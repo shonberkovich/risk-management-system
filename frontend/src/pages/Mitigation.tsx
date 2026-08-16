@@ -1,0 +1,143 @@
+import AssignmentLateIcon from "@mui/icons-material/AssignmentLate";
+import PaidIcon from "@mui/icons-material/Paid";
+import SavingsIcon from "@mui/icons-material/Savings";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CircularProgress from "@mui/material/CircularProgress";
+import Grid from "@mui/material/Grid";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+
+import { fetchMitigationTasks, fetchProperties, type MitigationStatus } from "../api/client";
+import KpiCard from "../components/KpiCard";
+import MitigationTable, { type MitigationRow } from "../components/MitigationTable";
+import { MITIGATION_STATUS_LABELS, formatIlsCompact } from "../format";
+
+const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
+
+const STATUS_ORDER: Record<MitigationStatus, number> = {
+  OVERDUE: 0,
+  IN_PROGRESS: 1,
+  OPEN: 2,
+  COMPLETED: 3,
+};
+
+export default function Mitigation() {
+  const [status, setStatus] = useState<MitigationStatus | "">("");
+
+  const tasks = useQuery({ queryKey: ["mitigation-tasks"], queryFn: fetchMitigationTasks });
+  const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+
+  const rows: MitigationRow[] = useMemo(() => {
+    const propertyNames = new Map((properties.data ?? []).map((p) => [p.property_id, p.name]));
+    const all = (tasks.data ?? []).map((t) => ({
+      ...t,
+      property_name: propertyNames.get(t.property_id) ?? `נכס #${t.property_id}`,
+    }));
+    const filtered = status ? all.filter((t) => t.status === status) : all;
+    return [...filtered].sort((a, b) => {
+      const orderDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+      if (orderDiff !== 0) return orderDiff;
+      return a.due_date.localeCompare(b.due_date);
+    });
+  }, [tasks.data, properties.data, status]);
+
+  const summary = useMemo(() => {
+    const all = tasks.data ?? [];
+    const openOrOverdue = all.filter((t) => t.status === "OPEN" || t.status === "OVERDUE");
+    const overdueCount = all.filter((t) => t.status === "OVERDUE").length;
+    const activeCost = all
+      .filter((t) => t.status !== "COMPLETED")
+      .reduce((sum, t) => sum + t.cost_estimate, 0);
+    const totalSavings = all.reduce((sum, t) => sum + t.expected_annual_savings, 0);
+    const roiValues = all.map((t) => t.roi_percent).filter((r): r is number => r !== null);
+    const avgRoi = roiValues.length ? roiValues.reduce((a, b) => a + b, 0) / roiValues.length : null;
+    return { openOrOverdueCount: openOrOverdue.length, overdueCount, activeCost, totalSavings, avgRoi };
+  }, [tasks.data]);
+
+  const loading = tasks.isLoading || properties.isLoading;
+
+  if (loading) {
+    return (
+      <Stack alignItems="center" sx={{ py: 8 }}>
+        <CircularProgress />
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack spacing={3}>
+      <Typography variant="h5" sx={{ fontWeight: 700 }}>
+        משימות הפחתת סיכון
+      </Typography>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard
+            label="משימות פתוחות / באיחור"
+            value={`${summary.openOrOverdueCount}`}
+            subtext={summary.overdueCount > 0 ? `${summary.overdueCount} באיחור` : undefined}
+            trend={summary.overdueCount > 0 ? "up" : undefined}
+            icon={<AssignmentLateIcon color="warning" fontSize="large" />}
+            accentColor="#c0521f"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard
+            label="עלות משוערת כוללת (פתוחות)"
+            value={formatIlsCompact(summary.activeCost)}
+            icon={<PaidIcon color="error" fontSize="large" />}
+            accentColor="#c62828"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard
+            label="חיסכון שנתי צפוי כולל"
+            value={formatIlsCompact(summary.totalSavings)}
+            icon={<SavingsIcon color="success" fontSize="large" />}
+            accentColor="#2e7d32"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard
+            label="ROI ממוצע"
+            value={summary.avgRoi !== null ? `${summary.avgRoi.toFixed(1)}%` : "-"}
+            icon={<TrendingUpIcon color="primary" fontSize="large" />}
+            accentColor="#1e5b8a"
+          />
+        </Grid>
+      </Grid>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              רשימת משימות ({rows.length})
+            </Typography>
+            <TextField
+              select
+              size="small"
+              label="סטטוס"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as MitigationStatus | "")}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">הכל</MenuItem>
+              {STATUS_OPTIONS.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {MITIGATION_STATUS_LABELS[s]}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <MitigationTable rows={rows} />
+        </CardContent>
+      </Card>
+    </Stack>
+  );
+}
