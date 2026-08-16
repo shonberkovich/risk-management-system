@@ -175,7 +175,7 @@ npm run dev
 - [`ClaimUpdateDialog.tsx`](../frontend/src/components/ClaimUpdateDialog.tsx) — נוסף כפעולה בטבלת התביעות הקיימת ([`ClaimsTable.tsx`](../frontend/src/components/ClaimsTable.tsx), מסך `/claims`) לעדכון סטטוס/סכום מאושר/צפי תשלום; מושבת אוטומטית עבור תביעות בסטטוס סופי
 - ראוט וקישור ניווט חדשים ("ניהול אירועים") ב-`App.tsx` ו-`Layout.tsx`
 
-אומת ידנית בדפדפן מול ה-DB האמיתי: 25 האירועים הקיימים נטענים עם ה-KPIs הנכונים, סינון לפי סטטוס עובד, ופתיחת דיאלוג "פתח תביעה" שולפת בהצלחה את הפוליסות הזמינות דרך `eligible-policies` (`GET /api/incidents/25/eligible-policies` אומת ב-Network). טרם נבדק ידנית מסלול השליחה המלא (`POST /api/claims`, `PATCH /api/incidents/{id}/status`, `PATCH /api/claims/{id}`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server — נבדק רק סטטית (`py_compile`, `tsc -b`, ללא שגיאות חדשות מעבר לשגיאת ה-`stylis` הקיימת מראש).
+אומת ידנית בדפדפן מול ה-DB האמיתי: 25 האירועים הקיימים נטענים עם ה-KPIs הנכונים, סינון לפי סטטוס עובד, ופתיחת דיאלוג "פתח תביעה" שולפת בהצלחה את הפוליסות הזמינות דרך `eligible-policies` (`GET /api/incidents/25/eligible-policies` אומת ב-Network). טרם נבדק ידנית מסלול השליחה המלא (`POST /api/claims`, `PATCH /api/incidents/{id}/status`, `PATCH /api/claims/{id}`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server — נבדק רק סטטית (`py_compile`, `tsc -b`, ללא שגיאות חדשות מעבר לשגיאת ה-`stylis` הקיימת מראש). פותח בענף `feature/incident-claim-workflow` ומוזג ל-`main` מקומית (ללא PR ב-GitHub, commit `0bb04ad`).
 
 ### מה עוד נשאר לעשות
 
