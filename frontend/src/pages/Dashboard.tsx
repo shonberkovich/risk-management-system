@@ -14,10 +14,19 @@ import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchClaims, fetchHazardDistribution, fetchKpis, fetchMapPoints, fetchRiskMatrix, type RiskMatrixCell } from "../api/client";
+import {
+  fetchClaims,
+  fetchHazardDistribution,
+  fetchKpis,
+  fetchLossRatioTrend,
+  fetchMapPoints,
+  fetchRiskMatrix,
+  type RiskMatrixCell,
+} from "../api/client";
 import ClaimsTable from "../components/ClaimsTable";
 import HazardChart from "../components/HazardChart";
 import KpiCard from "../components/KpiCard";
+import LossRatioTrendChart from "../components/LossRatioTrendChart";
 import RiskMap from "../components/RiskMap";
 import RiskMatrix from "../components/RiskMatrix";
 import { formatIlsCompact, formatPercent } from "../format";
@@ -29,6 +38,7 @@ export default function Dashboard() {
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const riskMatrix = useQuery({ queryKey: ["risk-matrix"], queryFn: fetchRiskMatrix });
   const hazardDist = useQuery({ queryKey: ["hazard-distribution"], queryFn: fetchHazardDistribution });
+  const lossRatioTrend = useQuery({ queryKey: ["loss-ratio-trend"], queryFn: fetchLossRatioTrend });
   const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
   const [selectedCell, setSelectedCell] = useState<RiskMatrixCell | null>(null);
 
@@ -139,6 +149,10 @@ export default function Dashboard() {
           </Stack>
         </Grid>
       </Grid>
+
+      <Card variant="outlined">
+        <CardContent>{lossRatioTrend.data && <LossRatioTrendChart data={lossRatioTrend.data} />}</CardContent>
+      </Card>
 
       <Card variant="outlined">
         <CardContent>

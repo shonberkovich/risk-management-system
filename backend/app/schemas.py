@@ -232,3 +232,10 @@ class HazardDistributionItem(BaseModel):
     hazard_type: HazardType
     count: int
     percent: float
+
+
+class LossRatioTrendPoint(BaseModel):
+    year: int
+    loss_ratio: float
+    total_claimed: float
+    total_annual_premium: float

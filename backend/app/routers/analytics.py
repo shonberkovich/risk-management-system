@@ -91,6 +91,16 @@ def get_risk_matrix(db: Session = Depends(get_db)):
     return output
 
 
+@router.get("/loss-ratio-trend", response_model=list[schemas.LossRatioTrendPoint])
+def get_loss_ratio_trend(db: Session = Depends(get_db)):
+    """Loss ratio per year, so a multi-year view isn't silently limited to the
+    current calendar year the way the headline KPI is."""
+    return [
+        schemas.LossRatioTrendPoint(year=year, loss_ratio=ratio, total_claimed=claimed, total_annual_premium=premium)
+        for year, ratio, claimed, premium in kpi.calculate_loss_ratio_trend(db)
+    ]
+
+
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
 def get_hazard_distribution(db: Session = Depends(get_db)):
     rows = db.execute(
