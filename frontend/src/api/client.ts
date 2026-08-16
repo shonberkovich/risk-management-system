@@ -210,6 +210,13 @@ export interface HazardDistributionItem {
   percent: number;
 }
 
+export interface LossRatioTrendPoint {
+  year: number;
+  loss_ratio: number;
+  total_claimed: number;
+  total_annual_premium: number;
+}
+
 export interface IncidentClassification {
   hazard_type: HazardType;
   severity_level: SeverityLevel;
@@ -268,6 +275,8 @@ export const fetchMapPoints = () => api.get<PropertyMapPoint[]>("/analytics/map"
 export const fetchRiskMatrix = () => api.get<RiskMatrixCell[]>("/analytics/risk-matrix").then((r) => r.data);
 export const fetchHazardDistribution = () =>
   api.get<HazardDistributionItem[]>("/analytics/hazard-distribution").then((r) => r.data);
+export const fetchLossRatioTrend = () =>
+  api.get<LossRatioTrendPoint[]>("/analytics/loss-ratio-trend").then((r) => r.data);
 
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);

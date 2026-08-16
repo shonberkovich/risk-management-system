@@ -67,6 +67,30 @@ def calculate_loss_ratio(db: Session, year: int | None = None) -> tuple[float, f
     return ratio, total_claimed, total_premium
 
 
+def calculate_loss_ratio_trend(db: Session) -> list[tuple[int, float, float, float]]:
+    """Loss ratio per calendar year present in the claims data. Premiums reflect
+    current active policies (annual figures, not tied to a specific year), so only
+    the claimed-amount side varies by year — same assumption as calculate_loss_ratio.
+    Returns a list of (year, loss_ratio, total_claimed, total_annual_premium), sorted
+    ascending by year."""
+    policies = db.scalars(select(models.InsurancePolicy)).all()
+    total_premium = float(sum(p.annual_premium for p in policies))
+
+    claims = db.execute(
+        select(models.Claim, models.Incident.incident_timestamp)
+        .join(models.Incident, models.Incident.incident_id == models.Claim.incident_id)
+    ).all()
+
+    claimed_by_year: dict[int, float] = {}
+    for c, ts in claims:
+        claimed_by_year[ts.year] = claimed_by_year.get(ts.year, 0.0) + float(c.claimed_amount)
+
+    return [
+        (year, round((claimed / total_premium) if total_premium else 0.0, 4), claimed, total_premium)
+        for year, claimed in sorted(claimed_by_year.items())
+    ]
+
+
 def calculate_open_claims(db: Session) -> tuple[int, float, float]:
     """Returns (count, total_claimed_open, total_approved_pending_payment)."""
     open_statuses = {"SUBMITTED", "IN_ADJUSTMENT", "APPROVED"}
