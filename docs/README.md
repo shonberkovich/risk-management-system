@@ -156,12 +156,20 @@ npm run dev
 
 ללא שינוי בבקאנד — האנדפוינט והחישוב היו כבר נכונים. אומת ידנית בדפדפן: כל 12 המשימות מוצגות עם ROI, שם נכס וסטטוס נכונים; הסינון לפי סטטוס עובד. מוזג ל-`main` (PR #1, commit `5d1d19f`).
 
+**מודול ניהול פוליסות (Policy CRUD) — בענף `feature/policy-crud`, טרם נפתח PR:** יישום ההמלצה מהעדכון הקודם. ה-Backend היה read-only בלבד (`GET /api/policies` בלבד); נוספו:
+- `POST /api/policies`, `PUT /api/policies/{id}` — יצירה ועדכון פוליסה, כולל טיפול ב-`IntegrityError` על מספר פוליסה כפול (`backend/app/routers/policies.py`)
+- `GET/POST /api/policies/{id}/assets`, `DELETE /api/policies/{id}/assets/{property_id}` — האנדפוינטים הראשונים ל-`Policy_Assets` (שהייתה טבלת קישור ללא שום אנדפוינט), לניהול שיוך נכסים לפוליסה עם השתתפות עצמית ייעודית
+- [`frontend/src/pages/Policies.tsx`](../frontend/src/pages/Policies.tsx) — מסך `/policies` עם 4 כרטיסי KPI (פוליסות פעילות, ממתינות לחידוש, סה"כ תקרת כיסוי ופרמיה שנתית לפוליסות פעילות), סינון לפי סטטוס וטבלה
+- [`PolicyDialog.tsx`](../frontend/src/components/PolicyDialog.tsx) — יצירה/עריכה של פוליסה; [`PolicyAssetsDialog.tsx`](../frontend/src/components/PolicyAssetsDialog.tsx) — שיוך/הסרת נכסים לפוליסה נבחרת דרך `Autocomplete`
+- ראוט וקישור ניווט חדשים ב-`App.tsx` ו-`Layout.tsx`
+
+אומת ידנית בדפדפן מול ה-DB האמיתי: 4 הפוליסות הקיימות נטענות עם ה-KPIs הנכונים, פתיחת "נכסים מבוטחים" מציגה את הנכסים המשויכים בפועל, והסרת נכס דרך ה-UI מתעדכנת ונשמרת ב-DB (`DELETE /api/policies/{id}/assets/{property_id}` אומת שמתמיד). טרם נבדק ידנית מסלול היצירה/עריכה המלא (`POST`/`PUT`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server.
+
 ### מה עוד נשאר לעשות
 
 נבדק מיפוי פערים מול המפרט (routers, מסכים, מודל נתונים, seed data). בסדר עדיפות משוער:
 
 **פערים משמעותיים בהיקף הפרויקט:**
-- **ניהול פוליסות (Policy CRUD + מסך):** קיים רק `GET /api/policies` ללא פילטרים; אין מסך frontend, אין `fetchPolicies` ב-`client.ts`, ואין דרך להוסיף/לערוך פוליסה. `Policy_Assets` קיימת רק כטבלת קישור ללא אנדפוינט.
 - **זרימת עבודה (workflow) לאירועים/תביעות:** אין שום דרך לעדכן סטטוס אירוע (NEW → UNDER_INVESTIGATION → CLAIM_FILED → CLOSED) או ליצור/לקדם תביעה. הכל read-only מלבד יצירת אירוע חדש.
 - **מטריצת הסיכונים אינה אינטראקטיבית:** ה-API של `/api/analytics/risk-matrix` כבר מחזיר `property_ids` לכל תא, אך ב-[`RiskMatrix.tsx`](../frontend/src/components/RiskMatrix.tsx) אין `onClick` — לחיצה על תא לא מסננת כלום (למרות ה-`cursor:pointer` ב-CSS).
 - **ניתוח רב-שנתי / מגמות:** `calculate_loss_ratio` ב-[`kpi.py`](../backend/app/services/kpi.py) מקבל פרמטר `year` אך תמיד נקרא בברירת מחדל (שנה נוכחית) — כלומר יחס הנזקים כרגע **מתעלם משנת 2025 כולה**. אין אנדפוינט טרנד רב-שנתי בכלל.
@@ -171,4 +179,4 @@ npm run dev
 
 **מוצהר כמחוץ להיקף (ראו סעיף 8) ולא צפוי להשתנות בפרויקט הקורס:** RBAC/Audit Log, הצפנת at-rest, אינטגרציית ERP/Govmap, סנכרון offline, סימולציות Monte Carlo/VaR מלאות, התראות Push/SMS, שמירת מדיה אמיתית לאירועים (`Incident_Media` קיימת במודל ומעולם לא נזרעה).
 
-**המלצה לצעד הבא:** מודול ניהול הפוליסות (Policy CRUD) — כרגע היחיד מבין שכבת ה"פיננסים" בשם המערכת שהוא read-only-בלבד ברמת ה-API עצמו (בניגוד ל-Mitigation שהיה רק חסר UI). זה חוסם גם כל הרחבה עתידית של תרשים הפוליסות/נכסים.
+**המלצה לצעד הבא:** זרימת עבודה (workflow) לאירועים/תביעות — כרגע אין שום דרך לעדכן סטטוס אירוע או לקדם/ליצור תביעה דרך ה-UI; הכל read-only מלבד יצירת אירוע חדש. עם קיומו של Policy CRUD, זהו עכשיו הפער המשמעותי הבא בשרשרת הערך המרכזית (Incidents → Claims), וגם הבסיס הטבעי להפעלת "Claim_Payments היתום" בהמשך.

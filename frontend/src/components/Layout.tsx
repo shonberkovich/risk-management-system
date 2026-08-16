@@ -2,6 +2,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import DomainIcon from "@mui/icons-material/Domain";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HandymanIcon from "@mui/icons-material/Handyman";
+import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import AppBar from "@mui/material/AppBar";
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { to: "/properties", label: "נכסים", icon: <DomainIcon fontSize="small" /> },
   { to: "/report-incident", label: "דיווח אירוע", icon: <ReportProblemIcon fontSize="small" /> },
   { to: "/claims", label: "תביעות", icon: <GavelIcon fontSize="small" /> },
+  { to: "/policies", label: "פוליסות", icon: <ShieldIcon fontSize="small" /> },
   { to: "/mitigation", label: "הפחתת סיכון", icon: <HandymanIcon fontSize="small" /> },
   { to: "/reports", label: "דוחות", icon: <SummarizeIcon fontSize="small" /> },
 ];
