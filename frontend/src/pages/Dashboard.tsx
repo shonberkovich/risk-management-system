@@ -1,16 +1,20 @@
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import CloseIcon from "@mui/icons-material/Close";
 import GavelIcon from "@mui/icons-material/Gavel";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import WarningIcon from "@mui/icons-material/Warning";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchClaims, fetchHazardDistribution, fetchKpis, fetchMapPoints, fetchRiskMatrix } from "../api/client";
+import { fetchClaims, fetchHazardDistribution, fetchKpis, fetchMapPoints, fetchRiskMatrix, type RiskMatrixCell } from "../api/client";
 import ClaimsTable from "../components/ClaimsTable";
 import HazardChart from "../components/HazardChart";
 import KpiCard from "../components/KpiCard";
@@ -18,12 +22,30 @@ import RiskMap from "../components/RiskMap";
 import RiskMatrix from "../components/RiskMatrix";
 import { formatIlsCompact, formatPercent } from "../format";
 
+const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
+
 export default function Dashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const riskMatrix = useQuery({ queryKey: ["risk-matrix"], queryFn: fetchRiskMatrix });
   const hazardDist = useQuery({ queryKey: ["hazard-distribution"], queryFn: fetchHazardDistribution });
   const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
+  const [selectedCell, setSelectedCell] = useState<RiskMatrixCell | null>(null);
+
+  const filteredMapPoints = useMemo(() => {
+    if (!mapPoints.data) return mapPoints.data;
+    if (!selectedCell) return mapPoints.data;
+    const ids = new Set(selectedCell.property_ids);
+    return mapPoints.data.filter((p) => ids.has(p.property_id));
+  }, [mapPoints.data, selectedCell]);
+
+  const filteredClaims = useMemo(() => {
+    if (!claims.data) return claims.data;
+    if (!selectedCell || !mapPoints.data) return claims.data;
+    const ids = new Set(selectedCell.property_ids);
+    const names = new Set(mapPoints.data.filter((p) => ids.has(p.property_id)).map((p) => p.name));
+    return claims.data.filter((c) => names.has(c.property_name));
+  }, [claims.data, mapPoints.data, selectedCell]);
 
   const loading = kpis.isLoading || mapPoints.isLoading;
 
@@ -84,17 +106,32 @@ export default function Dashboard() {
         <Grid item xs={12} md={8}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
-                מפת חשיפה מרחבית ואירועים
-              </Typography>
-              {mapPoints.data && <RiskMap points={mapPoints.data} />}
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  מפת חשיפה מרחבית ואירועים
+                </Typography>
+                {selectedCell && (
+                  <Chip
+                    size="small"
+                    color="primary"
+                    onDelete={() => setSelectedCell(null)}
+                    deleteIcon={<CloseIcon />}
+                    label={`מסונן: הסתברות ${BAND_LABELS[selectedCell.probability_band]} × חומרה ${BAND_LABELS[selectedCell.severity_band]} (${selectedCell.property_ids.length} נכסים)`}
+                  />
+                )}
+              </Stack>
+              {filteredMapPoints && <RiskMap points={filteredMapPoints} />}
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
           <Stack spacing={2}>
             <Card variant="outlined">
-              <CardContent>{riskMatrix.data && <RiskMatrix cells={riskMatrix.data} />}</CardContent>
+              <CardContent>
+                {riskMatrix.data && (
+                  <RiskMatrix cells={riskMatrix.data} selectedCell={selectedCell} onSelectCell={setSelectedCell} />
+                )}
+              </CardContent>
             </Card>
             <Card variant="outlined">
               <CardContent>{hazardDist.data && <HazardChart data={hazardDist.data} />}</CardContent>
@@ -105,13 +142,24 @@ export default function Dashboard() {
 
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
-            אירועים בטיפול וסטטוס תביעות ביטוח פתוחות
-          </Typography>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              אירועים בטיפול וסטטוס תביעות ביטוח פתוחות
+            </Typography>
+            {selectedCell && (
+              <Chip
+                size="small"
+                variant="outlined"
+                onDelete={() => setSelectedCell(null)}
+                deleteIcon={<CloseIcon />}
+                label="מסונן לפי תא הסיכון שנבחר"
+              />
+            )}
+          </Stack>
           {claims.isLoading ? (
             <CircularProgress size={24} />
           ) : (
-            <ClaimsTable rows={claims.data ?? []} />
+            <ClaimsTable rows={filteredClaims ?? []} />
           )}
         </CardContent>
       </Card>

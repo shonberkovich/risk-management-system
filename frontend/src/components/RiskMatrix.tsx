@@ -18,7 +18,15 @@ function cellColor(prob: string, sev: string, count: number) {
   return "#f2c14e";
 }
 
-export default function RiskMatrix({ cells }: { cells: RiskMatrixCell[] }) {
+export default function RiskMatrix({
+  cells,
+  selectedCell,
+  onSelectCell,
+}: {
+  cells: RiskMatrixCell[];
+  selectedCell?: RiskMatrixCell | null;
+  onSelectCell?: (cell: RiskMatrixCell | null) => void;
+}) {
   const getCell = (prob: string, sev: string) => cells.find((c) => c.probability_band === prob && c.severity_band === sev);
 
   return (
@@ -41,12 +49,21 @@ export default function RiskMatrix({ cells }: { cells: RiskMatrixCell[] }) {
             {SEV_ORDER.map((sev) => {
               const cell = getCell(prob, sev);
               const count = cell?.count ?? 0;
+              const isSelected = selectedCell?.probability_band === prob && selectedCell?.severity_band === sev;
               return (
                 <Tooltip
                   key={`${prob}-${sev}`}
-                  title={`הסתברות ${BAND_LABELS[prob]} × חומרה ${BAND_LABELS[sev]}: ${count} נכסים`}
+                  title={
+                    count > 0
+                      ? `הסתברות ${BAND_LABELS[prob]} × חומרה ${BAND_LABELS[sev]}: ${count} נכסים (לחיצה לסינון)`
+                      : `הסתברות ${BAND_LABELS[prob]} × חומרה ${BAND_LABELS[sev]}: 0 נכסים`
+                  }
                 >
                   <Box
+                    onClick={() => {
+                      if (!onSelectCell || count === 0 || !cell) return;
+                      onSelectCell(isSelected ? null : cell);
+                    }}
                     sx={{
                       bgcolor: cellColor(prob, sev, count),
                       borderRadius: 1,
@@ -54,9 +71,12 @@ export default function RiskMatrix({ cells }: { cells: RiskMatrixCell[] }) {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor: "pointer",
+                      cursor: count > 0 ? "pointer" : "default",
                       transition: "transform 0.15s",
-                      "&:hover": { transform: "scale(1.05)" },
+                      outline: isSelected ? "3px solid" : "none",
+                      outlineColor: "primary.main",
+                      outlineOffset: "2px",
+                      "&:hover": count > 0 ? { transform: "scale(1.05)" } : undefined,
                     }}
                   >
                     <Typography sx={{ fontWeight: 800, color: count > 0 ? "white" : "text.disabled" }}>
