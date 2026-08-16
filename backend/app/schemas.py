@@ -10,6 +10,7 @@ IncidentStatus = Literal["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED", "CLOSED"]
 ClaimStatus = Literal["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECTED", "SETTLED"]
 AssetType = Literal["LOGISTICS_CENTER", "OFFICE_BUILDING", "RETAIL", "INFRASTRUCTURE"]
 MitigationStatus = Literal["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"]
+PolicyStatus = Literal["ACTIVE", "EXPIRED", "PENDING_RENEWAL"]
 
 
 # --- Properties ---
@@ -121,7 +122,40 @@ class PolicyOut(BaseModel):
     total_limit: float
     deductible_default: float
     annual_premium: float
-    status: str
+    status: PolicyStatus
+
+
+class PolicyCreate(BaseModel):
+    policy_number: str
+    insurer_name: str
+    start_date: date
+    end_date: date
+    total_limit: float
+    deductible_default: float
+    annual_premium: float
+    status: PolicyStatus = "ACTIVE"
+
+
+class PolicyUpdate(BaseModel):
+    insurer_name: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    total_limit: float | None = None
+    deductible_default: float | None = None
+    annual_premium: float | None = None
+    status: PolicyStatus | None = None
+
+
+class PolicyAssetOut(BaseModel):
+    policy_id: int
+    property_id: int
+    property_name: str
+    specific_deductible: float | None = None
+
+
+class PolicyAssetCreate(BaseModel):
+    property_id: int
+    specific_deductible: float | None = None
 
 
 # --- Mitigation ---

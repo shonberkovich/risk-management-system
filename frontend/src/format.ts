@@ -63,6 +63,12 @@ export const MITIGATION_STATUS_LABELS: Record<string, string> = {
   OVERDUE: "באיחור",
 };
 
+export const POLICY_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "פעילה",
+  EXPIRED: "פגה תוקף",
+  PENDING_RENEWAL: "ממתינה לחידוש",
+};
+
 export const SEVERITY_COLORS: Record<string, "success" | "warning" | "error" | "default"> = {
   LOW: "success",
   MEDIUM: "warning",

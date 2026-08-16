@@ -11,6 +11,7 @@ export type IncidentStatus = "NEW" | "UNDER_INVESTIGATION" | "CLAIM_FILED" | "CL
 export type ClaimStatus = "DRAFT" | "SUBMITTED" | "IN_ADJUSTMENT" | "APPROVED" | "REJECTED" | "SETTLED";
 export type AssetType = "LOGISTICS_CENTER" | "OFFICE_BUILDING" | "RETAIL" | "INFRASTRUCTURE";
 export type MitigationStatus = "OPEN" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
+export type PolicyStatus = "ACTIVE" | "EXPIRED" | "PENDING_RENEWAL";
 
 export interface RiskProfile {
   profile_id: number;
@@ -101,6 +102,43 @@ export interface MitigationTask {
   roi_percent: number | null;
 }
 
+export interface Policy {
+  policy_id: number;
+  policy_number: string;
+  insurer_name: string;
+  start_date: string;
+  end_date: string;
+  total_limit: number;
+  deductible_default: number;
+  annual_premium: number;
+  status: PolicyStatus;
+}
+
+export interface PolicyCreate {
+  policy_number: string;
+  insurer_name: string;
+  start_date: string;
+  end_date: string;
+  total_limit: number;
+  deductible_default: number;
+  annual_premium: number;
+  status?: PolicyStatus;
+}
+
+export type PolicyUpdate = Partial<PolicyCreate>;
+
+export interface PolicyAsset {
+  policy_id: number;
+  property_id: number;
+  property_name: string;
+  specific_deductible: number | null;
+}
+
+export interface PolicyAssetCreate {
+  property_id: number;
+  specific_deductible?: number | null;
+}
+
 export interface KpiSummary {
   tiv: number;
   mfl: number;
@@ -149,6 +187,21 @@ export const fetchClaims = (status?: string) =>
 
 export const fetchMitigationTasks = () =>
   api.get<MitigationTask[]>("/mitigation-tasks").then((r) => r.data);
+
+export const fetchPolicies = (status?: string) =>
+  api.get<Policy[]>("/policies", { params: status ? { status } : undefined }).then((r) => r.data);
+export const fetchPolicy = (id: number) => api.get<Policy>(`/policies/${id}`).then((r) => r.data);
+export const createPolicy = (payload: PolicyCreate) =>
+  api.post<Policy>("/policies", payload).then((r) => r.data);
+export const updatePolicy = (id: number, payload: PolicyUpdate) =>
+  api.put<Policy>(`/policies/${id}`, payload).then((r) => r.data);
+
+export const fetchPolicyAssets = (policyId: number) =>
+  api.get<PolicyAsset[]>(`/policies/${policyId}/assets`).then((r) => r.data);
+export const assignPolicyAsset = (policyId: number, payload: PolicyAssetCreate) =>
+  api.post<PolicyAsset>(`/policies/${policyId}/assets`, payload).then((r) => r.data);
+export const unassignPolicyAsset = (policyId: number, propertyId: number) =>
+  api.delete(`/policies/${policyId}/assets/${propertyId}`);
 
 export const fetchKpis = () => api.get<KpiSummary>("/analytics/kpis").then((r) => r.data);
 export const fetchMapPoints = () => api.get<PropertyMapPoint[]>("/analytics/map").then((r) => r.data);
