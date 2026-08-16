@@ -22,12 +22,24 @@ def _next_claim_number(db: Session) -> str:
     return f"{prefix}{count + 1:03d}"
 
 
+_PAYABLE_CLAIM_STATUSES = {"APPROVED", "SETTLED"}
+
+
 @router.get("", response_model=list[schemas.ClaimTrackingRow])
 def list_claims(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+    paid_subq = (
+        select(
+            models.ClaimPayment.claim_id.label("claim_id"),
+            func.sum(models.ClaimPayment.amount).label("paid_amount"),
+        )
+        .group_by(models.ClaimPayment.claim_id)
+        .subquery()
+    )
     stmt = (
-        select(models.Claim, models.Incident, models.Property)
+        select(models.Claim, models.Incident, models.Property, paid_subq.c.paid_amount)
         .join(models.Incident, models.Incident.incident_id == models.Claim.incident_id)
         .join(models.Property, models.Property.property_id == models.Incident.property_id)
+        .outerjoin(paid_subq, paid_subq.c.claim_id == models.Claim.claim_id)
         .order_by(models.Claim.claim_id.desc())
     )
     if status:
@@ -46,8 +58,9 @@ def list_claims(status: str | None = Query(default=None), db: Session = Depends(
             approved_amount=float(claim.approved_amount),
             claim_status=claim.claim_status,
             expected_payment_date=claim.expected_payment_date,
+            paid_amount=float(paid_amount or 0),
         )
-        for claim, incident, prop in rows
+        for claim, incident, prop, paid_amount in rows
     ]
 
 
@@ -112,3 +125,42 @@ def update_claim(claim_id: int, payload: schemas.ClaimUpdate, db: Session = Depe
     db.commit()
     db.refresh(claim)
     return claim
+
+
+@router.get("/{claim_id}/payments", response_model=list[schemas.ClaimPaymentOut])
+def list_claim_payments(claim_id: int, db: Session = Depends(get_db)):
+    claim = db.get(models.Claim, claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    return db.scalars(
+        select(models.ClaimPayment)
+        .where(models.ClaimPayment.claim_id == claim_id)
+        .order_by(models.ClaimPayment.payment_date)
+    ).all()
+
+
+@router.post("/{claim_id}/payments", response_model=schemas.ClaimPaymentOut, status_code=201)
+def create_claim_payment(claim_id: int, payload: schemas.ClaimPaymentCreate, db: Session = Depends(get_db)):
+    claim = db.get(models.Claim, claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    if claim.claim_status not in _PAYABLE_CLAIM_STATUSES:
+        raise HTTPException(400, "ניתן לרשום תשלום רק לתביעה מאושרת או סגורה")
+
+    paid_so_far = db.scalar(
+        select(func.sum(models.ClaimPayment.amount)).where(models.ClaimPayment.claim_id == claim_id)
+    ) or 0
+    if float(paid_so_far) + payload.amount > float(claim.approved_amount) + 0.01:
+        raise HTTPException(400, "סכום התשלום חורג מהסכום המאושר לתביעה")
+
+    payment = models.ClaimPayment(
+        claim_id=claim_id,
+        payment_date=payload.payment_date,
+        amount=payload.amount,
+        reference_number=payload.reference_number,
+        payment_type=payload.payment_type,
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    return payment

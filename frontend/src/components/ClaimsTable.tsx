@@ -1,4 +1,5 @@
 import EditIcon from "@mui/icons-material/Edit";
+import PaymentsIcon from "@mui/icons-material/Payments";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Table from "@mui/material/Table";
@@ -24,20 +25,26 @@ const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" |
 
 const TERMINAL_STATUSES = new Set(["SETTLED", "REJECTED"]);
 
+const PAYABLE_STATUSES = new Set(["APPROVED", "SETTLED"]);
+
 export default function ClaimsTable({
   rows,
   onEdit,
+  onPayments,
 }: {
   rows: ClaimTrackingRow[];
   onEdit?: (claim: ClaimTrackingRow) => void;
+  onPayments?: (claim: ClaimTrackingRow) => void;
 }) {
+  const hasActions = !!onEdit || !!onPayments;
   const totals = rows.reduce(
     (acc, r) => ({
       claimed: acc.claimed + r.claimed_amount,
       deductible: acc.deductible + r.deductible_applied,
       approved: acc.approved + r.approved_amount,
+      paid: acc.paid + r.paid_amount,
     }),
-    { claimed: 0, deductible: 0, approved: 0 },
+    { claimed: 0, deductible: 0, approved: 0, paid: 0 },
   );
 
   return (
@@ -51,9 +58,10 @@ export default function ClaimsTable({
             <TableCell align="left">סכום נתבע</TableCell>
             <TableCell align="left">השתתפות עצמית</TableCell>
             <TableCell align="left">סכום מאושר</TableCell>
+            <TableCell align="left">שולם בפועל</TableCell>
             <TableCell>סטטוס</TableCell>
             <TableCell>צפי תשלום</TableCell>
-            {onEdit && <TableCell align="center">פעולות</TableCell>}
+            {hasActions && <TableCell align="center">פעולות</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -65,19 +73,29 @@ export default function ClaimsTable({
               <TableCell align="left">{formatIls(r.claimed_amount)}</TableCell>
               <TableCell align="left">{formatIls(r.deductible_applied)}</TableCell>
               <TableCell align="left">{formatIls(r.approved_amount)}</TableCell>
+              <TableCell align="left">{formatIls(r.paid_amount)}</TableCell>
               <TableCell>
                 <Chip size="small" label={CLAIM_STATUS_LABELS[r.claim_status] ?? r.claim_status} color={STATUS_COLOR[r.claim_status]} />
               </TableCell>
               <TableCell>{r.expected_payment_date ? formatDate(r.expected_payment_date) : "-"}</TableCell>
-              {onEdit && (
+              {hasActions && (
                 <TableCell align="center">
-                  <Tooltip title={TERMINAL_STATUSES.has(r.claim_status) ? "תביעה סגורה" : "עדכון תביעה"}>
-                    <span>
-                      <IconButton size="small" disabled={TERMINAL_STATUSES.has(r.claim_status)} onClick={() => onEdit(r)}>
-                        <EditIcon fontSize="small" />
+                  {onEdit && (
+                    <Tooltip title={TERMINAL_STATUSES.has(r.claim_status) ? "תביעה סגורה" : "עדכון תביעה"}>
+                      <span>
+                        <IconButton size="small" disabled={TERMINAL_STATUSES.has(r.claim_status)} onClick={() => onEdit(r)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
+                  {onPayments && (
+                    <Tooltip title={PAYABLE_STATUSES.has(r.claim_status) ? "רזרבות ותשלומים" : "צפייה בתשלומים"}>
+                      <IconButton size="small" onClick={() => onPayments(r)}>
+                        <PaymentsIcon fontSize="small" />
                       </IconButton>
-                    </span>
-                  </Tooltip>
+                    </Tooltip>
+                  )}
                 </TableCell>
               )}
             </TableRow>
@@ -89,7 +107,8 @@ export default function ClaimsTable({
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.claimed)}</TableCell>
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.deductible)}</TableCell>
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.approved)}</TableCell>
-            <TableCell colSpan={onEdit ? 3 : 2} />
+            <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.paid)}</TableCell>
+            <TableCell colSpan={hasActions ? 3 : 2} />
           </TableRow>
         </TableBody>
       </Table>
