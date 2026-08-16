@@ -217,6 +217,16 @@ export interface LossRatioTrendPoint {
   total_annual_premium: number;
 }
 
+export interface Alert {
+  alert_type: "geographic_exposure" | "incident_concentration";
+  severity: "warning" | "critical";
+  title: string;
+  message: string;
+  property_ids: number[];
+  value: number;
+  threshold: number;
+}
+
 export interface IncidentClassification {
   hazard_type: HazardType;
   severity_level: SeverityLevel;
@@ -277,6 +287,7 @@ export const fetchHazardDistribution = () =>
   api.get<HazardDistributionItem[]>("/analytics/hazard-distribution").then((r) => r.data);
 export const fetchLossRatioTrend = () =>
   api.get<LossRatioTrendPoint[]>("/analytics/loss-ratio-trend").then((r) => r.data);
+export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);

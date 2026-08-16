@@ -239,3 +239,13 @@ class LossRatioTrendPoint(BaseModel):
     loss_ratio: float
     total_claimed: float
     total_annual_premium: float
+
+
+class AlertOut(BaseModel):
+    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    severity: Literal["warning", "critical"]
+    title: str
+    message: str
+    property_ids: list[int]
+    value: float
+    threshold: float
