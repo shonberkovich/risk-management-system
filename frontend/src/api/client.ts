@@ -91,6 +91,35 @@ export interface ClaimTrackingRow {
   expected_payment_date: string | null;
 }
 
+export interface Claim {
+  claim_id: number;
+  claim_number: string;
+  incident_id: number;
+  policy_id: number;
+  claimed_amount: number;
+  deductible_applied: number;
+  approved_amount: number;
+  claim_status: ClaimStatus;
+  adjuster_name: string | null;
+  expected_payment_date: string | null;
+}
+
+export interface ClaimCreate {
+  incident_id: number;
+  policy_id: number;
+  claimed_amount: number;
+  deductible_applied?: number;
+  adjuster_name?: string | null;
+  expected_payment_date?: string | null;
+}
+
+export interface ClaimUpdate {
+  claim_status?: ClaimStatus;
+  approved_amount?: number;
+  adjuster_name?: string | null;
+  expected_payment_date?: string | null;
+}
+
 export interface MitigationTask {
   task_id: number;
   property_id: number;
@@ -181,9 +210,17 @@ export const fetchIncidents = (params?: { status?: string; property_id?: number 
   api.get<Incident[]>("/incidents", { params }).then((r) => r.data);
 export const createIncident = (payload: IncidentCreate) =>
   api.post<Incident>("/incidents", payload).then((r) => r.data);
+export const updateIncidentStatus = (id: number, status: IncidentStatus) =>
+  api.patch<Incident>(`/incidents/${id}/status`, { status }).then((r) => r.data);
+export const fetchEligiblePolicies = (incidentId: number) =>
+  api.get<Policy[]>(`/incidents/${incidentId}/eligible-policies`).then((r) => r.data);
 
 export const fetchClaims = (status?: string) =>
   api.get<ClaimTrackingRow[]>("/claims", { params: status ? { status } : undefined }).then((r) => r.data);
+export const createClaim = (payload: ClaimCreate) =>
+  api.post<Claim>("/claims", payload).then((r) => r.data);
+export const updateClaim = (id: number, payload: ClaimUpdate) =>
+  api.patch<Claim>(`/claims/${id}`, payload).then((r) => r.data);
 
 export const fetchMitigationTasks = () =>
   api.get<MitigationTask[]>("/mitigation-tasks").then((r) => r.data);

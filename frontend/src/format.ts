@@ -47,6 +47,13 @@ export const OPERATIONAL_IMPACT_LABELS: Record<string, string> = {
   FULL_SHUTDOWN: "השבתה מלאה",
 };
 
+export const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  NEW: "חדש",
+  UNDER_INVESTIGATION: "בבדיקה",
+  CLAIM_FILED: "תביעה הוגשה",
+  CLOSED: "סגור",
+};
+
 export const CLAIM_STATUS_LABELS: Record<string, string> = {
   DRAFT: "טיוטה",
   SUBMITTED: "הוגשה",

@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import Claims from "./pages/Claims";
 import Dashboard from "./pages/Dashboard";
 import IncidentReport from "./pages/IncidentReport";
+import Incidents from "./pages/Incidents";
 import Mitigation from "./pages/Mitigation";
 import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/properties" element={<Properties />} />
         <Route path="/report-incident" element={<IncidentReport />} />
+        <Route path="/incidents" element={<Incidents />} />
         <Route path="/claims" element={<Claims />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/mitigation" element={<Mitigation />} />

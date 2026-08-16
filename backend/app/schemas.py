@@ -83,6 +83,10 @@ class IncidentOut(BaseModel):
     ai_confidence: float | None = None
 
 
+class IncidentStatusUpdate(BaseModel):
+    status: IncidentStatus
+
+
 # --- Claims ---
 class ClaimOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -94,6 +98,22 @@ class ClaimOut(BaseModel):
     deductible_applied: float
     approved_amount: float
     claim_status: ClaimStatus
+    adjuster_name: str | None = None
+    expected_payment_date: date | None = None
+
+
+class ClaimCreate(BaseModel):
+    incident_id: int
+    policy_id: int
+    claimed_amount: float
+    deductible_applied: float = 0
+    adjuster_name: str | None = None
+    expected_payment_date: date | None = None
+
+
+class ClaimUpdate(BaseModel):
+    claim_status: ClaimStatus | None = None
+    approved_amount: float | None = None
     adjuster_name: str | None = None
     expected_payment_date: date | None = None
 
