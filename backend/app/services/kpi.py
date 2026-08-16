@@ -26,10 +26,10 @@ def calculate_tiv(db: Session) -> float:
     return float(sum(p.replacement_value for p in props))
 
 
-def calculate_mfl(db: Session) -> float:
-    """Maximum Foreseeable Loss: the highest total MFL exposure among properties
-    clustered within CLUSTER_RADIUS_KM of one another (a single-event geographic
-    concentration)."""
+def _geographic_clusters(db: Session) -> list[tuple[list[int], float]]:
+    """Groups properties into overlapping clusters of anything within CLUSTER_RADIUS_KM
+    of a given anchor property, returning (property_ids, cluster_mfl_total) per distinct
+    cluster (deduped by identical membership)."""
     rows = db.execute(
         select(models.Property.property_id, models.Property.latitude, models.Property.longitude,
                models.AssetRiskProfile.mfl_amount)
@@ -37,17 +37,29 @@ def calculate_mfl(db: Session) -> float:
         .where(models.Property.is_active == True)  # noqa: E712
     ).all()
 
-    if not rows:
-        return 0.0
-
-    best = 0.0
-    for _, lat_a, lon_a, _ in rows:
-        cluster_total = 0.0
-        for _, lat_b, lon_b, mfl_b in rows:
+    seen: set[frozenset[int]] = set()
+    clusters: list[tuple[list[int], float]] = []
+    for pid_a, lat_a, lon_a, _ in rows:
+        ids: list[int] = []
+        total = 0.0
+        for pid_b, lat_b, lon_b, mfl_b in rows:
             if _haversine_km(float(lat_a), float(lon_a), float(lat_b), float(lon_b)) <= CLUSTER_RADIUS_KM:
-                cluster_total += float(mfl_b)
-        best = max(best, cluster_total)
-    return best
+                ids.append(pid_b)
+                total += float(mfl_b)
+        key = frozenset(ids)
+        if key in seen:
+            continue
+        seen.add(key)
+        clusters.append((sorted(ids), total))
+    return clusters
+
+
+def calculate_mfl(db: Session) -> float:
+    """Maximum Foreseeable Loss: the highest total MFL exposure among properties
+    clustered within CLUSTER_RADIUS_KM of one another (a single-event geographic
+    concentration)."""
+    clusters = _geographic_clusters(db)
+    return max((total for _, total in clusters), default=0.0)
 
 
 def calculate_loss_ratio(db: Session, year: int | None = None) -> tuple[float, float, float]:
@@ -140,3 +152,62 @@ def calculate_mitigation_roi(task: models.MitigationTask) -> float | None:
     if not task.cost_estimate:
         return None
     return round((float(task.expected_annual_savings) / float(task.cost_estimate)) * 100, 1)
+
+
+# --- Threshold alerts ---
+# Deliberately simple, fixed thresholds (no per-tenant configuration) — the goal is to
+# demonstrate a working alerts mechanism, not a full rules engine (see docs/README.md §8).
+GEO_EXPOSURE_THRESHOLD_RATIO = 0.20  # a geographic cluster's combined MFL vs. total TIV
+INCIDENT_CONCENTRATION_THRESHOLD = 3  # open incidents on a single property
+
+OPEN_INCIDENT_STATUSES = {"NEW", "UNDER_INVESTIGATION", "CLAIM_FILED"}
+
+
+def calculate_alerts(db: Session) -> list[dict]:
+    """Returns a list of threshold-crossing alerts: geographic exposure clusters whose
+    combined MFL exceeds GEO_EXPOSURE_THRESHOLD_RATIO of TIV, and properties whose open
+    incident count reaches INCIDENT_CONCENTRATION_THRESHOLD. Each alert is a dict matching
+    schemas.AlertOut."""
+    alerts: list[dict] = []
+    tiv = calculate_tiv(db)
+    props_by_id = {p.property_id: p.name for p in db.scalars(select(models.Property)).all()}
+
+    if tiv > 0:
+        geo_threshold = tiv * GEO_EXPOSURE_THRESHOLD_RATIO
+        for property_ids, cluster_mfl in _geographic_clusters(db):
+            if len(property_ids) < 2 or cluster_mfl <= geo_threshold:
+                continue
+            names = ", ".join(props_by_id.get(pid, f"#{pid}") for pid in property_ids)
+            alerts.append({
+                "alert_type": "geographic_exposure",
+                "severity": "critical" if cluster_mfl > geo_threshold * 1.5 else "warning",
+                "title": "ריכוז חשיפה גיאוגרפית חוצה סף",
+                "message": f"אשכול של {len(property_ids)} נכסים ({names}) בטווח {CLUSTER_RADIUS_KM:.0f} ק\"מ "
+                           f"עם חשיפת MFL מצטברת החורגת מ-{GEO_EXPOSURE_THRESHOLD_RATIO:.0%} מסך שווי מבוטח (TIV).",
+                "property_ids": property_ids,
+                "value": round(cluster_mfl, 2),
+                "threshold": round(geo_threshold, 2),
+            })
+
+    incidents = db.scalars(select(models.Incident)).all()
+    open_counts: dict[int, int] = {}
+    for i in incidents:
+        if i.status in OPEN_INCIDENT_STATUSES:
+            open_counts[i.property_id] = open_counts.get(i.property_id, 0) + 1
+    for property_id, count in open_counts.items():
+        if count < INCIDENT_CONCENTRATION_THRESHOLD:
+            continue
+        name = props_by_id.get(property_id, f"#{property_id}")
+        alerts.append({
+            "alert_type": "incident_concentration",
+            "severity": "critical" if count >= INCIDENT_CONCENTRATION_THRESHOLD + 2 else "warning",
+            "title": "ריכוז אירועים פתוחים בנכס",
+            "message": f'לנכס "{name}" יש {count} אירועים פתוחים במקביל, מעל הסף המוגדר ({INCIDENT_CONCENTRATION_THRESHOLD}).',
+            "property_ids": [property_id],
+            "value": float(count),
+            "threshold": float(INCIDENT_CONCENTRATION_THRESHOLD),
+        })
+
+    severity_rank = {"critical": 0, "warning": 1}
+    alerts.sort(key=lambda a: severity_rank[a["severity"]])
+    return alerts

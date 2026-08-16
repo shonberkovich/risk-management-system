@@ -101,6 +101,13 @@ def get_loss_ratio_trend(db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/alerts", response_model=list[schemas.AlertOut])
+def get_alerts(db: Session = Depends(get_db)):
+    """Threshold-crossing alerts: geographic exposure clusters and open-incident
+    concentration per property. See kpi.calculate_alerts for the fixed thresholds."""
+    return kpi.calculate_alerts(db)
+
+
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
 def get_hazard_distribution(db: Session = Depends(get_db)):
     rows = db.execute(

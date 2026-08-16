@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  fetchAlerts,
   fetchClaims,
   fetchHazardDistribution,
   fetchKpis,
@@ -23,6 +24,7 @@ import {
   fetchRiskMatrix,
   type RiskMatrixCell,
 } from "../api/client";
+import AlertsBanner from "../components/AlertsBanner";
 import ClaimsTable from "../components/ClaimsTable";
 import HazardChart from "../components/HazardChart";
 import KpiCard from "../components/KpiCard";
@@ -35,6 +37,7 @@ const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינ
 
 export default function Dashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
+  const alerts = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const riskMatrix = useQuery({ queryKey: ["risk-matrix"], queryFn: fetchRiskMatrix });
   const hazardDist = useQuery({ queryKey: ["hazard-distribution"], queryFn: fetchHazardDistribution });
@@ -72,6 +75,8 @@ export default function Dashboard() {
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
         דשבורד מנהלים
       </Typography>
+
+      {alerts.data && <AlertsBanner alerts={alerts.data} />}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
