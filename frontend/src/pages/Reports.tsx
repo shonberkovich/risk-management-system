@@ -1,4 +1,5 @@
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SendIcon from "@mui/icons-material/Send";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import Alert from "@mui/material/Alert";
@@ -13,9 +14,12 @@ import Grid from "@mui/material/Grid";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { askQuestion } from "../api/client";
+import { askQuestion, fetchClaims, fetchKpis } from "../api/client";
+import ExecutiveReportPrintable from "../components/ExecutiveReportPrintable";
+import { exportElementToPdf } from "../exportPdf";
 
 const SUGGESTED_QUESTIONS = [
   "כמה תביעות אושרו ועדיין לא שולמו?",
@@ -34,6 +38,23 @@ export default function Reports() {
   const [summaryText, setSummaryText] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // --- PDF export ---
+  const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
+  const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
+  const printableRef = useRef<HTMLDivElement>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  async function exportPdf() {
+    if (!printableRef.current || !kpis.data || !claims.data) return;
+    setPdfExporting(true);
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await exportElementToPdf(printableRef.current, `executive-report-${dateStr}.pdf`);
+    } finally {
+      setPdfExporting(false);
+    }
+  }
 
   async function generateSummary() {
     setSummaryLoading(true);
@@ -101,14 +122,24 @@ export default function Reports() {
                     דוח הנהלה (Executive Summary)
                   </Typography>
                 </Stack>
-                <Button
-                  variant="contained"
-                  startIcon={summaryLoading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
-                  onClick={generateSummary}
-                  disabled={summaryLoading}
-                >
-                  {summaryLoading ? "מפיק דוח..." : "הפק דוח"}
-                </Button>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="contained"
+                    startIcon={summaryLoading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                    onClick={generateSummary}
+                    disabled={summaryLoading}
+                  >
+                    {summaryLoading ? "מפיק דוח..." : "הפק דוח"}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={pdfExporting ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
+                    onClick={exportPdf}
+                    disabled={pdfExporting || !kpis.data || !claims.data}
+                  >
+                    ייצוא ל-PDF
+                  </Button>
+                </Stack>
               </Stack>
 
               {summaryError && <Alert severity="error" sx={{ mb: 2 }}>{summaryError}</Alert>}
@@ -196,6 +227,16 @@ export default function Reports() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Off-screen (not display:none — html2canvas needs a laid-out element to capture)
+          printable layout for the PDF export button above. */}
+      {kpis.data && claims.data && (
+        <Box sx={{ position: "fixed", top: 0, left: "-9999px" }}>
+          <div ref={printableRef}>
+            <ExecutiveReportPrintable kpis={kpis.data} claims={claims.data} summaryText={summaryText || undefined} />
+          </div>
+        </Box>
+      )}
     </Stack>
   );
 }
