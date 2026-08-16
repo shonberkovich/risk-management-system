@@ -8,7 +8,8 @@ import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { fetchClaims } from "../api/client";
+import { fetchClaims, type ClaimTrackingRow } from "../api/client";
+import ClaimUpdateDialog from "../components/ClaimUpdateDialog";
 import ClaimsTable from "../components/ClaimsTable";
 import { CLAIM_STATUS_LABELS } from "../format";
 
@@ -16,6 +17,7 @@ const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJE
 
 export default function Claims() {
   const [status, setStatus] = useState("");
+  const [editClaim, setEditClaim] = useState<ClaimTrackingRow | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["claims", status],
     queryFn: () => fetchClaims(status || undefined),
@@ -46,9 +48,11 @@ export default function Claims() {
 
       <Card variant="outlined">
         <CardContent>
-          {isLoading ? <CircularProgress size={24} /> : <ClaimsTable rows={data ?? []} />}
+          {isLoading ? <CircularProgress size={24} /> : <ClaimsTable rows={data ?? []} onEdit={setEditClaim} />}
         </CardContent>
       </Card>
+
+      <ClaimUpdateDialog open={!!editClaim} claim={editClaim} onClose={() => setEditClaim(null)} />
     </Stack>
   );
 }

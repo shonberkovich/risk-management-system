@@ -165,12 +165,23 @@ npm run dev
 
 אומת ידנית בדפדפן מול ה-DB האמיתי: 4 הפוליסות הקיימות נטענות עם ה-KPIs הנכונים, פתיחת "נכסים מבוטחים" מציגה את הנכסים המשויכים בפועל, והסרת נכס דרך ה-UI מתעדכנת ונשמרת ב-DB (`DELETE /api/policies/{id}/assets/{property_id}` אומת שמתמיד). טרם נבדק ידנית מסלול היצירה/עריכה המלא (`POST`/`PUT`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server. פותח בענף `feature/policy-crud` ומוזג ל-`main` מקומית (ללא PR ב-GitHub, commit `1525b91`).
 
+**זרימת עבודה (workflow) לאירועים/תביעות:** יישום ההמלצה מהעדכון הקודם. עד כה כל מחזור החיים של אירוע/תביעה היה read-only מלבד יצירת אירוע חדש (`Incidents.status` נשאר `NEW` לצמיתות, ותביעות לא ניתנות ליצירה כלל דרך ה-UI). נוספו:
+- `PATCH /api/incidents/{id}/status` — קידום סטטוס אירוע (`NEW → UNDER_INVESTIGATION → CLOSED`) עם אכיפת סדר (לא ניתן לדלג אחורה, ולא ניתן להגדיר `CLAIM_FILED` ידנית — סטטוס זה נקבע רק אוטומטית מפתיחת תביעה)
+- `GET /api/incidents/{id}/eligible-policies` — מחזיר את הפוליסות הפעילות המכסות את הנכס של האירוע (JOIN דרך `Policy_Assets`), לצורך בחירת פוליסה בעת פתיחת תביעה
+- `POST /api/claims` — פתיחת תביעה חדשה מתוך אירוע קיים ופוליסה מכסה; מייצר `claim_number` (`CLM-{שנה}-{סד"נ}`) ומעדכן אוטומטית את `Incidents.status` ל-`CLAIM_FILED`
+- `PATCH /api/claims/{id}` — עדכון סטטוס תביעה (`DRAFT → SUBMITTED → IN_ADJUSTMENT → APPROVED/REJECTED → SETTLED`), סכום מאושר, שמאי וצפי תשלום; חסום לעדכון נוסף לאחר `SETTLED`/`REJECTED`; כשכל התביעות של אירוע מגיעות לסטטוס סופי, האירוע נסגר אוטומטית (`status = CLOSED`)
+- [`frontend/src/pages/Incidents.tsx`](../frontend/src/pages/Incidents.tsx) — מסך `/incidents` חדש (ניהול אירועים) עם 4 כרטיסי KPI, סינון לפי סטטוס, וטבלה עם פעולות: קידום לבדיקה, סגירה ללא תביעה, פתיחת תביעה
+- [`IncidentsTable.tsx`](../frontend/src/components/IncidentsTable.tsx), [`FileClaimDialog.tsx`](../frontend/src/components/FileClaimDialog.tsx) — טבלת אירועים ודיאלוג פתיחת תביעה (בוחר פוליסה מכסה מתוך `eligible-policies`, סכום נתבע, השתתפות עצמית, שמאי)
+- [`ClaimUpdateDialog.tsx`](../frontend/src/components/ClaimUpdateDialog.tsx) — נוסף כפעולה בטבלת התביעות הקיימת ([`ClaimsTable.tsx`](../frontend/src/components/ClaimsTable.tsx), מסך `/claims`) לעדכון סטטוס/סכום מאושר/צפי תשלום; מושבת אוטומטית עבור תביעות בסטטוס סופי
+- ראוט וקישור ניווט חדשים ("ניהול אירועים") ב-`App.tsx` ו-`Layout.tsx`
+
+אומת ידנית בדפדפן מול ה-DB האמיתי: 25 האירועים הקיימים נטענים עם ה-KPIs הנכונים, סינון לפי סטטוס עובד, ופתיחת דיאלוג "פתח תביעה" שולפת בהצלחה את הפוליסות הזמינות דרך `eligible-policies` (`GET /api/incidents/25/eligible-policies` אומת ב-Network). טרם נבדק ידנית מסלול השליחה המלא (`POST /api/claims`, `PATCH /api/incidents/{id}/status`, `PATCH /api/claims/{id}`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server — נבדק רק סטטית (`py_compile`, `tsc -b`, ללא שגיאות חדשות מעבר לשגיאת ה-`stylis` הקיימת מראש).
+
 ### מה עוד נשאר לעשות
 
 נבדק מיפוי פערים מול המפרט (routers, מסכים, מודל נתונים, seed data). בסדר עדיפות משוער:
 
 **פערים משמעותיים בהיקף הפרויקט:**
-- **זרימת עבודה (workflow) לאירועים/תביעות:** אין שום דרך לעדכן סטטוס אירוע (NEW → UNDER_INVESTIGATION → CLAIM_FILED → CLOSED) או ליצור/לקדם תביעה. הכל read-only מלבד יצירת אירוע חדש.
 - **מטריצת הסיכונים אינה אינטראקטיבית:** ה-API של `/api/analytics/risk-matrix` כבר מחזיר `property_ids` לכל תא, אך ב-[`RiskMatrix.tsx`](../frontend/src/components/RiskMatrix.tsx) אין `onClick` — לחיצה על תא לא מסננת כלום (למרות ה-`cursor:pointer` ב-CSS).
 - **ניתוח רב-שנתי / מגמות:** `calculate_loss_ratio` ב-[`kpi.py`](../backend/app/services/kpi.py) מקבל פרמטר `year` אך תמיד נקרא בברירת מחדל (שנה נוכחית) — כלומר יחס הנזקים כרגע **מתעלם משנת 2025 כולה**. אין אנדפוינט טרנד רב-שנתי בכלל.
 - **`Claim_Payments` יתום לחלוטין:** הטבלה קיימת, מאוכלסת (5 רשומות), עם `relationship` במודל — אך אין אנדפוינט, סכימה, או שימוש בקוד בכלל. זו נקודת ההתחלה הטבעית למודול "ניהול רזרבות ותזרים" מהמפרט.
@@ -179,4 +190,4 @@ npm run dev
 
 **מוצהר כמחוץ להיקף (ראו סעיף 8) ולא צפוי להשתנות בפרויקט הקורס:** RBAC/Audit Log, הצפנת at-rest, אינטגרציית ERP/Govmap, סנכרון offline, סימולציות Monte Carlo/VaR מלאות, התראות Push/SMS, שמירת מדיה אמיתית לאירועים (`Incident_Media` קיימת במודל ומעולם לא נזרעה).
 
-**המלצה לצעד הבא:** זרימת עבודה (workflow) לאירועים/תביעות — כרגע אין שום דרך לעדכן סטטוס אירוע או לקדם/ליצור תביעה דרך ה-UI; הכל read-only מלבד יצירת אירוע חדש. עם קיומו של Policy CRUD, זהו עכשיו הפער המשמעותי הבא בשרשרת הערך המרכזית (Incidents → Claims), וגם הבסיס הטבעי להפעלת "Claim_Payments היתום" בהמשך.
+**המלצה לצעד הבא:** הפעלת `Claim_Payments` — הטבלה קיימת ומאוכלסת (5 רשומות) אך יתומה לחלוטין (ללא אנדפוינט/סכימה/UI). עם זרימת העבודה של אירועים/תביעות קיימת עכשיו, זהו הצעד הטבעי הבא: מודול "ניהול רזרבות ותזרים" שמציג את תשלומי התביעות בפועל (מקדמות מול סילוק סופי) מול הסכום המאושר, ומאפשר רישום תשלום חדש לתביעה שאושרה.

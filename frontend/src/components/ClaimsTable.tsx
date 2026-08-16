@@ -1,10 +1,13 @@
+import EditIcon from "@mui/icons-material/Edit";
 import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
 import type { ClaimTrackingRow } from "../api/client";
@@ -19,7 +22,15 @@ const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" |
   SETTLED: "default",
 };
 
-export default function ClaimsTable({ rows }: { rows: ClaimTrackingRow[] }) {
+const TERMINAL_STATUSES = new Set(["SETTLED", "REJECTED"]);
+
+export default function ClaimsTable({
+  rows,
+  onEdit,
+}: {
+  rows: ClaimTrackingRow[];
+  onEdit?: (claim: ClaimTrackingRow) => void;
+}) {
   const totals = rows.reduce(
     (acc, r) => ({
       claimed: acc.claimed + r.claimed_amount,
@@ -42,6 +53,7 @@ export default function ClaimsTable({ rows }: { rows: ClaimTrackingRow[] }) {
             <TableCell align="left">סכום מאושר</TableCell>
             <TableCell>סטטוס</TableCell>
             <TableCell>צפי תשלום</TableCell>
+            {onEdit && <TableCell align="center">פעולות</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -57,6 +69,17 @@ export default function ClaimsTable({ rows }: { rows: ClaimTrackingRow[] }) {
                 <Chip size="small" label={CLAIM_STATUS_LABELS[r.claim_status] ?? r.claim_status} color={STATUS_COLOR[r.claim_status]} />
               </TableCell>
               <TableCell>{r.expected_payment_date ? formatDate(r.expected_payment_date) : "-"}</TableCell>
+              {onEdit && (
+                <TableCell align="center">
+                  <Tooltip title={TERMINAL_STATUSES.has(r.claim_status) ? "תביעה סגורה" : "עדכון תביעה"}>
+                    <span>
+                      <IconButton size="small" disabled={TERMINAL_STATUSES.has(r.claim_status)} onClick={() => onEdit(r)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </TableCell>
+              )}
             </TableRow>
           ))}
           <TableRow sx={{ bgcolor: "action.hover" }}>
@@ -66,7 +89,7 @@ export default function ClaimsTable({ rows }: { rows: ClaimTrackingRow[] }) {
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.claimed)}</TableCell>
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.deductible)}</TableCell>
             <TableCell align="left" sx={{ fontWeight: 700 }}>{formatIls(totals.approved)}</TableCell>
-            <TableCell colSpan={2} />
+            <TableCell colSpan={onEdit ? 3 : 2} />
           </TableRow>
         </TableBody>
       </Table>
