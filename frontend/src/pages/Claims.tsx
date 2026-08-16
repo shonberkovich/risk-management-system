@@ -1,3 +1,5 @@
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -12,6 +14,7 @@ import { fetchClaims, type ClaimTrackingRow } from "../api/client";
 import ClaimPaymentsDialog from "../components/ClaimPaymentsDialog";
 import ClaimUpdateDialog from "../components/ClaimUpdateDialog";
 import ClaimsTable from "../components/ClaimsTable";
+import { exportClaimsToExcel } from "../exportClaims";
 import { CLAIM_STATUS_LABELS } from "../format";
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECTED", "SETTLED"];
@@ -31,21 +34,31 @@ export default function Claims() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           מעקב תביעות וסטטוס גבייה
         </Typography>
-        <TextField
-          select
-          size="small"
-          label="סינון לפי סטטוס"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          sx={{ minWidth: 200 }}
-        >
-          <MenuItem value="">הכל</MenuItem>
-          {STATUS_OPTIONS.map((s) => (
-            <MenuItem key={s} value={s}>
-              {CLAIM_STATUS_LABELS[s]}
-            </MenuItem>
-          ))}
-        </TextField>
+        <Stack direction="row" spacing={2}>
+          <TextField
+            select
+            size="small"
+            label="סינון לפי סטטוס"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value="">הכל</MenuItem>
+            {STATUS_OPTIONS.map((s) => (
+              <MenuItem key={s} value={s}>
+                {CLAIM_STATUS_LABELS[s]}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button
+            variant="outlined"
+            startIcon={<FileDownloadIcon />}
+            disabled={!data || data.length === 0}
+            onClick={() => data && exportClaimsToExcel(data, `תביעות-${new Date().toISOString().slice(0, 10)}.xlsx`)}
+          >
+            ייצוא ל-Excel
+          </Button>
+        </Stack>
       </Stack>
 
       <Card variant="outlined">
