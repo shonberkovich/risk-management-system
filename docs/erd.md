@@ -134,3 +134,7 @@ erDiagram
 ```
 
 מקביל, ומחוץ לשרשרת הליניארית: `Mitigation_Tasks` מקשר `Properties` להמלצות תחזוקה מונעת עם חישוב ROI, ו-`Policy_Assets` הוא טבלת קישור many-to-many בין `Properties` ל-`Insurance_Policies` (נכס יכול להיות מכוסה במספר פוליסות; פוליסה מכסה מספר נכסים).
+
+## התראות סף (Threshold Alerts)
+
+התראות הסף המוצגות ב-`GET /api/analytics/alerts` (ריכוז חשיפה גיאוגרפית מעל אחוז מסוים מה-TIV, וריכוז אירועים פתוחים בנכס בודד) **אינן ישות מתמידה בסכמה** — הן מחושבות "on the fly" מתוך `Properties`, `Asset_Risk_Profiles` ו-`Incidents` הקיימים (ראו `backend/app/services/kpi.py::calculate_alerts`), ולכן לא נוסף טבלה/ישות חדשה לתרשים ה-ERD עבור תכונה זו.
