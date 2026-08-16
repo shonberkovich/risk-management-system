@@ -11,6 +11,7 @@ ClaimStatus = Literal["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECT
 AssetType = Literal["LOGISTICS_CENTER", "OFFICE_BUILDING", "RETAIL", "INFRASTRUCTURE"]
 MitigationStatus = Literal["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"]
 PolicyStatus = Literal["ACTIVE", "EXPIRED", "PENDING_RENEWAL"]
+PaymentType = Literal["ADVANCE", "FINAL_SETTLEMENT"]
 
 
 # --- Properties ---
@@ -118,6 +119,23 @@ class ClaimUpdate(BaseModel):
     expected_payment_date: date | None = None
 
 
+class ClaimPaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    payment_id: int
+    claim_id: int
+    payment_date: date
+    amount: float
+    reference_number: str | None = None
+    payment_type: PaymentType
+
+
+class ClaimPaymentCreate(BaseModel):
+    payment_date: date
+    amount: float
+    reference_number: str | None = None
+    payment_type: PaymentType
+
+
 class ClaimTrackingRow(BaseModel):
     claim_id: int
     claim_number: str
@@ -129,6 +147,7 @@ class ClaimTrackingRow(BaseModel):
     approved_amount: float
     claim_status: ClaimStatus
     expected_payment_date: date | None = None
+    paid_amount: float = 0
 
 
 # --- Policies ---

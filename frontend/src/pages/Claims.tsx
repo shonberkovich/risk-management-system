@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { fetchClaims, type ClaimTrackingRow } from "../api/client";
+import ClaimPaymentsDialog from "../components/ClaimPaymentsDialog";
 import ClaimUpdateDialog from "../components/ClaimUpdateDialog";
 import ClaimsTable from "../components/ClaimsTable";
 import { CLAIM_STATUS_LABELS } from "../format";
@@ -18,6 +19,7 @@ const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJE
 export default function Claims() {
   const [status, setStatus] = useState("");
   const [editClaim, setEditClaim] = useState<ClaimTrackingRow | null>(null);
+  const [paymentsClaim, setPaymentsClaim] = useState<ClaimTrackingRow | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["claims", status],
     queryFn: () => fetchClaims(status || undefined),
@@ -48,11 +50,16 @@ export default function Claims() {
 
       <Card variant="outlined">
         <CardContent>
-          {isLoading ? <CircularProgress size={24} /> : <ClaimsTable rows={data ?? []} onEdit={setEditClaim} />}
+          {isLoading ? (
+            <CircularProgress size={24} />
+          ) : (
+            <ClaimsTable rows={data ?? []} onEdit={setEditClaim} onPayments={setPaymentsClaim} />
+          )}
         </CardContent>
       </Card>
 
       <ClaimUpdateDialog open={!!editClaim} claim={editClaim} onClose={() => setEditClaim(null)} />
+      <ClaimPaymentsDialog open={!!paymentsClaim} claim={paymentsClaim} onClose={() => setPaymentsClaim(null)} />
     </Stack>
   );
 }

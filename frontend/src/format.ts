@@ -63,6 +63,11 @@ export const CLAIM_STATUS_LABELS: Record<string, string> = {
   SETTLED: "נסגרה",
 };
 
+export const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  ADVANCE: "מקדמה",
+  FINAL_SETTLEMENT: "סילוק סופי",
+};
+
 export const MITIGATION_STATUS_LABELS: Record<string, string> = {
   OPEN: "פתוחה",
   IN_PROGRESS: "בטיפול",

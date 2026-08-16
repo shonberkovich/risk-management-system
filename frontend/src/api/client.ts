@@ -89,6 +89,25 @@ export interface ClaimTrackingRow {
   approved_amount: number;
   claim_status: ClaimStatus;
   expected_payment_date: string | null;
+  paid_amount: number;
+}
+
+export type PaymentType = "ADVANCE" | "FINAL_SETTLEMENT";
+
+export interface ClaimPayment {
+  payment_id: number;
+  claim_id: number;
+  payment_date: string;
+  amount: number;
+  reference_number: string | null;
+  payment_type: PaymentType;
+}
+
+export interface ClaimPaymentCreate {
+  payment_date: string;
+  amount: number;
+  reference_number?: string | null;
+  payment_type: PaymentType;
 }
 
 export interface Claim {
@@ -221,6 +240,10 @@ export const createClaim = (payload: ClaimCreate) =>
   api.post<Claim>("/claims", payload).then((r) => r.data);
 export const updateClaim = (id: number, payload: ClaimUpdate) =>
   api.patch<Claim>(`/claims/${id}`, payload).then((r) => r.data);
+export const fetchClaimPayments = (claimId: number) =>
+  api.get<ClaimPayment[]>(`/claims/${claimId}/payments`).then((r) => r.data);
+export const createClaimPayment = (claimId: number, payload: ClaimPaymentCreate) =>
+  api.post<ClaimPayment>(`/claims/${claimId}/payments`, payload).then((r) => r.data);
 
 export const fetchMitigationTasks = () =>
   api.get<MitigationTask[]>("/mitigation-tasks").then((r) => r.data);
