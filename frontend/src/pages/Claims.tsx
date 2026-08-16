@@ -1,0 +1,54 @@
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CircularProgress from "@mui/material/CircularProgress";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+
+import { fetchClaims } from "../api/client";
+import ClaimsTable from "../components/ClaimsTable";
+import { CLAIM_STATUS_LABELS } from "../format";
+
+const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECTED", "SETTLED"];
+
+export default function Claims() {
+  const [status, setStatus] = useState("");
+  const { data, isLoading } = useQuery({
+    queryKey: ["claims", status],
+    queryFn: () => fetchClaims(status || undefined),
+  });
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          מעקב תביעות וסטטוס גבייה
+        </Typography>
+        <TextField
+          select
+          size="small"
+          label="סינון לפי סטטוס"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="">הכל</MenuItem>
+          {STATUS_OPTIONS.map((s) => (
+            <MenuItem key={s} value={s}>
+              {CLAIM_STATUS_LABELS[s]}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Stack>
+
+      <Card variant="outlined">
+        <CardContent>
+          {isLoading ? <CircularProgress size={24} /> : <ClaimsTable rows={data ?? []} />}
+        </CardContent>
+      </Card>
+    </Stack>
+  );
+}
