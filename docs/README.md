@@ -156,14 +156,14 @@ npm run dev
 
 ללא שינוי בבקאנד — האנדפוינט והחישוב היו כבר נכונים. אומת ידנית בדפדפן: כל 12 המשימות מוצגות עם ROI, שם נכס וסטטוס נכונים; הסינון לפי סטטוס עובד. מוזג ל-`main` (PR #1, commit `5d1d19f`).
 
-**מודול ניהול פוליסות (Policy CRUD) — בענף `feature/policy-crud`, טרם נפתח PR:** יישום ההמלצה מהעדכון הקודם. ה-Backend היה read-only בלבד (`GET /api/policies` בלבד); נוספו:
+**מודול ניהול פוליסות (Policy CRUD):** יישום ההמלצה מהעדכון הקודם. ה-Backend היה read-only בלבד (`GET /api/policies` בלבד); נוספו:
 - `POST /api/policies`, `PUT /api/policies/{id}` — יצירה ועדכון פוליסה, כולל טיפול ב-`IntegrityError` על מספר פוליסה כפול (`backend/app/routers/policies.py`)
 - `GET/POST /api/policies/{id}/assets`, `DELETE /api/policies/{id}/assets/{property_id}` — האנדפוינטים הראשונים ל-`Policy_Assets` (שהייתה טבלת קישור ללא שום אנדפוינט), לניהול שיוך נכסים לפוליסה עם השתתפות עצמית ייעודית
 - [`frontend/src/pages/Policies.tsx`](../frontend/src/pages/Policies.tsx) — מסך `/policies` עם 4 כרטיסי KPI (פוליסות פעילות, ממתינות לחידוש, סה"כ תקרת כיסוי ופרמיה שנתית לפוליסות פעילות), סינון לפי סטטוס וטבלה
 - [`PolicyDialog.tsx`](../frontend/src/components/PolicyDialog.tsx) — יצירה/עריכה של פוליסה; [`PolicyAssetsDialog.tsx`](../frontend/src/components/PolicyAssetsDialog.tsx) — שיוך/הסרת נכסים לפוליסה נבחרת דרך `Autocomplete`
 - ראוט וקישור ניווט חדשים ב-`App.tsx` ו-`Layout.tsx`
 
-אומת ידנית בדפדפן מול ה-DB האמיתי: 4 הפוליסות הקיימות נטענות עם ה-KPIs הנכונים, פתיחת "נכסים מבוטחים" מציגה את הנכסים המשויכים בפועל, והסרת נכס דרך ה-UI מתעדכנת ונשמרת ב-DB (`DELETE /api/policies/{id}/assets/{property_id}` אומת שמתמיד). טרם נבדק ידנית מסלול היצירה/עריכה המלא (`POST`/`PUT`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server.
+אומת ידנית בדפדפן מול ה-DB האמיתי: 4 הפוליסות הקיימות נטענות עם ה-KPIs הנכונים, פתיחת "נכסים מבוטחים" מציגה את הנכסים המשויכים בפועל, והסרת נכס דרך ה-UI מתעדכנת ונשמרת ב-DB (`DELETE /api/policies/{id}/assets/{property_id}` אומת שמתמיד). טרם נבדק ידנית מסלול היצירה/עריכה המלא (`POST`/`PUT`) כדי לא לזהם seed data משותף שנבדק גם על ידי סשן אחר שרץ באותו זמן על אותו dev server. פותח בענף `feature/policy-crud` ומוזג ל-`main` מקומית (ללא PR ב-GitHub, commit `1525b91`).
 
 ### מה עוד נשאר לעשות
 
