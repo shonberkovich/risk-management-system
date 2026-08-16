@@ -140,3 +140,35 @@ npm run dev
 2. **`DBCC CHECKIDENT ... RESEED 0`** על טבלה שמעולם לא הוכנסו אליה שורות מתנהג אחרת (ה-ID הבא הופך להיות ממש 0/הערך שהוזן) לעומת טבלה שכבר אוכלסה בעבר (ה-ID הבא = ערך+1). הפתרון בשימוש: `schema.sql` תמיד מבצע DROP+CREATE מסודר (בסדר תלויות FK הפוך) לפני seeding, כדי שההתנהגות תהיה עקבית.
 3. **SQLAlchemy `String`/`Text` גנרי במקום `Unicode`/`UnicodeText`** יכול לגרום ל-pyodbc לקשור פרמטרים כ-ANSI צר במקום Unicode רחב, מה שהופך טקסט עברי ל-`?????` בזמן INSERT — למרות שהעמודה בפועל היא `NVARCHAR`. כל השדות הטקסטואליים ב-`models.py` משתמשים כעת ב-`Unicode`/`UnicodeText` באופן מפורש.
 4. **`--reload` של uvicorn** תקוע לעיתים אחרי כמה מחזורי rewrite מהירים על אותם קבצים (במיוחד ב-Windows) — נצפה `RuntimeWarning: coroutine 'Server.serve' was never awaited`. הפתרון: הפעלה מחדש מלאה של תהליך השרת אחרי שינויים משמעותיים, ולא הסתמכות בלבד על ה-reloader.
+
+## 10. סטטוס נוכחי ומשימות להמשך
+
+עדכון אחרון: 2026-08-16.
+
+### מה בוצע עד כה
+
+**גרסה ראשונית (build מלא, first commit → `8f1398e`):** המערכת המלאה כפי שמתוארת בסעיפים 1-9 — 9 טבלאות, כל ה-routers (properties/incidents/policies/claims/mitigation/analytics/ai), שלוש יכולות ה-AI, וחמשת מסכי ה-Frontend המקוריים (Dashboard, Properties, IncidentReport, Claims, Reports).
+
+**PR #1 — מודול "משימות הפחתת סיכון" (Mitigation Tasks & ROI):** ה-Backend למודול הזה (טבלת `Mitigation_Tasks`, 12 רשומות seed, חישוב ROI ב-[`kpi.py`](../backend/app/services/kpi.py), ואנדפוינט `GET /api/mitigation-tasks`) היה קיים מההתחלה אך **לא היה נגיש דרך שום מסך** — רק דרך כלי ה-AI `query_mitigation_tasks`. נסגר הפער בהוספת:
+- [`frontend/src/pages/Mitigation.tsx`](../frontend/src/pages/Mitigation.tsx) — מסך `/mitigation` עם 4 כרטיסי KPI (משימות פתוחות/באיחור, עלות פעילה כוללת, חיסכון שנתי צפוי כולל, ROI ממוצע), סינון לפי סטטוס, וטבלה ממוינת עם משימות באיחור ראשונות
+- [`frontend/src/components/MitigationTable.tsx`](../frontend/src/components/MitigationTable.tsx) — טבלה read-only, תואמת לסגנון `ClaimsTable.tsx`
+- ראוט וקישור ניווט חדשים ב-`App.tsx` ו-`Layout.tsx`
+
+ללא שינוי בבקאנד — האנדפוינט והחישוב היו כבר נכונים. אומת ידנית בדפדפן: כל 12 המשימות מוצגות עם ROI, שם נכס וסטטוס נכונים; הסינון לפי סטטוס עובד. מוזג ל-`main` (PR #1, commit `5d1d19f`).
+
+### מה עוד נשאר לעשות
+
+נבדק מיפוי פערים מול המפרט (routers, מסכים, מודל נתונים, seed data). בסדר עדיפות משוער:
+
+**פערים משמעותיים בהיקף הפרויקט:**
+- **ניהול פוליסות (Policy CRUD + מסך):** קיים רק `GET /api/policies` ללא פילטרים; אין מסך frontend, אין `fetchPolicies` ב-`client.ts`, ואין דרך להוסיף/לערוך פוליסה. `Policy_Assets` קיימת רק כטבלת קישור ללא אנדפוינט.
+- **זרימת עבודה (workflow) לאירועים/תביעות:** אין שום דרך לעדכן סטטוס אירוע (NEW → UNDER_INVESTIGATION → CLAIM_FILED → CLOSED) או ליצור/לקדם תביעה. הכל read-only מלבד יצירת אירוע חדש.
+- **מטריצת הסיכונים אינה אינטראקטיבית:** ה-API של `/api/analytics/risk-matrix` כבר מחזיר `property_ids` לכל תא, אך ב-[`RiskMatrix.tsx`](../frontend/src/components/RiskMatrix.tsx) אין `onClick` — לחיצה על תא לא מסננת כלום (למרות ה-`cursor:pointer` ב-CSS).
+- **ניתוח רב-שנתי / מגמות:** `calculate_loss_ratio` ב-[`kpi.py`](../backend/app/services/kpi.py) מקבל פרמטר `year` אך תמיד נקרא בברירת מחדל (שנה נוכחית) — כלומר יחס הנזקים כרגע **מתעלם משנת 2025 כולה**. אין אנדפוינט טרנד רב-שנתי בכלל.
+- **`Claim_Payments` יתום לחלוטין:** הטבלה קיימת, מאוכלסת (5 רשומות), עם `relationship` במודל — אך אין אנדפוינט, סכימה, או שימוש בקוד בכלל. זו נקודת ההתחלה הטבעית למודול "ניהול רזרבות ותזרים" מהמפרט.
+- **ייצוא דוחות (Excel/PDF):** אין שום יכולת ייצוא בקוד (לא openpyxl, לא reportlab, לא כפתור הורדה). מוזכר כדוגמה ב-wireframes ("ייצוא ל-Excel", "ייצוא דוח הנהלה PDF") אך לא מומש.
+- **התראות סף (thresholds/alerts):** אין מנגנון טריגרים — לא על חשיפה גיאוגרפית שחוצה סף, לא על אירוע קריטי. ה-"תיבחור" הקיים (`_band` ב-`analytics.py`) הוא חלוקה קבועה ל-3 רמות, לא סף מוגדר.
+
+**מוצהר כמחוץ להיקף (ראו סעיף 8) ולא צפוי להשתנות בפרויקט הקורס:** RBAC/Audit Log, הצפנת at-rest, אינטגרציית ERP/Govmap, סנכרון offline, סימולציות Monte Carlo/VaR מלאות, התראות Push/SMS, שמירת מדיה אמיתית לאירועים (`Incident_Media` קיימת במודל ומעולם לא נזרעה).
+
+**המלצה לצעד הבא:** מודול ניהול הפוליסות (Policy CRUD) — כרגע היחיד מבין שכבת ה"פיננסים" בשם המערכת שהוא read-only-בלבד ברמת ה-API עצמו (בניגוד ל-Mitigation שהיה רק חסר UI). זה חוסם גם כל הרחבה עתידית של תרשים הפוליסות/נכסים.
