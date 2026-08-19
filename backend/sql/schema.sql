@@ -146,7 +146,11 @@ CREATE TABLE dbo.Incidents (
         CHECK (status IN ('NEW','UNDER_INVESTIGATION','CLAIM_FILED','CLOSED')),
     ai_classified                             BIT NOT NULL DEFAULT 0,
     ai_confidence                              DECIMAL(4,3) NULL,
-    created_at                                   DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    created_at                                   DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    is_draft                                       BIT NOT NULL DEFAULT 0,
+    business_interruption_requested                BIT NOT NULL DEFAULT 0,
+    area_or_building                                 NVARCHAR(150) NULL,   -- אזור/מבנה בתוך הנכס
+    reported_coordinates                               NVARCHAR(50) NULL  -- מיקום GPS של המדווח, "lat,lng"
 );
 GO
 CREATE INDEX IX_Incidents_Property ON dbo.Incidents(property_id);
