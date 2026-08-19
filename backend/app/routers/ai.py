@@ -1,13 +1,14 @@
 """AI endpoints (LLM-powered), backed by Anthropic Claude."""
 import anthropic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import settings
 from app.services import llm
+from app.services.rate_limit import enforce_ai_rate_limit
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(prefix="/api/ai", tags=["ai"], dependencies=[Depends(enforce_ai_rate_limit)])
 
 
 class ClassifyRequest(BaseModel):
