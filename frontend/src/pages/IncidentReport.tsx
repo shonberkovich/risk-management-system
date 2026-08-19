@@ -21,12 +21,15 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   classifyIncident,
   createIncident,
+  fetchIncident,
   fetchProperties,
+  submitDraftIncident,
+  updateDraftIncident,
   uploadIncidentMedia,
   type HazardType,
   type IncidentClassification,
@@ -41,6 +44,11 @@ import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../fo
 const STEPS = ["מיקום וזיהוי הנכס", "פרטי הנזק והחומרה", "אומדן כספי ותיאור", "תיעוד ושליחה"];
 
 const NEARBY_RADIUS_KM = 15;
+
+// Persists only the draft incident's id — the fields themselves live server-side
+// (via PATCH /api/incidents/{id}) so "save as draft, come back later" survives
+// a closed tab / different device login, not just a page refresh.
+const DRAFT_STORAGE_KEY = "rmis_incident_draft_id";
 
 const HAZARD_OPTIONS: HazardType[] = ["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"];
 const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
@@ -64,9 +72,40 @@ export default function IncidentReport() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<number | null>(null);
+  const [draftCode, setDraftCode] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const draftResumeAttempted = useRef(false);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const geo = useGeolocation();
+
+  // Resume a previously saved draft (if any) once the property list is loaded,
+  // so the Autocomplete can be matched to a real Property object.
+  useEffect(() => {
+    if (draftResumeAttempted.current || !properties) return;
+    draftResumeAttempted.current = true;
+    const storedId = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!storedId) return;
+    fetchIncident(Number(storedId))
+      .then((incident) => {
+        if (!incident.is_draft) {
+          localStorage.removeItem(DRAFT_STORAGE_KEY);
+          return;
+        }
+        setDraftId(incident.incident_id);
+        setDraftCode(incident.incident_code);
+        setProperty(properties.find((p) => p.property_id === incident.property_id) ?? null);
+        setTimestamp(incident.incident_timestamp.slice(0, 16));
+        setHazardType(incident.hazard_type);
+        setSeverity(incident.severity_level);
+        setImpact(incident.operational_impact);
+        setLoss(String(incident.initial_estimated_loss));
+        setDescription(incident.description);
+        setDraftNotice(`נטענה טיוטה קודמת (מס' ${incident.incident_code}) — ניתן להמשיך למלא ולשלוח.`);
+      })
+      .catch(() => localStorage.removeItem(DRAFT_STORAGE_KEY));
+  }, [properties]);
 
   const nearbyProperties = geo.coords
     ? (properties ?? [])
@@ -87,9 +126,61 @@ export default function IncidentReport() {
     },
   });
 
+  const saveDraftMutation = useMutation({
+    mutationFn: () => {
+      const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
+      if (draftId != null) {
+        return updateDraftIncident(draftId, {
+          property_id: property?.property_id,
+          incident_timestamp: timestamp ? new Date(timestamp).toISOString() : undefined,
+          hazard_type: hazardType || undefined,
+          severity_level: severity || undefined,
+          operational_impact: impact || undefined,
+          initial_estimated_loss: loss ? Number(loss) : undefined,
+          description,
+          reported_coordinates: reportedCoordinates,
+        });
+      }
+      // Draft rows still need a value in every required column — fields the
+      // user hasn't reached yet get a placeholder that PATCH will overwrite
+      // once they fill them in (see update_draft_incident in incidents.py).
+      return createIncident({
+        property_id: property!.property_id,
+        incident_timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+        hazard_type: hazardType || "OTHER",
+        severity_level: severity || "LOW",
+        operational_impact: impact || "FULL_OPERATION",
+        initial_estimated_loss: Number(loss) || 0,
+        description: description || "(טיוטה — יושלם מאוחר יותר)",
+        is_draft: true,
+        reported_coordinates: reportedCoordinates,
+      });
+    },
+    onSuccess: (incident) => {
+      setDraftId(incident.incident_id);
+      setDraftCode(incident.incident_code);
+      localStorage.setItem(DRAFT_STORAGE_KEY, String(incident.incident_id));
+      setDraftNotice(`נשמר כטיוטה (מס' ${incident.incident_code}) בשעה ${new Date().toLocaleTimeString("he-IL")} — ניתן לצאת ולחזור מאוחר יותר.`);
+    },
+  });
+
   const submitMutation = useMutation({
-    mutationFn: () =>
-      createIncident({
+    mutationFn: async () => {
+      const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
+      if (draftId != null) {
+        await updateDraftIncident(draftId, {
+          property_id: property!.property_id,
+          incident_timestamp: new Date(timestamp).toISOString(),
+          hazard_type: hazardType as HazardType,
+          severity_level: severity as SeverityLevel,
+          operational_impact: impact as OperationalImpact,
+          initial_estimated_loss: Number(loss) || 0,
+          description,
+          reported_coordinates: reportedCoordinates,
+        });
+        return submitDraftIncident(draftId);
+      }
+      return createIncident({
         property_id: property!.property_id,
         incident_timestamp: new Date(timestamp).toISOString(),
         hazard_type: hazardType as HazardType,
@@ -99,8 +190,9 @@ export default function IncidentReport() {
         description,
         ai_classified: aiResult !== null,
         ai_confidence: aiResult?.confidence ?? null,
-        reported_coordinates: geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null,
-      }),
+        reported_coordinates: reportedCoordinates,
+      });
+    },
     onSuccess: async (incident) => {
       setMediaUploadError(null);
       if (mediaFiles.length > 0) {
@@ -116,6 +208,9 @@ export default function IncidentReport() {
           setMediaUploadError(`העלאת הקבצים הבאים נכשלה: ${failed.join(", ")}. הדיווח עצמו נשלח בהצלחה.`);
         }
       }
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setDraftId(null);
+      setDraftCode(null);
       setSubmitted(incident.incident_code);
     },
   });
@@ -157,6 +252,9 @@ export default function IncidentReport() {
             setAiResult(null);
             setMediaFiles([]);
             setMediaUploadError(null);
+            setDraftId(null);
+            setDraftCode(null);
+            setDraftNotice(null);
           }}
         >
           דווח אירוע נוסף
@@ -171,9 +269,18 @@ export default function IncidentReport() {
         במקרה של סכנת חיים חייג 102/100 מיד
       </Alert>
 
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
         דיווח על אירוע נזק חדש
+        {draftCode && (
+          <Chip size="small" color="default" label={`טיוטה: ${draftCode}`} sx={{ mr: 1.5, fontWeight: 400 }} />
+        )}
       </Typography>
+
+      {draftNotice && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setDraftNotice(null)}>
+          {draftNotice}
+        </Alert>
+      )}
 
       <Stepper activeStep={activeStep} sx={{ mb: 4 }} alternativeLabel>
         {STEPS.map((label) => (
@@ -364,9 +471,16 @@ export default function IncidentReport() {
             </Stack>
           )}
 
-          <Stack direction="row" justifyContent="space-between" sx={{ mt: 4 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 4 }}>
             <Button disabled={activeStep === 0} onClick={() => setActiveStep((s) => s - 1)}>
               חזרה
+            </Button>
+            <Button
+              startIcon={saveDraftMutation.isPending ? <CircularProgress size={16} /> : undefined}
+              disabled={!property || saveDraftMutation.isPending}
+              onClick={() => saveDraftMutation.mutate()}
+            >
+              שמור כטיוטה
             </Button>
             {activeStep < STEPS.length - 1 ? (
               <Button variant="contained" disabled={!canNext} onClick={() => setActiveStep((s) => s + 1)}>
@@ -383,6 +497,11 @@ export default function IncidentReport() {
               </Button>
             )}
           </Stack>
+          {saveDraftMutation.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              שמירת הטיוטה נכשלה. נסה שוב.
+            </Alert>
+          )}
         </CardContent>
       </Card>
     </Box>

@@ -63,6 +63,10 @@ export interface Incident {
   status: IncidentStatus;
   ai_classified: boolean;
   ai_confidence: number | null;
+  is_draft: boolean;
+  business_interruption_requested: boolean;
+  area_or_building: string | null;
+  reported_coordinates: string | null;
 }
 
 export interface IncidentCreate {
@@ -76,6 +80,22 @@ export interface IncidentCreate {
   description: string;
   ai_classified?: boolean;
   ai_confidence?: number | null;
+  is_draft?: boolean;
+  business_interruption_requested?: boolean;
+  area_or_building?: string | null;
+  reported_coordinates?: string | null;
+}
+
+export interface IncidentUpdate {
+  property_id?: number;
+  incident_timestamp?: string;
+  hazard_type?: HazardType;
+  severity_level?: SeverityLevel;
+  operational_impact?: OperationalImpact;
+  initial_estimated_loss?: number;
+  description?: string;
+  business_interruption_requested?: boolean;
+  area_or_building?: string | null;
   reported_coordinates?: string | null;
 }
 
@@ -257,6 +277,11 @@ export const fetchIncidents = (params?: { status?: string; property_id?: number 
   api.get<Incident[]>("/incidents", { params }).then((r) => r.data);
 export const createIncident = (payload: IncidentCreate) =>
   api.post<Incident>("/incidents", payload).then((r) => r.data);
+export const fetchIncident = (id: number) => api.get<Incident>(`/incidents/${id}`).then((r) => r.data);
+export const updateDraftIncident = (id: number, payload: IncidentUpdate) =>
+  api.patch<Incident>(`/incidents/${id}`, payload).then((r) => r.data);
+export const submitDraftIncident = (id: number) =>
+  api.patch<Incident>(`/incidents/${id}/submit`).then((r) => r.data);
 export const updateIncidentStatus = (id: number, status: IncidentStatus) =>
   api.patch<Incident>(`/incidents/${id}/status`, { status }).then((r) => r.data);
 export const fetchEligiblePolicies = (incidentId: number) =>
