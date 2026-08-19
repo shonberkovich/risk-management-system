@@ -268,6 +268,14 @@ export interface CashflowSummary {
   monthly: CashflowMonthPoint[];
 }
 
+export interface RegionExposure {
+  region_id: number | null;
+  region_name: string;
+  tiv: number;
+  mfl: number;
+  total_claimed: number;
+}
+
 export interface Alert {
   alert_type: "geographic_exposure" | "incident_concentration";
   severity: "warning" | "critical";
@@ -419,6 +427,8 @@ export const fetchLossRatioTrend = () =>
   api.get<LossRatioTrendPoint[]>("/analytics/loss-ratio-trend").then((r) => r.data);
 export const fetchCashflowSummary = (monthsAhead = 12) =>
   api.get<CashflowSummary>("/analytics/cashflow", { params: { months_ahead: monthsAhead } }).then((r) => r.data);
+export const fetchExposureByRegion = () =>
+  api.get<RegionExposure[]>("/analytics/exposure-by-region").then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
