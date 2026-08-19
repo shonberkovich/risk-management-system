@@ -16,14 +16,16 @@ def run():
 
     # --- clean slate (children first) ---
     for table in [
-        "Claim_Payments", "Claims", "Incident_Media", "Incidents",
-        "Policy_Assets", "Mitigation_Tasks", "Asset_Risk_Profiles",
-        "Insurance_Policies", "Properties", "Users",
+        "Claim_Reserves", "Claim_Payments", "Claims", "Incident_Media", "Incidents",
+        "Documents", "Audit_Log", "Policy_Assets", "Mitigation_Tasks", "Asset_Risk_Profiles",
+        "Insurance_Policies", "Properties", "Regions", "Role_Permissions",
+        "Financial_Statements", "Users",
     ]:
         cur.execute(f"DELETE FROM {table}")
     for table in [
-        "Properties", "Asset_Risk_Profiles", "Insurance_Policies",
-        "Incidents", "Claims", "Claim_Payments", "Mitigation_Tasks", "Users",
+        "Regions", "Properties", "Asset_Risk_Profiles", "Insurance_Policies",
+        "Incidents", "Claims", "Claim_Payments", "Claim_Reserves", "Mitigation_Tasks",
+        "Audit_Log", "Role_Permissions", "Documents", "Financial_Statements", "Users",
     ]:
         cur.execute(f"DBCC CHECKIDENT ('{table}', RESEED, 1)")
 
@@ -36,10 +38,23 @@ def run():
         ("רונית שמעוני", "ronit.shimoni@company.co.il", "FIELD_WORKER"),
         ("עומר בר", "omer.bar@company.co.il", "FIELD_WORKER"),
         ("אדמין מערכת", "admin@company.co.il", "ADMIN"),
+        ("נעם פרידמן", "noam.friedman@company.co.il", "RISK_OFFICER"),
+        ("שרה כהן", "sara.cohen@adjusters.co.il", "ADJUSTER"),
     ]
     cur.executemany(
         "INSERT INTO Users (full_name, email, role) VALUES (?, ?, ?)", users
     )
+
+    # --- Regions ---
+    regions = [
+        ("CENTER", "מרכז"),
+        ("NORTH", "צפון"),
+        ("SOUTH", "דרום"),
+    ]
+    cur.executemany(
+        "INSERT INTO Regions (region_code, name) VALUES (?, ?)", regions
+    )
+    region_id_by_name = {"מרכז": 1, "צפון": 2, "דרום": 3}
 
     # --- Properties ---
     properties = [
@@ -61,11 +76,16 @@ def run():
     ]
     cur.executemany(
         """INSERT INTO Properties
-           (property_code, name, address, region, latitude, longitude, asset_type,
+           (property_code, name, address, region, region_id, latitude, longitude, asset_type,
             replacement_value, book_value, primary_manager_id, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
-        properties,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+        [
+            (code, name, address, region, region_id_by_name[region], lat, lng, asset_type, repl, book, mgr)
+            for (code, name, address, region, lat, lng, asset_type, repl, book, mgr) in properties
+        ],
     )
+    # property_id -> (latitude, longitude), for deriving realistic reported_coordinates on incidents
+    property_coords = {i + 1: (p[4], p[5]) for i, p in enumerate(properties)}
 
     # --- Asset_Risk_Profiles ---
     profiles = [
@@ -95,16 +115,21 @@ def run():
 
     # --- Insurance_Policies ---
     policies = [
-        ("POL-2026-CENTRAL", "הפניקס ביטוח", "2026-01-01", "2026-12-31", 200000000, 100000, 1850000, "ACTIVE"),
-        ("POL-2026-NORTH", "כלל ביטוח", "2026-01-01", "2026-12-31", 90000000, 75000, 720000, "ACTIVE"),
-        ("POL-2026-SOUTH", "מגדל ביטוח", "2026-01-01", "2026-12-31", 80000000, 75000, 610000, "ACTIVE"),
-        ("POL-2026-BI", "הראל ביטוח - אובדן רווחים", "2026-01-01", "2026-12-31", 50000000, 50000, 380000, "ACTIVE"),
+        ("POL-2026-CENTRAL", "הפניקס ביטוח", "2026-01-01", "2026-12-31", 200000000, 100000, 1850000, "ACTIVE",
+         50000000, 72, "נזקי מלחמה ופעולות איבה; נזק גרעיני; בלאי טבעי ותחזוקה לקויה"),
+        ("POL-2026-NORTH", "כלל ביטוח", "2026-01-01", "2026-12-31", 90000000, 75000, 720000, "ACTIVE",
+         30000000, 72, "נזקי מלחמה ופעולות איבה; רעידת אדמה מעל 7 בסולם ריכטר"),
+        ("POL-2026-SOUTH", "מגדל ביטוח", "2026-01-01", "2026-12-31", 80000000, 75000, 610000, "ACTIVE",
+         25000000, 96, "נזקי מלחמה ופעולות איבה; שיטפונות באזורים מוצהרים כאזורי סיכון"),
+        ("POL-2026-BI", "הראל ביטוח - אובדן רווחים", "2026-01-01", "2026-12-31", 50000000, 50000, 380000, "ACTIVE",
+         20000000, 168, "אובדן רווחים עקב שביתה או השבתה יזומה; נזק עקיף שאינו תוצאה ישירה מאירוע מבוטח"),
     ]
     cur.executemany(
         """INSERT INTO Insurance_Policies
            (policy_number, insurer_name, start_date, end_date, total_limit,
-            deductible_default, annual_premium, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            deductible_default, annual_premium, status, per_event_limit,
+            bi_waiting_period_hours, exclusions)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         policies,
     )
 
@@ -121,64 +146,115 @@ def run():
     )
 
     # --- Incidents ---
-    incidents = [
+    # Base tuples: (code, property_id, reporter_id, timestamp, hazard, severity, impact,
+    #               est_loss, description, status, ai_classified, ai_confidence,
+    #               is_draft, business_interruption_requested, area_or_building, gps_offset)
+    # gps_offset is a small (lat, lng) delta applied to the property's own coordinates to
+    # simulate the field reporter's device GPS reading; None means no GPS was captured.
+    incidents_base = [
         ("INC-2025-001", 1, 5, "2025-01-12 07:00", "FLOOD", "HIGH", "PARTIAL_SHUTDOWN", 450000,
-         "פיצוץ בצינור מים ראשי בקומה 1 שגרם להצפה באזור האריזה. החשמל נותק באופן יזום.", "CLAIM_FILED", 1, 0.920),
+         "פיצוץ בצינור מים ראשי בקומה 1 שגרם להצפה באזור האריזה. החשמל נותק באופן יזום.", "CLAIM_FILED", 1, 0.920,
+         0, 1, "קומת קרקע - אזור אריזה", (0.0006, -0.0004)),
         ("INC-2025-002", 3, 6, "2025-03-05 14:20", "ELECTRICAL", "MEDIUM", "PARTIAL_SHUTDOWN", 120000,
-         'קצר חשמלי בלוח ראשי, עשן זוהה ע"י מערכת גילוי, כובה מיידית ע"י צוות אבטחה.', "UNDER_INVESTIGATION", 1, 0.870),
+         'קצר חשמלי בלוח ראשי, עשן זוהה ע"י מערכת גילוי, כובה מיידית ע"י צוות אבטחה.', "UNDER_INVESTIGATION", 1, 0.870,
+         0, 1, "חדר לוח חשמל ראשי", (-0.0003, 0.0005)),
         ("INC-2025-003", 2, 5, "2025-04-18 09:15", "STRUCTURAL_FAILURE", "LOW", "FULL_OPERATION", 85000,
-         "סדק בתקרת קומה 12 התגלה בבדיקה שגרתית, נדרש תיקון.", "CLOSED", 0, None),
+         "סדק בתקרת קומה 12 התגלה בבדיקה שגרתית, נדרש תיקון.", "CLOSED", 0, None,
+         0, 0, "קומה 12", None),
         ("INC-2025-004", 7, 6, "2025-05-02 22:40", "FIRE", "CRITICAL", "FULL_SHUTDOWN", 1200000,
-         "שריפה פרצה בחנות בקומת הקרקע, התפשטה לחנויות סמוכות. כיבוי אש הגיע תוך 12 דקות.", "CLAIM_FILED", 1, 0.950),
+         "שריפה פרצה בחנות בקומת הקרקע, התפשטה לחנויות סמוכות. כיבוי אש הגיע תוך 12 דקות.", "CLAIM_FILED", 1, 0.950,
+         0, 1, "קומת קרקע - אגף חנויות", (0.0009, 0.0002)),
         ("INC-2025-005", 4, 5, "2025-06-14 06:30", "THEFT", "MEDIUM", "PARTIAL_SHUTDOWN", 65000,
-         "פריצה למחסן בשעות הלילה, נגנב ציוד אלקטרוני.", "CLOSED", 0, None),
+         "פריצה למחסן בשעות הלילה, נגנב ציוד אלקטרוני.", "CLOSED", 0, None,
+         0, 0, "מחסן לילה - אגף B", (-0.0005, -0.0002)),
         ("INC-2025-006", 9, 6, "2025-07-01 11:00", "ELECTRICAL", "LOW", "FULL_OPERATION", 18000,
-         "תקלה בלוח חשמל משני, לא נגרם נזק משמעותי.", "CLOSED", 0, None),
+         "תקלה בלוח חשמל משני, לא נגרם נזק משמעותי.", "CLOSED", 0, None,
+         0, 0, "לוח חשמל משני", None),
         ("INC-2025-007", 6, 5, "2025-07-20 15:45", "FIRE", "MEDIUM", "PARTIAL_SHUTDOWN", 210000,
-         'שריפה קטנה במחסן חומרי אריזה, כובתה ע"י צוות פנימי.', "UNDER_INVESTIGATION", 1, 0.810),
+         'שריפה קטנה במחסן חומרי אריזה, כובתה ע"י צוות פנימי.', "UNDER_INVESTIGATION", 1, 0.810,
+         0, 1, "מחסן חומרי אריזה", (0.0002, 0.0007)),
         ("INC-2025-008", 1, 6, "2025-08-09 03:20", "FLOOD", "CRITICAL", "FULL_SHUTDOWN", 980000,
-         "הצפה חמורה בעקבות סופה, מים חדרו לקומת הקרקע ופגעו במלאי.", "CLAIM_FILED", 1, 0.930),
+         "הצפה חמורה בעקבות סופה, מים חדרו לקומת הקרקע ופגעו במלאי.", "CLAIM_FILED", 1, 0.930,
+         0, 1, "קומת קרקע - מחסן מלאי", (-0.0007, 0.0003)),
         ("INC-2025-009", 12, 5, "2025-08-22 10:10", "STRUCTURAL_FAILURE", "LOW", "FULL_OPERATION", 42000,
-         "סדקים קלים בקירות חוץ בעקבות רעידת אדמה קלה.", "CLOSED", 0, None),
+         "סדקים קלים בקירות חוץ בעקבות רעידת אדמה קלה.", "CLOSED", 0, None,
+         0, 0, "קירות חוץ - חזית מערבית", None),
         ("INC-2025-010", 5, 6, "2025-09-03 13:30", "ELECTRICAL", "MEDIUM", "PARTIAL_SHUTDOWN", 95000,
-         'עלייה בטמפרטורת לוח חשמל ראשי, זוהה ע"י חיישן טמפרטורה.', "UNDER_INVESTIGATION", 1, 0.760),
+         'עלייה בטמפרטורת לוח חשמל ראשי, זוהה ע"י חיישן טמפרטורה.', "UNDER_INVESTIGATION", 1, 0.760,
+         0, 1, "לוח חשמל ראשי - קומת מרתף", (0.0004, -0.0006)),
         ("INC-2025-011", 11, 5, "2025-09-15 04:50", "STRUCTURAL_FAILURE", "HIGH", "PARTIAL_SHUTDOWN", 310000,
-         "רעידת אדמה בעוצמה בינונית גרמה לסדקים במבנה.", "CLAIM_FILED", 0, None),
+         "רעידת אדמה בעוצמה בינונית גרמה לסדקים במבנה.", "CLAIM_FILED", 0, None,
+         0, 1, "מבנה כללי", (-0.0002, -0.0008)),
         ("INC-2025-012", 10, 6, "2025-10-01 08:00", "THEFT", "LOW", "FULL_OPERATION", 28000,
-         "ניסיון פריצה נכשל, אזעקה הרתיעה את הפורצים.", "CLOSED", 0, None),
+         "ניסיון פריצה נכשל, אזעקה הרתיעה את הפורצים.", "CLOSED", 0, None,
+         0, 0, "כניסה ראשית", None),
         ("INC-2025-013", 3, 5, "2025-10-14 19:20", "FIRE", "HIGH", "PARTIAL_SHUTDOWN", 340000,
-         "שריפה במטבח מסעדה בקניון, התפשטה לתקרה.", "CLAIM_FILED", 1, 0.890),
+         "שריפה במטבח מסעדה בקניון, התפשטה לתקרה.", "CLAIM_FILED", 1, 0.890,
+         0, 1, "מטבח מסעדה - קומה 1", (0.0005, 0.0004)),
         ("INC-2025-014", 13, 6, "2025-11-02 05:15", "ELECTRICAL", "CRITICAL", "FULL_SHUTDOWN", 560000,
-         "כשל במערכת קירור עקב תקלה חשמלית, מלאי מזון קפוא ניזוק.", "CLAIM_FILED", 1, 0.900),
+         "כשל במערכת קירור עקב תקלה חשמלית, מלאי מזון קפוא ניזוק.", "CLAIM_FILED", 1, 0.900,
+         0, 1, "מערכת קירור - חדר מכונות", (-0.0004, 0.0006)),
         ("INC-2025-015", 8, 5, "2025-11-20 16:40", "FLOOD", "LOW", "FULL_OPERATION", 22000,
-         "נזילה קלה ממערכת מיזוג, נזק מינימלי לריצוף.", "CLOSED", 0, None),
+         "נזילה קלה ממערכת מיזוג, נזק מינימלי לריצוף.", "CLOSED", 0, None,
+         0, 0, "מערכת מיזוג - קומה 4", None),
         ("INC-2025-016", 2, 6, "2025-12-05 12:00", "OTHER", "LOW", "FULL_OPERATION", 15000,
-         "נזק קל למעלית עקב תקלה טכנית.", "CLOSED", 0, None),
+         "נזק קל למעלית עקב תקלה טכנית.", "CLOSED", 0, None,
+         0, 0, "פיר מעלית - מגדל B", None),
         ("INC-2026-001", 1, 5, "2026-01-12 07:00", "FLOOD", "HIGH", "PARTIAL_SHUTDOWN", 450000,
-         "פיצוץ נוסף בצנרת מים בקומה 1, אזור דומה לאירוע קודם - נדרשת בדיקת תשתית.", "CLAIM_FILED", 1, 0.940),
+         "פיצוץ נוסף בצנרת מים בקומה 1, אזור דומה לאירוע קודם - נדרשת בדיקת תשתית.", "CLAIM_FILED", 1, 0.940,
+         0, 1, "קומת קרקע - צנרת ראשית", (0.0003, -0.0005)),
         ("INC-2026-002", 9, 6, "2026-01-25 09:30", "ELECTRICAL", "MEDIUM", "PARTIAL_SHUTDOWN", 78000,
-         "קצר בלוח חשמל ראשי בתחנת החלוקה.", "UNDER_INVESTIGATION", 1, 0.820),
+         "קצר בלוח חשמל ראשי בתחנת החלוקה.", "UNDER_INVESTIGATION", 1, 0.820,
+         0, 1, "לוח חשמל ראשי", (-0.0006, 0.0001)),
         ("INC-2026-003", 4, 5, "2026-02-10 21:00", "THEFT", "HIGH", "PARTIAL_SHUTDOWN", 110000,
-         "פריצה מאורגנת למחסן, נגנבו טובין בהיקף משמעותי.", "CLAIM_FILED", 1, 0.870),
+         "פריצה מאורגנת למחסן, נגנבו טובין בהיקף משמעותי.", "CLAIM_FILED", 1, 0.870,
+         0, 1, "מחסן טובין - אגף C", (0.0007, 0.0003)),
         ("INC-2026-004", 7, 6, "2026-03-05 11:15", "STRUCTURAL_FAILURE", "LOW", "FULL_OPERATION", 38000,
-         "התמוטטות חלקית של תקרה דקורטיבית, אין נפגעים.", "UNDER_INVESTIGATION", 0, None),
+         "התמוטטות חלקית של תקרה דקורטיבית, אין נפגעים.", "UNDER_INVESTIGATION", 0, None,
+         0, 0, "תקרה דקורטיבית - אטריום", None),
         ("INC-2026-005", 14, 5, "2026-03-22 06:00", "FIRE", "CRITICAL", "FULL_SHUTDOWN", 680000,
-         "שריפה בתחנת שנע פגעה במלוא המבנה, נדרש שיקום מלא.", "CLAIM_FILED", 1, 0.960),
+         "שריפה בתחנת שנע פגעה במלוא המבנה, נדרש שיקום מלא.", "CLAIM_FILED", 1, 0.960,
+         0, 1, "מבנה מלא", (-0.0008, -0.0003)),
         ("INC-2026-006", 6, 6, "2026-04-08 14:00", "FLOOD", "MEDIUM", "PARTIAL_SHUTDOWN", 145000,
-         "הצפה עקב גשמים כבדים, מים חדרו למחסן התחתון.", "UNDER_INVESTIGATION", 1, 0.850),
+         "הצפה עקב גשמים כבדים, מים חדרו למחסן התחתון.", "UNDER_INVESTIGATION", 1, 0.850,
+         0, 1, "מחסן תחתון", (0.0002, 0.0008)),
         ("INC-2026-007", 15, 5, "2026-05-01 08:45", "ELECTRICAL", "LOW", "FULL_OPERATION", 31000,
-         "תקלה קלה בגנרטור גיבוי, טופלה במקום.", "CLOSED", 0, None),
+         "תקלה קלה בגנרטור גיבוי, טופלה במקום.", "CLOSED", 0, None,
+         0, 0, "חדר גנרטור", None),
         ("INC-2026-008", 5, 6, "2026-05-19 17:30", "OTHER", "LOW", "FULL_OPERATION", 12000,
-         "נזק קל לחזית הבניין עקב סופת רוחות.", "CLOSED", 0, None),
+         "נזק קל לחזית הבניין עקב סופת רוחות.", "CLOSED", 0, None,
+         0, 0, "חזית מבנה", None),
         ("INC-2026-009", 12, 5, "2026-06-02 10:00", "STRUCTURAL_FAILURE", "MEDIUM", "PARTIAL_SHUTDOWN", 195000,
-         "סדקים משמעותיים בעמודי תמך התגלו בבדיקה תקופתית.", "UNDER_INVESTIGATION", 0, None),
+         "סדקים משמעותיים בעמודי תמך התגלו בבדיקה תקופתית.", "UNDER_INVESTIGATION", 0, None,
+         0, 1, "עמודי תמך - קומת מרתף", (-0.0001, 0.0004)),
+        # --- draft incidents: demonstrate save-as-draft / submit-later workflow ---
+        ("INC-2026-010", 3, 6, "2026-06-20 09:00", "OTHER", "LOW", "FULL_OPERATION", 5000,
+         "טיוטת דיווח ראשונית - נזק קל שזוהה בסיור שגרתי, טרם אושר לשליחה.", "NEW", 0, None,
+         1, 0, "חניון תת-קרקעי", (0.0003, 0.0002)),
+        ("INC-2026-011", 10, 5, "2026-07-02 16:20", "ELECTRICAL", "MEDIUM", "PARTIAL_SHUTDOWN", 40000,
+         "טיוטה - חשד לתקלה בלוח חשמל, ממתין להשלמת פרטים ותמונות לפני שליחה.", "NEW", 0, None,
+         1, 0, "לוח חשמל - קומת מרתף", None),
     ]
+    incidents = []
+    for (code, prop_id, reporter, ts, hazard, sev, impact, loss, desc, status, ai_cls, ai_conf,
+         is_draft, bi_requested, area, gps_offset) in incidents_base:
+        if gps_offset is not None:
+            base_lat, base_lng = property_coords[prop_id]
+            d_lat, d_lng = gps_offset
+            coords = f"{float(base_lat) + d_lat:.6f},{float(base_lng) + d_lng:.6f}"
+        else:
+            coords = None
+        incidents.append((
+            code, prop_id, reporter, ts, hazard, sev, impact, loss, desc, status, ai_cls, ai_conf,
+            is_draft, bi_requested, area, coords,
+        ))
     cur.executemany(
         """INSERT INTO Incidents
            (incident_code, property_id, reported_by_user_id, incident_timestamp, hazard_type,
             severity_level, operational_impact, initial_estimated_loss, description, status,
-            ai_classified, ai_confidence)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ai_classified, ai_confidence, is_draft, business_interruption_requested,
+            area_or_building, reported_coordinates)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         incidents,
     )
 
@@ -215,6 +291,24 @@ def run():
         payments,
     )
 
+    # --- Claim_Reserves: open balance on claims still owed money ---
+    # claim 3 (CLM-2025-08) has an ADVANCE of 400000 against an approved 850000 -> 450000 still reserved.
+    # claims 2/4/6/7/9 have no payments yet; reserve their approved amount (or, if not yet approved,
+    # the claimed amount net of the deductible as a working estimate pending adjustment).
+    reserves = [
+        (2, 950000, "2026-10-01", "2026-08-05"),   # CLM-2025-04, IN_ADJUSTMENT, approved but unpaid
+        (3, 450000, "2026-09-01", "2026-08-10"),   # CLM-2025-08, partially paid, remaining balance
+        (4, 200000, None, "2026-08-01"),           # CLM-2025-11, IN_ADJUSTMENT, working estimate
+        (6, 465000, None, "2026-07-25"),           # CLM-2025-14, SUBMITTED, working estimate
+        (7, 350000, None, "2026-08-12"),           # CLM-2026-01, SUBMITTED, working estimate
+        (9, 575000, None, "2026-08-14"),           # CLM-2026-05, IN_ADJUSTMENT, working estimate
+    ]
+    cur.executemany(
+        """INSERT INTO Claim_Reserves (claim_id, reserve_amount, expected_payment_date, updated_at)
+           VALUES (?, ?, ?, ?)""",
+        reserves,
+    )
+
     tasks = [
         (1, "התקנת שסתומים אל-חוזרים למניעת הצפה חוזרת", 85000, 120000, "2026-10-01", "IN_PROGRESS", 3),
         (3, "התקנת מערכת מתזים אוטומטית", 220000, 95000, "2026-11-15", "OPEN", 4),
@@ -234,6 +328,89 @@ def run():
            (property_id, title, cost_estimate, expected_annual_savings, due_date, status, assigned_to_user_id)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         tasks,
+    )
+
+    # --- Role_Permissions ---
+    role_permissions = [
+        ("RISK_MANAGER", "incidents:view", "צפייה בכל האירועים"),
+        ("RISK_MANAGER", "incidents:edit", "עריכת אירועים וסטטוסים"),
+        ("RISK_MANAGER", "claims:view", "צפייה בתביעות"),
+        ("RISK_MANAGER", "mitigation:manage", "ניהול משימות מיטיגציה"),
+        ("RISK_MANAGER", "reports:view", "צפייה בדוחות הנהלה"),
+        ("CFO", "claims:view", "צפייה בתביעות"),
+        ("CFO", "claims:approve", "אישור תביעות"),
+        ("CFO", "financials:view", "צפייה בנתונים פיננסיים"),
+        ("CFO", "reports:view", "צפייה בדוחות הנהלה"),
+        ("PROPERTY_MANAGER", "incidents:view", "צפייה באירועים בנכסים באחריותו"),
+        ("PROPERTY_MANAGER", "incidents:create", "דיווח אירוע חדש"),
+        ("PROPERTY_MANAGER", "mitigation:view", "צפייה במשימות מיטיגציה"),
+        ("PROPERTY_MANAGER", "mitigation:update_status", "עדכון סטטוס משימת מיטיגציה"),
+        ("FIELD_WORKER", "incidents:create", "דיווח אירוע חדש מהשטח"),
+        ("FIELD_WORKER", "incidents:view_own", "צפייה באירועים שדווחו על ידו"),
+        ("FIELD_WORKER", "media:upload", "העלאת תמונות/וידאו לאירוע"),
+        ("ADMIN", "users:manage", "ניהול משתמשים והרשאות"),
+        ("ADMIN", "audit_log:view", "צפייה ביומן הביקורת"),
+        ("ADMIN", "roles:manage", "ניהול תפקידים והרשאות"),
+        ("RISK_OFFICER", "incidents:view", "צפייה בכל האירועים"),
+        ("RISK_OFFICER", "incidents:classify", "סיווג אירוע (AI/ידני)"),
+        ("RISK_OFFICER", "risk_profiles:edit", "עריכת פרופיל סיכון נכס"),
+        ("ADJUSTER", "claims:view", "צפייה בתביעות משויכות"),
+        ("ADJUSTER", "claims:edit", "עדכון פרטי תביעה"),
+        ("ADJUSTER", "documents:upload", "העלאת דוחות שמאי ומסמכים"),
+    ]
+    cur.executemany(
+        "INSERT INTO Role_Permissions (role, permission_key, description) VALUES (?, ?, ?)",
+        role_permissions,
+    )
+
+    # --- Audit_Log ---
+    audit_log = [
+        (1, "Incident", 1, "CREATE", None, '{"status":"NEW"}', "10.0.0.15"),
+        (1, "Incident", 1, "UPDATE", '{"status":"NEW"}', '{"status":"CLAIM_FILED"}', "10.0.0.15"),
+        (2, "Claim", 1, "UPDATE", '{"claim_status":"SUBMITTED"}', '{"claim_status":"APPROVED"}', "10.0.0.22"),
+        (7, "Insurance_Policy", 1, "UPDATE", '{"status":"PENDING_RENEWAL"}', '{"status":"ACTIVE"}', "10.0.0.5"),
+        (3, "Mitigation_Task", 1, "CREATE", None, '{"status":"OPEN"}', "10.0.0.31"),
+        (9, "Claim", 3, "UPDATE", '{"claim_status":"IN_ADJUSTMENT"}', '{"claim_status":"APPROVED"}', "10.0.0.44"),
+        (7, "User", 8, "CREATE", None, '{"role":"RISK_OFFICER"}', "10.0.0.5"),
+        (6, "Incident", 26, "CREATE", None, '{"status":"NEW","is_draft":true}', "10.0.0.61"),
+    ]
+    cur.executemany(
+        """INSERT INTO Audit_Log (user_id, entity_type, entity_id, action, old_value, new_value, ip_address)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        audit_log,
+    )
+
+    # --- Documents ---
+    documents = [
+        ("POLICY", 1, "https://storage.rmis-demo.local/policies/POL-2026-CENTRAL.pdf", "POLICY_DOCUMENT", 1),
+        ("POLICY", 2, "https://storage.rmis-demo.local/policies/POL-2026-NORTH.pdf", "POLICY_DOCUMENT", 1),
+        ("POLICY", 4, "https://storage.rmis-demo.local/policies/POL-2026-BI.pdf", "POLICY_DOCUMENT", 1),
+        ("CLAIM", 1, "https://storage.rmis-demo.local/claims/CLM-2025-01-report.pdf", "ADJUSTER_REPORT", 9),
+        ("CLAIM", 3, "https://storage.rmis-demo.local/claims/CLM-2025-08-report.pdf", "ADJUSTER_REPORT", 9),
+        ("CLAIM", 2, "https://storage.rmis-demo.local/claims/CLM-2025-04-correspondence.pdf", "CORRESPONDENCE", 1),
+        ("INCIDENT", 4, "https://storage.rmis-demo.local/incidents/INC-2025-004-photo1.jpg", "PHOTO", 6),
+        ("INCIDENT", 8, "https://storage.rmis-demo.local/incidents/INC-2025-008-photo1.jpg", "PHOTO", 6),
+        ("PROPERTY", 1, "https://storage.rmis-demo.local/properties/PRP-001-survey.pdf", "SURVEY_REPORT", 8),
+        ("PROPERTY", 7, "https://storage.rmis-demo.local/properties/PRP-007-survey.pdf", "SURVEY_REPORT", 8),
+    ]
+    cur.executemany(
+        """INSERT INTO Documents (entity_type, entity_id, s3_url, doc_type, uploaded_by)
+           VALUES (?, ?, ?, ?, ?)""",
+        documents,
+    )
+
+    # --- Financial_Statements ---
+    financial_statements = [
+        (2022, 620000000, 210000000, 18000000, 2400000),
+        (2023, 680000000, 235000000, 21000000, 2650000),
+        (2024, 730000000, 258000000, 19500000, 2900000),
+        (2025, 790000000, 279000000, 23800000, 3150000),
+        (2026, 845000000, 298000000, 26200000, 3560000),
+    ]
+    cur.executemany(
+        """INSERT INTO Financial_Statements (year, total_assets, revenue, net_income, insurance_expense)
+           VALUES (?, ?, ?, ?, ?)""",
+        financial_statements,
     )
 
     conn.commit()
