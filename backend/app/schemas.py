@@ -197,6 +197,25 @@ class PolicyAssetCreate(BaseModel):
     specific_deductible: float | None = None
 
 
+# --- Incident Media ---
+class IncidentMediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    media_id: int
+    incident_id: int
+    file_path: str  # storage_key within media_storage — see services/storage.py
+    file_type: str
+    captured_at: datetime
+    gps_latitude: float | None = None
+    gps_longitude: float | None = None
+
+
+class SignedUrlOut(BaseModel):
+    url: str  # illustrative S3-style reference (see services/storage.py) — not fetchable
+    download_url: str  # actually fetchable: GET /api/media/download?key=...&expires=...&token=...
+    storage_key: str
+    expires_at: int
+
+
 # --- Mitigation ---
 class MitigationTaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

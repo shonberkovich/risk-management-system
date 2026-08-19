@@ -116,13 +116,20 @@ def generate_signed_url(storage_key: str, expires_in_seconds: int = DEFAULT_SIGN
     locally so is_signed_url_valid can verify it without any network dependency.
     Does not check that storage_key exists — signing a URL for an as-yet-unwritten
     key (e.g. for a client-side direct upload) is a legitimate real-world use case
-    too."""
+    too.
+
+    "url" is the illustrative, S3-presign-shaped reference (same STORAGE_DOMAIN as
+    upload_file's URLs) — it's not actually fetchable, since there's no real cloud
+    endpoint behind it. "token" is returned separately so a caller with an actual
+    download endpoint (e.g. routers/media.py's GET /api/media/download) can build a
+    real, fetchable URL against itself instead."""
     expires_at = int(time.time()) + expires_in_seconds
     token = _sign(storage_key, expires_at)
     return {
         "url": f"{STORAGE_DOMAIN}/{storage_key}?expires={expires_at}&token={token}",
         "storage_key": storage_key,
         "expires_at": expires_at,
+        "token": token,
     }
 
 

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, Date, DateTime, ForeignKey, Numeric, SmallInteger, Unicode, UnicodeText,
+    BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Numeric, SmallInteger, Unicode, UnicodeText,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -126,6 +126,8 @@ class IncidentMedia(Base):
     file_path: Mapped[str] = mapped_column(Unicode(500))
     file_type: Mapped[str] = mapped_column(Unicode(50))
     captured_at: Mapped[datetime] = mapped_column(DateTime)
+    gps_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     incident: Mapped["Incident"] = relationship(back_populates="media")
 
