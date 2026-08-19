@@ -99,6 +99,10 @@ class Incident(Base):
     ai_classified: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_confidence: Mapped[float | None] = mapped_column(Numeric(4, 3), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
+    is_draft: Mapped[bool] = mapped_column(Boolean, default=False)
+    business_interruption_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    area_or_building: Mapped[str | None] = mapped_column(Unicode(150), nullable=True)
+    reported_coordinates: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
 
     property_: Mapped["Property"] = relationship(back_populates="incidents")
     media: Mapped[list["IncidentMedia"]] = relationship(back_populates="incident")

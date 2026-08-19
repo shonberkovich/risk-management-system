@@ -11,8 +11,9 @@
   📁 `backend/app/models.py` (Class `InsurancePolicy`) + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/policy-extended-fields`: נוספו שלושת השדות כ-nullable ל-`InsurancePolicy` (`SmallInteger` ל-bi_waiting_period_hours, `UnicodeText` ל-exclusions) ול-`schema.sql`.
 
-- [ ] **הרחבת טבלת האירועים**: הוספת `is_draft` (שמירה כטיוטה), `business_interruption_requested` (בקשת כיסוי אובדן רווחים), `area_or_building` (אזור/מבנה בתוך הנכס), `reported_coordinates` (מיקום GPS של המדווח).
+- [x] **הרחבת טבלת האירועים**: הוספת `is_draft` (שמירה כטיוטה), `business_interruption_requested` (בקשת כיסוי אובדן רווחים), `area_or_building` (אזור/מבנה בתוך הנכס), `reported_coordinates` (מיקום GPS של המדווח).
   📁 `backend/app/models.py` (Class `Incident`) + `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/incident-extended-fields`: `is_draft`/`business_interruption_requested` כ-`BIT NOT NULL DEFAULT 0`, `area_or_building` (`NVARCHAR(150)` nullable), `reported_coordinates` (`NVARCHAR(50)` nullable, מחרוזת "lat,lng").
 
 - [ ] **טבלת רזרבות וצפי תזרים**: טבלה חדשה `Claim_Reserves` (claim_id, reserve_amount, expected_payment_date, updated_at) לניהול רזרבות וצפי גבייה.
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
