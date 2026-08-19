@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
 from app.database import get_db
@@ -42,6 +42,43 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
     if not incident:
         raise HTTPException(404, "Incident not found")
     return incident
+
+
+@router.get("/{incident_id}/full", response_model=schemas.IncidentDrillDown)
+def get_incident_drilldown(incident_id: int, db: Session = Depends(get_db)):
+    """Unified incident file (Drill-down): the incident + its media + its claim(s),
+    each claim with its payments + any documents attached directly to the incident
+    (Documents.entity_type == "INCIDENT"), all in a single call for the incident
+    detail screen — avoids the frontend firing five separate requests."""
+    incident = db.get(models.Incident, incident_id)
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+
+    media = db.scalars(
+        select(models.IncidentMedia)
+        .where(models.IncidentMedia.incident_id == incident_id)
+        .order_by(models.IncidentMedia.captured_at.desc())
+    ).all()
+
+    claims = db.scalars(
+        select(models.Claim)
+        .where(models.Claim.incident_id == incident_id)
+        .options(selectinload(models.Claim.payments))
+        .order_by(models.Claim.created_at.desc())
+    ).all()
+
+    documents = db.scalars(
+        select(models.Document)
+        .where(models.Document.entity_type == "INCIDENT", models.Document.entity_id == incident_id)
+        .order_by(models.Document.uploaded_at.desc())
+    ).all()
+
+    return {
+        "incident": incident,
+        "media": media,
+        "claims": claims,
+        "documents": documents,
+    }
 
 
 @router.post("", response_model=schemas.IncidentOut, status_code=201)
