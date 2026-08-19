@@ -306,6 +306,14 @@ class CashflowSummary(BaseModel):
     monthly: list[CashflowMonthPoint]
 
 
+class RegionExposure(BaseModel):
+    region_id: int | None = None
+    region_name: str
+    tiv: float
+    mfl: float
+    total_claimed: float
+
+
 class AlertOut(BaseModel):
     alert_type: Literal["geographic_exposure", "incident_concentration"]
     severity: Literal["warning", "critical"]
