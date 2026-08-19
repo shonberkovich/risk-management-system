@@ -19,6 +19,7 @@ GO
 IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
 IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
 IF OBJECT_ID('dbo.Documents', 'U') IS NOT NULL DROP TABLE dbo.Documents;
+IF OBJECT_ID('dbo.Financial_Statements', 'U') IS NOT NULL DROP TABLE dbo.Financial_Statements;
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
 IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
 IF OBJECT_ID('dbo.Claims', 'U') IS NOT NULL DROP TABLE dbo.Claims;
@@ -327,4 +328,19 @@ GO
 CREATE INDEX IX_Documents_Entity ON dbo.Documents(entity_type, entity_id);
 GO
 CREATE INDEX IX_Documents_UploadedBy ON dbo.Documents(uploaded_by);
+GO
+
+-- ============================================================================
+-- Financial_Statements
+-- ============================================================================
+IF OBJECT_ID('dbo.Financial_Statements', 'U') IS NOT NULL DROP TABLE dbo.Financial_Statements;
+GO
+CREATE TABLE dbo.Financial_Statements (
+    statement_id        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    year                 SMALLINT NOT NULL UNIQUE,
+    total_assets          DECIMAL(18,2) NOT NULL,
+    revenue                DECIMAL(18,2) NOT NULL,
+    net_income               DECIMAL(18,2) NOT NULL,
+    insurance_expense           DECIMAL(18,2) NOT NULL
+);
 GO

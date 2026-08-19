@@ -224,3 +224,14 @@ class Document(Base):
     doc_type: Mapped[str] = mapped_column(Unicode(30))
     uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class FinancialStatement(Base):
+    __tablename__ = "Financial_Statements"
+
+    statement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    year: Mapped[int] = mapped_column(SmallInteger, unique=True)
+    total_assets: Mapped[float] = mapped_column(Numeric(18, 2))
+    revenue: Mapped[float] = mapped_column(Numeric(18, 2))
+    net_income: Mapped[float] = mapped_column(Numeric(18, 2))
+    insurance_expense: Mapped[float] = mapped_column(Numeric(18, 2))

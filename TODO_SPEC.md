@@ -35,8 +35,9 @@
   📁 `backend/app/models.py` (Class `Property`) + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/regions-table`: נוספה מחלקת `Region` (models.py) + טבלת `Regions` ב-schema.sql (`region_code` UNIQUE, `name`), ממוקמת לפני `Users`/`Properties` ב-schema כי `Properties.region_id` מפנה אליה. נוסף שדה `region_id` ל-`Property` כ-FK אופציונלי (nullable) ל-`Regions`, **לצד** שדה `region` (מחרוזת חופשית) הקיים ולא במקומו — כדי לא לשבור קוד/seed קיימים שכבר משתמשים ב-`region`. נוסף אינדקס `IX_Properties_RegionId`.
 
-- [ ] **טבלת נתוני מאקרו פיננסיים**: `Financial_Statements` (year, total_assets, revenue, net_income, insurance_expense) לניתוח רב-שנתי.
+- [x] **טבלת נתוני מאקרו פיננסיים**: `Financial_Statements` (year, total_assets, revenue, net_income, insurance_expense) לניתוח רב-שנתי.
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/financial-statements`: נוספה מחלקת `FinancialStatement` (models.py) + טבלת `Financial_Statements` ב-schema.sql — טבלה עצמאית (ללא FK-ים, לא תלויה בישויות אחרות ולא נתלים בה), עם `year` (SMALLINT) כ-UNIQUE כדי להבטיח רשומה אחת בלבד לשנה, מתאים לניתוח רב-שנתי לפי CFO/דוחות מאקרו.
 
 - [ ] **אינדקסים חסרים**: אינדקס מרחבי GIST על `Properties.coordinates`, אינדקס מורכב על `Incidents(status, hazard_type)` ועל `Claims(claim_status, payment_date)`.
   📁 `backend/sql/schema.sql`
