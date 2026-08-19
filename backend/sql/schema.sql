@@ -17,6 +17,7 @@ GO
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
 IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
+IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
 IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
 IF OBJECT_ID('dbo.Claims', 'U') IS NOT NULL DROP TABLE dbo.Claims;
@@ -39,7 +40,7 @@ CREATE TABLE dbo.Users (
     full_name       NVARCHAR(100) NOT NULL,
     email           NVARCHAR(200) NOT NULL UNIQUE,
     role            NVARCHAR(30) NOT NULL
-        CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN')),
+        CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER')),
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME()
 );
 GO
@@ -271,4 +272,21 @@ CREATE TABLE dbo.Audit_Log (
 GO
 CREATE INDEX IX_AuditLog_Entity ON dbo.Audit_Log(entity_type, entity_id);
 CREATE INDEX IX_AuditLog_User ON dbo.Audit_Log(user_id);
+GO
+
+-- ============================================================================
+-- Role_Permissions
+-- ============================================================================
+IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
+GO
+CREATE TABLE dbo.Role_Permissions (
+    role_permission_id     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    role                       NVARCHAR(30) NOT NULL
+        CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER')),
+    permission_key                NVARCHAR(100) NOT NULL,   -- e.g. 'incidents:create', 'claims:approve'
+    description                       NVARCHAR(200) NULL,
+    CONSTRAINT UQ_RolePermissions_RoleKey UNIQUE (role, permission_key)
+);
+GO
+CREATE INDEX IX_RolePermissions_Role ON dbo.Role_Permissions(role);
 GO
