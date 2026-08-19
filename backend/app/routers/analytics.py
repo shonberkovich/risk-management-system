@@ -118,6 +118,14 @@ def get_cashflow(months_ahead: int = 12, db: Session = Depends(get_db)):
     return cashflow.get_cashflow_summary(db, months_ahead=months_ahead)
 
 
+@router.get("/exposure-by-region", response_model=list[schemas.RegionExposure])
+def get_exposure_by_region(db: Session = Depends(get_db)):
+    """TIV/MFL/total-claimed per administrative Region, for the management report.
+    See kpi.calculate_exposure_by_region for the full calculation (including how
+    unassigned properties are grouped)."""
+    return kpi.calculate_exposure_by_region(db)
+
+
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
 def get_hazard_distribution(db: Session = Depends(get_db)):
     rows = db.execute(
