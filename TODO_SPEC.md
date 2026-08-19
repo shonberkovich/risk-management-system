@@ -19,8 +19,9 @@
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/claim-reserves-table`: נוספה `ClaimReserve` (models.py) + טבלת `Claim_Reserves` ב-schema.sql (עם FK ל-Claims, אינדקס על claim_id, ו-relationship דו-כיווני מול `Claim`).
 
-- [ ] **טבלת Audit Log**: טבלה חדשה `Audit_Log` (user_id, entity_type, entity_id, action, old_value, new_value, timestamp, ip_address).
+- [x] **טבלת Audit Log**: טבלה חדשה `Audit_Log` (user_id, entity_type, entity_id, action, old_value, new_value, timestamp, ip_address).
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/audit-log-table`: נוספה `AuditLog` (models.py) + טבלת `Audit_Log` ב-schema.sql (FK אופציונלי ל-Users, `action` עם CHECK ל-CREATE/UPDATE/DELETE, `old_value`/`new_value` כ-NVARCHAR(MAX) לשמירת JSON, אינדקסים על entity_type+entity_id ועל user_id).
 
 - [ ] **טבלת תפקידים והרשאות**: הרחבת `User` בשדה `role` (RISK_OFFICER / PROPERTY_MANAGER / CFO / ADJUSTER / ADMIN) + טבלת `Role_Permissions`.
   📁 `backend/app/models.py` (Class `User`) + `backend/sql/schema.sql`
