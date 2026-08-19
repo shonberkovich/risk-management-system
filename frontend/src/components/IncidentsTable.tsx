@@ -1,6 +1,7 @@
 import GavelIcon from "@mui/icons-material/Gavel";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
@@ -12,6 +13,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { useNavigate } from "react-router-dom";
 
 import type { Incident } from "../api/client";
 import { HAZARD_LABELS, INCIDENT_STATUS_LABELS, SEVERITY_COLORS, SEVERITY_LABELS, formatDate, formatIls } from "../format";
@@ -36,6 +38,8 @@ export default function IncidentsTable({
   onClose: (incident: Incident) => void;
   onFileClaim: (incident: Incident) => void;
 }) {
+  const navigate = useNavigate();
+
   if (rows.length === 0) {
     return (
       <Typography color="text.secondary" variant="body2" sx={{ py: 2 }}>
@@ -75,6 +79,11 @@ export default function IncidentsTable({
               </TableCell>
               <TableCell align="center">
                 <Stack direction="row" spacing={0.5} justifyContent="center">
+                  <Tooltip title="תיק אירוע מלא">
+                    <IconButton size="small" onClick={() => navigate(`/incidents/${inc.incident_id}`)}>
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   {inc.status === "NEW" && (
                     <Tooltip title="העבר לבדיקה">
                       <IconButton size="small" onClick={() => onInvestigate(inc)}>
