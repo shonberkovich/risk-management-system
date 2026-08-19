@@ -355,6 +355,21 @@ class PropertySimulationResult(BaseModel):
     distribution: list[HistogramBucket]
 
 
+class RetentionRecommendation(BaseModel):
+    policy_id: int
+    property_id: int
+    estimated_loss: float
+    deductible: float
+    claim_recoverable_amount: float
+    claim_out_of_pocket: float
+    expected_premium_surcharge: float
+    claim_total_cost: float
+    absorb_total_cost: float
+    recommendation: str
+    estimated_savings: float
+    incident_id: int | None = None
+
+
 class AlertOut(BaseModel):
     alert_type: Literal["geographic_exposure", "incident_concentration"]
     severity: Literal["warning", "critical"]
