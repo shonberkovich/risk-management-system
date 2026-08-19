@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.services import kpi
+from app.services import cashflow, kpi
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -106,6 +106,16 @@ def get_alerts(db: Session = Depends(get_db)):
     """Threshold-crossing alerts: geographic exposure clusters and open-incident
     concentration per property. See kpi.calculate_alerts for the fixed thresholds."""
     return kpi.calculate_alerts(db)
+
+
+@router.get("/cashflow", response_model=schemas.CashflowSummary)
+def get_cashflow(months_ahead: int = 12, db: Session = Depends(get_db)):
+    """Reserve & receipts forecast for the dashboard: total open reserves (current
+    adjuster estimate per claim), total expected receipts on open claims (approved
+    amount minus payments made so far), and a merged monthly view covering the
+    current month through months_ahead months out. See services/cashflow.py for
+    the full calculation."""
+    return cashflow.get_cashflow_summary(db, months_ahead=months_ahead)
 
 
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
