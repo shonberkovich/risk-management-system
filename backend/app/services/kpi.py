@@ -62,6 +62,56 @@ def calculate_mfl(db: Session) -> float:
     return max((total for _, total in clusters), default=0.0)
 
 
+def calculate_geographic_exposure_clusters(db: Session) -> list[dict]:
+    """Enriches _geographic_clusters (property membership + cumulative MFL) with the
+    geometric details needed to draw exposure circles on the map and report cumulative
+    limits per cluster: the cluster's centroid (mean lat/lon of its members), its actual
+    radius (max distance from that centroid to any member — not the fixed
+    CLUSTER_RADIUS_KM used to *form* the cluster, which is just the neighbor-inclusion
+    threshold), and the cluster's cumulative TIV (sum of replacement_value) alongside the
+    existing cumulative MFL. Sorted descending by cluster_mfl_total (largest single-event
+    concentration first), matching how calculate_mfl / calculate_alerts prioritize
+    clusters."""
+    clusters = _geographic_clusters(db)
+    if not clusters:
+        return []
+
+    prop_rows = db.execute(
+        select(models.Property.property_id, models.Property.name, models.Property.latitude,
+               models.Property.longitude, models.Property.replacement_value)
+        .where(models.Property.is_active == True)  # noqa: E712
+    ).all()
+    prop_by_id = {
+        pid: {"name": name, "lat": float(lat), "lon": float(lon), "tiv": float(rv)}
+        for pid, name, lat, lon, rv in prop_rows
+    }
+
+    result: list[dict] = []
+    for property_ids, mfl_total in clusters:
+        members = [prop_by_id[pid] for pid in property_ids]
+        center_lat = sum(m["lat"] for m in members) / len(members)
+        center_lon = sum(m["lon"] for m in members) / len(members)
+        radius_km = max(
+            (_haversine_km(center_lat, center_lon, m["lat"], m["lon"]) for m in members),
+            default=0.0,
+        )
+        tiv_total = sum(m["tiv"] for m in members)
+
+        result.append({
+            "property_ids": property_ids,
+            "property_names": [m["name"] for m in members],
+            "property_count": len(property_ids),
+            "center_lat": round(center_lat, 6),
+            "center_lon": round(center_lon, 6),
+            "radius_km": round(radius_km, 2),
+            "cluster_mfl_total": round(mfl_total, 2),
+            "cluster_tiv_total": round(tiv_total, 2),
+        })
+
+    result.sort(key=lambda c: c["cluster_mfl_total"], reverse=True)
+    return result
+
+
 def calculate_loss_ratio(db: Session, year: int | None = None) -> tuple[float, float, float]:
     """Returns (loss_ratio, total_claimed_ytd, total_annual_premium)."""
     year = year or date.today().year
