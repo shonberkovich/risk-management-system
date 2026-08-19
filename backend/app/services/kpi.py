@@ -341,17 +341,33 @@ INCIDENT_CONCENTRATION_THRESHOLD = 3  # open incidents on a single property
 OPEN_INCIDENT_STATUSES = {"NEW", "UNDER_INVESTIGATION", "CLAIM_FILED"}
 
 
-def calculate_alerts(db: Session) -> list[dict]:
+def calculate_alerts(
+    db: Session,
+    geo_exposure_threshold_ratio: float | None = None,
+    incident_concentration_threshold: int | None = None,
+) -> list[dict]:
     """Returns a list of threshold-crossing alerts: geographic exposure clusters whose
-    combined MFL exceeds GEO_EXPOSURE_THRESHOLD_RATIO of TIV, and properties whose open
-    incident count reaches INCIDENT_CONCENTRATION_THRESHOLD. Each alert is a dict matching
-    schemas.AlertOut."""
+    combined MFL exceeds geo_exposure_threshold_ratio of TIV, and properties whose open
+    incident count reaches incident_concentration_threshold. Each alert is a dict matching
+    schemas.AlertOut.
+
+    Both thresholds default to the fixed module constants (GEO_EXPOSURE_THRESHOLD_RATIO,
+    INCIDENT_CONCENTRATION_THRESHOLD) when omitted, so existing callers are unaffected;
+    passing them explicitly lets a caller (e.g. notifications.dispatch_notifications) use
+    per-call/configurable thresholds instead of editing the module constants."""
+    geo_exposure_threshold_ratio = (
+        GEO_EXPOSURE_THRESHOLD_RATIO if geo_exposure_threshold_ratio is None else geo_exposure_threshold_ratio
+    )
+    incident_concentration_threshold = (
+        INCIDENT_CONCENTRATION_THRESHOLD if incident_concentration_threshold is None else incident_concentration_threshold
+    )
+
     alerts: list[dict] = []
     tiv = calculate_tiv(db)
     props_by_id = {p.property_id: p.name for p in db.scalars(select(models.Property)).all()}
 
     if tiv > 0:
-        geo_threshold = tiv * GEO_EXPOSURE_THRESHOLD_RATIO
+        geo_threshold = tiv * geo_exposure_threshold_ratio
         for property_ids, cluster_mfl in _geographic_clusters(db):
             if len(property_ids) < 2 or cluster_mfl <= geo_threshold:
                 continue
@@ -361,7 +377,7 @@ def calculate_alerts(db: Session) -> list[dict]:
                 "severity": "critical" if cluster_mfl > geo_threshold * 1.5 else "warning",
                 "title": "ריכוז חשיפה גיאוגרפית חוצה סף",
                 "message": f"אשכול של {len(property_ids)} נכסים ({names}) בטווח {CLUSTER_RADIUS_KM:.0f} ק\"מ "
-                           f"עם חשיפת MFL מצטברת החורגת מ-{GEO_EXPOSURE_THRESHOLD_RATIO:.0%} מסך שווי מבוטח (TIV).",
+                           f"עם חשיפת MFL מצטברת החורגת מ-{geo_exposure_threshold_ratio:.0%} מסך שווי מבוטח (TIV).",
                 "property_ids": property_ids,
                 "value": round(cluster_mfl, 2),
                 "threshold": round(geo_threshold, 2),
@@ -373,17 +389,17 @@ def calculate_alerts(db: Session) -> list[dict]:
         if i.status in OPEN_INCIDENT_STATUSES:
             open_counts[i.property_id] = open_counts.get(i.property_id, 0) + 1
     for property_id, count in open_counts.items():
-        if count < INCIDENT_CONCENTRATION_THRESHOLD:
+        if count < incident_concentration_threshold:
             continue
         name = props_by_id.get(property_id, f"#{property_id}")
         alerts.append({
             "alert_type": "incident_concentration",
-            "severity": "critical" if count >= INCIDENT_CONCENTRATION_THRESHOLD + 2 else "warning",
+            "severity": "critical" if count >= incident_concentration_threshold + 2 else "warning",
             "title": "ריכוז אירועים פתוחים בנכס",
-            "message": f'לנכס "{name}" יש {count} אירועים פתוחים במקביל, מעל הסף המוגדר ({INCIDENT_CONCENTRATION_THRESHOLD}).',
+            "message": f'לנכס "{name}" יש {count} אירועים פתוחים במקביל, מעל הסף המוגדר ({incident_concentration_threshold}).',
             "property_ids": [property_id],
             "value": float(count),
-            "threshold": float(INCIDENT_CONCENTRATION_THRESHOLD),
+            "threshold": float(incident_concentration_threshold),
         })
 
     severity_rank = {"critical": 0, "warning": 1}
