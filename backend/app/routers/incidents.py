@@ -101,8 +101,51 @@ def create_incident(payload: schemas.IncidentCreate, db: Session = Depends(get_d
         ai_classified=payload.ai_classified,
         ai_confidence=payload.ai_confidence,
         created_at=datetime.now(),
+        is_draft=payload.is_draft,
+        business_interruption_requested=payload.business_interruption_requested,
+        area_or_building=payload.area_or_building,
+        reported_coordinates=payload.reported_coordinates,
     )
     db.add(incident)
+    db.commit()
+    db.refresh(incident)
+    return incident
+
+
+@router.patch("/{incident_id}", response_model=schemas.IncidentOut)
+def update_draft_incident(incident_id: int, payload: schemas.IncidentUpdate, db: Session = Depends(get_db)):
+    """Edits a draft's fields before it's submitted. Once an incident has been
+    submitted (is_draft=False) its report content is frozen here — status still
+    progresses via PATCH /{incident_id}/status as usual."""
+    incident = db.get(models.Incident, incident_id)
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    if not incident.is_draft:
+        raise HTTPException(400, "לא ניתן לערוך אירוע שכבר הוגש — רק טיוטות ניתנות לעריכה")
+
+    if payload.property_id is not None and db.get(models.Property, payload.property_id) is None:
+        raise HTTPException(404, "Property not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(incident, field, value)
+
+    db.commit()
+    db.refresh(incident)
+    return incident
+
+
+@router.patch("/{incident_id}/submit", response_model=schemas.IncidentOut)
+def submit_draft_incident(incident_id: int, db: Session = Depends(get_db)):
+    """Draft → Submitted: flips is_draft off. Idempotent-unsafe by design — a
+    second call on an already-submitted incident is rejected, mirroring the
+    guard on PATCH /{incident_id}/status not allowing status to move backwards."""
+    incident = db.get(models.Incident, incident_id)
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    if not incident.is_draft:
+        raise HTTPException(400, "האירוע כבר הוגש")
+
+    incident.is_draft = False
     db.commit()
     db.refresh(incident)
     return incident

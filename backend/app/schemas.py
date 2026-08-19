@@ -66,6 +66,10 @@ class IncidentCreate(BaseModel):
     description: str
     ai_classified: bool = False
     ai_confidence: float | None = None
+    is_draft: bool = False
+    business_interruption_requested: bool = False
+    area_or_building: str | None = None
+    reported_coordinates: str | None = None  # "lat,lng"
 
 
 class IncidentOut(BaseModel):
@@ -82,6 +86,25 @@ class IncidentOut(BaseModel):
     status: IncidentStatus
     ai_classified: bool
     ai_confidence: float | None = None
+    is_draft: bool
+    business_interruption_requested: bool
+    area_or_building: str | None = None
+    reported_coordinates: str | None = None
+
+
+class IncidentUpdate(BaseModel):
+    """Edits a draft's content before submission — see PATCH /{incident_id}.
+    Only usable while the incident is still a draft (is_draft=True)."""
+    property_id: int | None = None
+    incident_timestamp: datetime | None = None
+    hazard_type: HazardType | None = None
+    severity_level: SeverityLevel | None = None
+    operational_impact: OperationalImpact | None = None
+    initial_estimated_loss: float | None = None
+    description: str | None = None
+    business_interruption_requested: bool | None = None
+    area_or_building: str | None = None
+    reported_coordinates: str | None = None
 
 
 class IncidentStatusUpdate(BaseModel):
