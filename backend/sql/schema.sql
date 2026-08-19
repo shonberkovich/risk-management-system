@@ -188,7 +188,9 @@ CREATE TABLE dbo.Incident_Media (
     incident_id           BIGINT NOT NULL REFERENCES dbo.Incidents(incident_id),
     file_path               NVARCHAR(500) NOT NULL,
     file_type                 NVARCHAR(50) NOT NULL,
-    captured_at                 DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    captured_at                 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    gps_latitude                       FLOAT NULL,
+    gps_longitude                      FLOAT NULL
 );
 GO
 

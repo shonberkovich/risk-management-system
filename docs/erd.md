@@ -80,6 +80,8 @@ erDiagram
         bigint incident_id FK
         nvarchar file_path
         nvarchar file_type
+        float gps_latitude
+        float gps_longitude
     }
 
     Claims {
