@@ -69,6 +69,9 @@ class InsurancePolicy(Base):
     deductible_default: Mapped[float] = mapped_column(Numeric(18, 2))
     annual_premium: Mapped[float] = mapped_column(Numeric(18, 2))
     status: Mapped[str] = mapped_column(Unicode(20))
+    per_event_limit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    bi_waiting_period_hours: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    exclusions: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
 
 class PolicyAsset(Base):
