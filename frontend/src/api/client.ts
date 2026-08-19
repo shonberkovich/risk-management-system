@@ -255,6 +255,19 @@ export interface LossRatioTrendPoint {
   total_annual_premium: number;
 }
 
+export interface CashflowMonthPoint {
+  month: string; // "YYYY-MM"
+  expected_receipts: number;
+  open_reserves: number;
+}
+
+export interface CashflowSummary {
+  total_open_reserves: number;
+  total_expected_receipts: number;
+  unscheduled_reserves: number;
+  monthly: CashflowMonthPoint[];
+}
+
 export interface Alert {
   alert_type: "geographic_exposure" | "incident_concentration";
   severity: "warning" | "critical";
@@ -404,6 +417,8 @@ export const fetchHazardDistribution = () =>
   api.get<HazardDistributionItem[]>("/analytics/hazard-distribution").then((r) => r.data);
 export const fetchLossRatioTrend = () =>
   api.get<LossRatioTrendPoint[]>("/analytics/loss-ratio-trend").then((r) => r.data);
+export const fetchCashflowSummary = (monthsAhead = 12) =>
+  api.get<CashflowSummary>("/analytics/cashflow", { params: { months_ahead: monthsAhead } }).then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
