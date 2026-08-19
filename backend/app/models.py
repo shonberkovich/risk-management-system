@@ -194,3 +194,12 @@ class AuditLog(Base):
     new_value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime)
     ip_address: Mapped[str | None] = mapped_column(Unicode(45), nullable=True)
+
+
+class RolePermission(Base):
+    __tablename__ = "Role_Permissions"
+
+    role_permission_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    role: Mapped[str] = mapped_column(Unicode(30))
+    permission_key: Mapped[str] = mapped_column(Unicode(100))
+    description: Mapped[str | None] = mapped_column(Unicode(200), nullable=True)
