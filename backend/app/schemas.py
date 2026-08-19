@@ -325,6 +325,36 @@ class GeographicExposureCluster(BaseModel):
     cluster_tiv_total: float
 
 
+class HistogramBucket(BaseModel):
+    bucket_min: float
+    bucket_max: float
+    count: int
+
+
+class PortfolioSimulationResult(BaseModel):
+    iterations: int
+    horizon_years: int
+    properties_simulated: int
+    expected_annual_loss: float
+    worst_case_simulated_loss: float
+    var_95: float
+    var_99: float
+    distribution: list[HistogramBucket]
+
+
+class PropertySimulationResult(BaseModel):
+    property_id: int
+    iterations: int
+    horizon_years: int
+    annual_event_probability: float
+    mfl_amount: float
+    expected_annual_loss: float
+    worst_case_simulated_loss: float
+    var_95: float
+    var_99: float
+    distribution: list[HistogramBucket]
+
+
 class AlertOut(BaseModel):
     alert_type: Literal["geographic_exposure", "incident_concentration"]
     severity: Literal["warning", "critical"]
