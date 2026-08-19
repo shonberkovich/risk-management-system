@@ -1,8 +1,6 @@
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -29,12 +27,14 @@ import {
   classifyIncident,
   createIncident,
   fetchProperties,
+  uploadIncidentMedia,
   type HazardType,
   type IncidentClassification,
   type OperationalImpact,
   type Property,
   type SeverityLevel,
 } from "../api/client";
+import MediaUploader from "../components/MediaUploader";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
 
@@ -61,7 +61,8 @@ export default function IncidentReport() {
   const [loss, setLoss] = useState("");
   const [description, setDescription] = useState("");
   const [aiResult, setAiResult] = useState<IncidentClassification | null>(null);
-  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
@@ -100,7 +101,23 @@ export default function IncidentReport() {
         ai_confidence: aiResult?.confidence ?? null,
         reported_coordinates: geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null,
       }),
-    onSuccess: (incident) => setSubmitted(incident.incident_code),
+    onSuccess: async (incident) => {
+      setMediaUploadError(null);
+      if (mediaFiles.length > 0) {
+        const failed: string[] = [];
+        for (const file of mediaFiles) {
+          try {
+            await uploadIncidentMedia(incident.incident_id, file);
+          } catch {
+            failed.push(file.name);
+          }
+        }
+        if (failed.length > 0) {
+          setMediaUploadError(`העלאת הקבצים הבאים נכשלה: ${failed.join(", ")}. הדיווח עצמו נשלח בהצלחה.`);
+        }
+      }
+      setSubmitted(incident.incident_code);
+    },
   });
 
   const canNext = [
@@ -120,6 +137,11 @@ export default function IncidentReport() {
         <Typography color="text.secondary" sx={{ my: 1 }}>
           מספר אירוע: <strong>{submitted}</strong>
         </Typography>
+        {mediaUploadError && (
+          <Alert severity="warning" sx={{ textAlign: "right", mt: 1 }}>
+            {mediaUploadError}
+          </Alert>
+        )}
         <Button
           variant="contained"
           sx={{ mt: 2 }}
@@ -133,7 +155,8 @@ export default function IncidentReport() {
             setLoss("");
             setDescription("");
             setAiResult(null);
-            setFileNames([]);
+            setMediaFiles([]);
+            setMediaUploadError(null);
           }}
         >
           דווח אירוע נוסף
@@ -325,53 +348,18 @@ export default function IncidentReport() {
 
           {activeStep === 3 && (
             <Stack spacing={2}>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    component="label"
-                    startIcon={<CameraAltIcon />}
-                    sx={{ py: 3 }}
-                  >
-                    צלם תמונה
-                    <input
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files ?? []).map((f) => f.name);
-                        setFileNames((prev) => [...prev, ...files]);
-                      }}
-                    />
-                  </Button>
-                </Grid>
-                <Grid item xs={6}>
-                  <Button fullWidth variant="outlined" component="label" startIcon={<UploadFileIcon />} sx={{ py: 3 }}>
-                    העלה קובץ
-                    <input
-                      type="file"
-                      hidden
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files ?? []).map((f) => f.name);
-                        setFileNames((prev) => [...prev, ...files]);
-                      }}
-                    />
-                  </Button>
-                </Grid>
-              </Grid>
-              {fileNames.length > 0 && (
+              <MediaUploader files={mediaFiles} onFilesChange={setMediaFiles} disabled={submitMutation.isPending} />
+
+              {submitMutation.isPending && (
                 <Stack spacing={0.5}>
-                  <Typography variant="caption" color="text.secondary">
-                    קבצים שהועלו ({fileNames.length}) — לצרכי הדגמה בלבד, לא נשמרים בשרת
-                  </Typography>
-                  {fileNames.map((f, idx) => (
-                    <Chip key={idx} label={f} size="small" onDelete={() => setFileNames((prev) => prev.filter((_, i) => i !== idx))} />
-                  ))}
+                  <LinearProgress />
+                  {mediaFiles.length > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      שולח דיווח ומעלה {mediaFiles.length} קבצים...
+                    </Typography>
+                  )}
                 </Stack>
               )}
-
-              {submitMutation.isPending && <LinearProgress />}
               {submitMutation.isError && <Alert severity="error">שליחת הדיווח נכשלה. נסה שוב.</Alert>}
             </Stack>
           )}
