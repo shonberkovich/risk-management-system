@@ -10,6 +10,7 @@ import Mitigation from "./pages/Mitigation";
 import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
 import Reports from "./pages/Reports";
+import Simulation from "./pages/Simulation";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/policies" element={<Policies />} />
         <Route path="/mitigation" element={<Mitigation />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/simulation" element={<Simulation />} />
       </Routes>
     </Layout>
   );
