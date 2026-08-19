@@ -157,8 +157,11 @@
 - [ ] **הצפנת נתונים רגישים ותצורת אבטחה**: הצפנה במנוחה לשדות פיננסיים, אכיפת HTTPS, CORS מוגבל, ניהול סודות בסביבה.
   📁 `backend/app/config.py` + `backend/.env.example`
 
-- [ ] **הגבלת קצב ו-API Key מסודר לשירותי AI**: חיזוק המנגנון הקיים והסרת מפתחות מהקוד.
+- [x] **הגבלת קצב ו-API Key מסודר לשירותי AI**: חיזוק המנגנון הקיים והסרת מפתחות מהקוד.
   📁 `backend/app/routers/ai.py` + `backend/app/config.py`
+  ✅ בוצע ב-branch `feature/ai-rate-limiting`. הערת scope: שאר `שלב 4` (מודול אימות/JWT, RBAC, SSO/AD, Audit Log middleware, הצפנה במנוחה) הושאר פתוח בכוונה — `CLAUDE.md` §"Deliberately out of scope" מגדיר במפורש RBAC/audit-log enforcement והצפנה במנוחה כמחוץ לתחום הפרויקט הזה; רק פריט זה (rate limiting + ניהול מפתחות) לא מנוגד לרשימה ההיא ולכן טופל.
+  ניהול המפתח: `services/llm.py` כבר קרא ל-`Anthropic(api_key=settings.anthropic_api_key)` מ-`backend/.env` (gitignored) — אין ולא היה מפתח קשיח בקוד; לא נדרש שינוי בהיבט הזה.
+  חיזוק ה-rate limiting: קובץ חדש `backend/app/services/rate_limit.py` — מגביל בזיכרון תהליך (fixed-window per client-IP, `defaultdict`), ללא תלות חיצונית (Redis וכו') כי RMIS רץ כתהליך uvicorn יחיד להדגמה. שני settings חדשים ב-`config.py`: `ai_rate_limit_per_window` (ברירת מחדל 10) ו-`ai_rate_limit_window_seconds` (ברירת מחדל 60). הופעל כ-`dependencies=[Depends(enforce_ai_rate_limit)]` ברמת ה-`APIRouter` של `routers/ai.py` כך שהוא חל אוטומטית על כל שלושת נתיבי ה-AI (`/classify-incident`, `/executive-summary`, `/ask`) בלי לגעת בכל endpoint בנפרד. חריגה ממכסה מחזירה `429` עם הודעה בעברית וכותרת `Retry-After`. נבדק בפועל דרך שרת ה-preview: 11 קריאות רצופות ל-`POST /api/ai/ask` — 10 הראשונות החזירו `503` (כצפוי, אין `ANTHROPIC_API_KEY` מוגדר בסביבת הפיתוח המקומית — הבדיקה של ה-rate limit רצה כ-dependency *לפני* בדיקת המפתח, כך שהיא נבדקת ללא תלות בקיום מפתח), הקריאה ה-11 החזירה `429` עם `Retry-After: 59` והודעה "חריגה ממכסת הבקשות ל-AI (10 בקשות ל-60 שניות)"; `GET /api/incidents` (נתיב שאינו AI) המשיך לפעול כרגיל (`200`) — מוודא שה-dependency לא דלף לנתיבים אחרים.
 
 ---
 
