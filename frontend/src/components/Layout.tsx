@@ -1,5 +1,6 @@
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DomainIcon from "@mui/icons-material/Domain";
+import BalanceIcon from "@mui/icons-material/Balance";
 import CasinoIcon from "@mui/icons-material/Casino";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HandymanIcon from "@mui/icons-material/Handyman";
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { to: "/policies", label: "פוליסות", icon: <ShieldIcon fontSize="small" /> },
   { to: "/mitigation", label: "הפחתת סיכון", icon: <HandymanIcon fontSize="small" /> },
   { to: "/simulation", label: "סימולציה ו-VaR", icon: <CasinoIcon fontSize="small" /> },
+  { to: "/retention", label: "השתתפות עצמית", icon: <BalanceIcon fontSize="small" /> },
   { to: "/reports", label: "דוחות", icon: <SummarizeIcon fontSize="small" /> },
 ];
 
