@@ -1,5 +1,6 @@
 """Pure KPI / risk calculations. No LLM calls here."""
 import math
+from collections import defaultdict
 from datetime import date
 
 from sqlalchemy import select
@@ -109,6 +110,68 @@ def calculate_geographic_exposure_clusters(db: Session) -> list[dict]:
         })
 
     result.sort(key=lambda c: c["cluster_mfl_total"], reverse=True)
+    return result
+
+
+def calculate_exposure_by_region(db: Session) -> list[dict]:
+    """TIV, MFL and total claimed amount per Region, for comparing geographic
+    concentration against the cluster-based view in calculate_geographic_exposure_clusters
+    (this groups by the administrative Regions table rather than physical proximity —
+    the two can disagree, e.g. two properties in different regions but geographically
+    close to a border still cluster together in _geographic_clusters).
+
+    - tiv: sum of replacement_value for active properties in the region.
+    - mfl: sum of Asset_Risk_Profiles.mfl_amount for active properties in the region
+      (a simple sum, not a clustered max like calculate_mfl — this reports the region's
+      total foreseeable-loss capacity, not a single-event concentration).
+    - total_claimed: sum of Claims.claimed_amount for claims on incidents at properties
+      in the region (all claims regardless of status, matching how claimed_amount is
+      used elsewhere, e.g. calculate_open_claims).
+
+    Properties with no region_id are grouped under a synthetic "unassigned" entry.
+    Sorted descending by tiv."""
+    regions = {r.region_id: r.name for r in db.scalars(select(models.Region)).all()}
+
+    props = db.scalars(
+        select(models.Property).where(models.Property.is_active == True)  # noqa: E712
+    ).all()
+    props_by_id = {p.property_id: p for p in props}
+
+    tiv_by_region: dict[int | None, float] = defaultdict(float)
+    for p in props:
+        tiv_by_region[p.region_id] += float(p.replacement_value)
+
+    profiles = db.scalars(select(models.AssetRiskProfile)).all()
+    mfl_by_region: dict[int | None, float] = defaultdict(float)
+    for profile in profiles:
+        prop = props_by_id.get(profile.property_id)
+        if prop is None:
+            continue
+        mfl_by_region[prop.region_id] += float(profile.mfl_amount)
+
+    claims = db.execute(
+        select(models.Claim, models.Incident.property_id)
+        .join(models.Incident, models.Incident.incident_id == models.Claim.incident_id)
+    ).all()
+    claimed_by_region: dict[int | None, float] = defaultdict(float)
+    for claim, property_id in claims:
+        prop = props_by_id.get(property_id)
+        if prop is None:
+            continue
+        claimed_by_region[prop.region_id] += float(claim.claimed_amount)
+
+    region_ids = set(tiv_by_region) | set(mfl_by_region) | set(claimed_by_region)
+    result = [
+        {
+            "region_id": region_id,
+            "region_name": regions.get(region_id, "לא משויך") if region_id is not None else "לא משויך",
+            "tiv": round(tiv_by_region.get(region_id, 0.0), 2),
+            "mfl": round(mfl_by_region.get(region_id, 0.0), 2),
+            "total_claimed": round(claimed_by_region.get(region_id, 0.0), 2),
+        }
+        for region_id in region_ids
+    ]
+    result.sort(key=lambda r: r["tiv"], reverse=True)
     return result
 
 
