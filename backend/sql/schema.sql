@@ -103,7 +103,10 @@ CREATE TABLE dbo.Insurance_Policies (
     deductible_default        DECIMAL(18,2) NOT NULL,
     annual_premium             DECIMAL(18,2) NOT NULL,
     status                      NVARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
-        CHECK (status IN ('ACTIVE','EXPIRED','PENDING_RENEWAL'))
+        CHECK (status IN ('ACTIVE','EXPIRED','PENDING_RENEWAL')),
+    per_event_limit             DECIMAL(18,2) NULL,          -- גבול אחריות לאירוע בודד
+    bi_waiting_period_hours     SMALLINT NULL,                -- תקופת המתנה לכיסוי אובדן רווחים (שעות)
+    exclusions                  NVARCHAR(MAX) NULL           -- החרגות פוליסה (טקסט חופשי / JSON)
 );
 GO
 
