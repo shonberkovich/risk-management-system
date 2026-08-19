@@ -54,8 +54,9 @@
 
 ## שלב 2 — Backend Services (לוגיקה עסקית)
 
-- [ ] **מנוע רזרבות ותזרים מזומנים**: חישוב צפי תקבולים לפי סטטוס תביעה ותאריכי יעד, וסכימת רזרבות פתוחות.
+- [x] **מנוע רזרבות ותזרים מזומנים**: חישוב צפי תקבולים לפי סטטוס תביעה ותאריכי יעד, וסכימת רזרבות פתוחות.
   📁 קובץ חדש: `backend/app/services/cashflow.py`
+  ✅ בוצע ב-branch `feature/cashflow-service`: נוצר `cashflow.py` בהתאם לדפוס הקיים ב-`kpi.py` (פונקציות טהורות שמקבלות `db: Session`, ללא קריאות LLM). `get_current_reserves` בוחר, לכל `claim_id`, את רשומת `Claim_Reserves` העדכנית ביותר (לפי `updated_at`) — כי רזרבה יכולה להתעדכן מספר פעמים לאותה תביעה, ורק הערך האחרון רלוונטי. `calculate_claim_outstanding_balance` מחשבת יתרה פתוחה לתביעה (`approved_amount` פחות סכום ה-`Claim_Payments` ששולמו בפועל, עם נפילה ל-`claimed_amount` לתביעות שטרם אושרו). `calculate_expected_receipts_by_month` מקבצת יתרות פתוחות של תביעות בסטטוס פתוח (`SUBMITTED`/`IN_ADJUSTMENT`/`APPROVED`) לפי `Claims.expected_payment_date` (חודש "YYYY-MM"). `calculate_reserves_by_month` מקבצת את הרזרבות הנוכחיות לפי `Claim_Reserves.expected_payment_date`, עם קיבוץ "unscheduled" לרזרבות ללא תאריך יעד. `get_cashflow_summary` מאחדת הכל לתצוגת דשבורד: סך רזרבות פתוחות, סך תקבולים צפויים, רזרבות ללא תאריך, ותחזית חודשית ממוזגת (`months_ahead` חודשים קדימה, ברירת מחדל 12). נבדק בפועל מול `RiskDB` המקומי (עם נתוני ה-seed המורחבים משלב קודם) — כל הפונקציות רצות ומחזירות ערכים תקינים (6 רזרבות נוכחיות, סה"כ רזרבות פתוחות ₪2,990,000), וייבוא `app.main` תקין.
 
 - [ ] **מנגנון אופטימיזציה של השתתפות עצמית (Retention Optimizer)**: השוואה בין ספיגת נזק עצמית לבין הגשת תביעה, כולל השפעה צפויה על הפרמיה.
   📁 קובץ חדש: `backend/app/services/retention.py`
