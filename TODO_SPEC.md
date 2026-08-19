@@ -39,8 +39,12 @@
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/financial-statements`: נוספה מחלקת `FinancialStatement` (models.py) + טבלת `Financial_Statements` ב-schema.sql — טבלה עצמאית (ללא FK-ים, לא תלויה בישויות אחרות ולא נתלים בה), עם `year` (SMALLINT) כ-UNIQUE כדי להבטיח רשומה אחת בלבד לשנה, מתאים לניתוח רב-שנתי לפי CFO/דוחות מאקרו.
 
-- [ ] **אינדקסים חסרים**: אינדקס מרחבי GIST על `Properties.coordinates`, אינדקס מורכב על `Incidents(status, hazard_type)` ועל `Claims(claim_status, payment_date)`.
+- [x] **אינדקסים חסרים**: אינדקס מרחבי GIST על `Properties.coordinates`, אינדקס מורכב על `Incidents(status, hazard_type)` ועל `Claims(claim_status, payment_date)`.
   📁 `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/missing-indexes`. בבדיקה מול הסכימה הקיימת התגלו שלושה פערים בין הניסוח למציאות, שתועדו ונפתרו בפועל:
+  1. **אינדקס מרחבי GIST על coordinates** — GIST הוא מנוע אינדוקס של PostgreSQL; ב-SQL Server המקביל הוא `SPATIAL INDEX`, אבל הוא דורש עמודת `geometry`/`geography` ולא זוג `DECIMAL` נפרדים (`latitude`, `longitude`) כפי שקיים כאן. יצירת עמודת geography אמיתית היא שינוי מבנה נתונים מהותי שישפיע על שכבות נוספות (ORM, שירותי המפה) וחורג מהיקף המשימה. `IX_Properties_Coordinates` (אינדקס מורכב רגיל על lat+lng) כבר קיים וממלא בפועל את הצורך המעשי בשאילתות טווח גיאוגרפי — הושאר ללא שינוי, עם התיעוד הזה כהסבר לפער.
+  2. **אינדקס מורכב על `Incidents(status, hazard_type)`** — כבר קיים בסכימה כ-`IX_Incidents_StatusHazard`. לא בוצע שינוי.
+  3. **אינדקס מורכב על `Claims(claim_status, payment_date)`** — `payment_date` לא קיים בפועל בטבלת `Claims` אלא ב-`Claim_Payments`; ב-`Claims` יש `expected_payment_date`, ועליו כבר קיים `IX_Claims_StatusDate(claim_status, expected_payment_date)`. כפתרון מעשי נוסף אינדקס חדש `IX_ClaimPayments_ClaimDate` על `Claim_Payments(claim_id, payment_date)`, שתומך בדפוס השאילתה הריאלי — תשלומים בפועל לפי תאריך, לכל תביעה.
 
 - [ ] **הרחבת נתוני הזרעה (Seed)** לכל הטבלאות והשדות החדשים.
   📁 `backend/app/seed.py` + `backend/sql/seed.sql`

@@ -232,6 +232,11 @@ CREATE TABLE dbo.Claim_Payments (
         CHECK (payment_type IN ('ADVANCE','FINAL_SETTLEMENT'))
 );
 GO
+-- Composite index for "payments by date, per claim" reporting (the practical equivalent of a
+-- Claims(claim_status, payment_date) index — payment_date lives here, not on Claims; see note
+-- in TODO_SPEC.md "אינדקסים חסרים" for the full explanation).
+CREATE INDEX IX_ClaimPayments_ClaimDate ON dbo.Claim_Payments(claim_id, payment_date);
+GO
 
 -- ============================================================================
 -- Claim_Reserves
