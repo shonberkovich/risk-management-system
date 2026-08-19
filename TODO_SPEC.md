@@ -46,8 +46,9 @@
   2. **אינדקס מורכב על `Incidents(status, hazard_type)`** — כבר קיים בסכימה כ-`IX_Incidents_StatusHazard`. לא בוצע שינוי.
   3. **אינדקס מורכב על `Claims(claim_status, payment_date)`** — `payment_date` לא קיים בפועל בטבלת `Claims` אלא ב-`Claim_Payments`; ב-`Claims` יש `expected_payment_date`, ועליו כבר קיים `IX_Claims_StatusDate(claim_status, expected_payment_date)`. כפתרון מעשי נוסף אינדקס חדש `IX_ClaimPayments_ClaimDate` על `Claim_Payments(claim_id, payment_date)`, שתומך בדפוס השאילתה הריאלי — תשלומים בפועל לפי תאריך, לכל תביעה.
 
-- [ ] **הרחבת נתוני הזרעה (Seed)** לכל הטבלאות והשדות החדשים.
+- [x] **הרחבת נתוני הזרעה (Seed)** לכל הטבלאות והשדות החדשים.
   📁 `backend/app/seed.py` + `backend/sql/seed.sql`
+  ✅ בוצע ב-branch `feature/seed-data-expansion`: `seed.py` הורחב (לא `sql/seed.sql`, בהתאם לכלל ב-CLAUDE.md נגד טעינת עברית דרך `sqlcmd -i`) — נוספו שני משתמשים חדשים (`RISK_OFFICER`, `ADJUSTER`), הזרעת `Regions` (מרכז/צפון/דרום) עם קישור `Properties.region_id` בפועל, שדות הפוליסה החדשים (`per_event_limit`/`bi_waiting_period_hours`/`exclusions`) לכל ארבע הפוליסות, ושדות האירוע החדשים (`is_draft`/`business_interruption_requested`/`area_or_building`/`reported_coordinates`) לכל 25 האירועים הקיימים (קואורדינטות GPS מחושבות כ-offset קטן מנקודת הנכס) + שתי טיוטות אירוע חדשות (`INC-2026-010/011`, `is_draft=1`) להדגמת זרימת Draft→Submitted. נוספו גם נתוני הזרעה לטבלאות החדשות לגמרי: `Claim_Reserves` (6 רזרבות לתביעות עם יתרה פתוחה), `Audit_Log` (8 רשומות דוגמה), `Role_Permissions` (25 הרשאות פרוסות על פני 7 התפקידים), `Documents` (10 מסמכים לדוגמה על פני policy/claim/incident/property), ו-`Financial_Statements` (2022–2026). רשימות ה-`DELETE`/`DBCC CHECKIDENT` בראש `seed.py` עודכנו לכלול את כל הטבלאות החדשות בסדר תקין מבחינת FK. נבדק בפועל: `sqlcmd -i sql\schema.sql` ואז `python -m app.seed` רצים בהצלחה מקצה לקצה מול `RiskDB` מקומי, וכל הטבלאות מאוכלסות (נבדק בספירות שורות).
 
 ---
 
