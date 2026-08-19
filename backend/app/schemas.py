@@ -223,6 +223,20 @@ class DocumentOut(BaseModel):
     uploaded_at: datetime
 
 
+class ClaimWithPaymentsOut(ClaimOut):
+    payments: list[ClaimPaymentOut] = []
+
+
+class IncidentDrillDown(BaseModel):
+    """Unified incident file: everything linked to one incident in a single call —
+    the incident itself, its media, its claim(s) each with their payments, and any
+    documents attached directly to it (Documents.entity_type == "INCIDENT")."""
+    incident: IncidentOut
+    media: list[IncidentMediaOut]
+    claims: list[ClaimWithPaymentsOut]
+    documents: list[DocumentOut]
+
+
 class SignedUrlOut(BaseModel):
     url: str  # illustrative S3-style reference (see services/storage.py) — not fetchable
     download_url: str  # actually fetchable: GET /api/media/download?key=...&expires=...&token=...
