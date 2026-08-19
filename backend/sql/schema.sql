@@ -56,6 +56,7 @@ CREATE TABLE dbo.Users (
     email           NVARCHAR(200) NOT NULL UNIQUE,
     role            NVARCHAR(30) NOT NULL
         CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER')),
+    password_hash   NVARCHAR(255) NULL,   -- pbkdf2_hmac "salt$hash" hex; NULL = no local password (SSO-only / not provisioned)
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME()
 );
 GO
@@ -229,7 +230,7 @@ CREATE TABLE dbo.Claim_Payments (
     claim_id                BIGINT NOT NULL REFERENCES dbo.Claims(claim_id),
     payment_date               DATE NOT NULL,
     amount                        DECIMAL(18,2) NOT NULL,
-    reference_number                NVARCHAR(50) NULL,
+    reference_number                NVARCHAR(255) NULL,   -- stored encrypted at rest (Fernet, see app/services/encryption.py) — widened from 50 to fit ciphertext
     payment_type                      NVARCHAR(20) NOT NULL
         CHECK (payment_type IN ('ADVANCE','FINAL_SETTLEMENT'))
 );

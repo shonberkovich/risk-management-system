@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services import storage
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -61,6 +62,7 @@ async def upload_document(
     doc_type: str = Query(..., description='e.g. "POLICY_DOCUMENT", "ADJUSTER_REPORT", "CORRESPONDENCE", "PHOTO", "SURVEY_REPORT"'),
     uploaded_by: int | None = Query(None, description="Users.user_id"),
     db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),  # any authenticated role
 ):
     _get_entity_or_404(db, entity_type, entity_id)
     if not file.filename:
@@ -99,7 +101,11 @@ def list_documents(entity_type: schemas.DocumentEntityType, entity_id: int, db: 
 
 
 @router.delete("/{document_id}", status_code=204)
-def delete_document(document_id: int, db: Session = Depends(get_db)):
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles("RISK_MANAGER", "ADMIN")),
+):
     document = db.get(models.Document, document_id)
     if not document:
         raise HTTPException(404, "Document not found")

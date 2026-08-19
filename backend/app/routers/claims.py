@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 
 router = APIRouter(prefix="/api/claims", tags=["claims"])
+
+_CLAIMS_WRITE_ROLES = ("RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN")
 
 _TERMINAL_CLAIM_STATUSES = {"SETTLED", "REJECTED"}
 
@@ -73,7 +76,11 @@ def get_claim(claim_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.ClaimOut, status_code=201)
-def create_claim(payload: schemas.ClaimCreate, db: Session = Depends(get_db)):
+def create_claim(
+    payload: schemas.ClaimCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+):
     incident = db.get(models.Incident, payload.incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
@@ -104,7 +111,12 @@ def create_claim(payload: schemas.ClaimCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/{claim_id}", response_model=schemas.ClaimOut)
-def update_claim(claim_id: int, payload: schemas.ClaimUpdate, db: Session = Depends(get_db)):
+def update_claim(
+    claim_id: int,
+    payload: schemas.ClaimUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+):
     claim = db.get(models.Claim, claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
@@ -140,7 +152,12 @@ def list_claim_payments(claim_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{claim_id}/payments", response_model=schemas.ClaimPaymentOut, status_code=201)
-def create_claim_payment(claim_id: int, payload: schemas.ClaimPaymentCreate, db: Session = Depends(get_db)):
+def create_claim_payment(
+    claim_id: int,
+    payload: schemas.ClaimPaymentCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+):
     claim = db.get(models.Claim, claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")

@@ -142,20 +142,44 @@
 
 ## שלב 4 — Auth & Security
 
-- [ ] **מודול אימות משתמשים**: התחברות, JWT/Session, רענון טוקן, יציאה.
+- [x] **מודול אימות משתמשים**: התחברות, JWT/Session, רענון טוקן, יציאה.
   📁 קובץ חדש: `backend/app/routers/auth.py` + `backend/app/services/auth.py`
 
-- [ ] **RBAC — הרשאות לפי תפקיד**: Dependency ב-FastAPI החוסמת גישה לנתיבים לפי תפקיד המשתמש (CFO / מנהל סיכונים / מנהל נכס / שמאי).
+  ✅ בוצע (branch `feature/auth-rbac-security`). CLAUDE.md מנה במפורש את כל שלב 4 כ"מחוץ לתחום", אך המשתמש אישר בפירוש להשלים את כל מה שנותר בשלב זה ("כל מה שלא עשית בשלב 4 תעשה אני מרשה לך").
+
+  מימוש: `Users.password_hash` (עמודה חדשה, `NVARCHAR(255) NULL` — `salt$hash` hex של `hashlib.pbkdf2_hmac`, 260,000 איטרציות; stdlib בלבד, בלי תלות חיצונית שדורשת קומפילציה כמו bcrypt). `services/auth.py`: `hash_password`/`verify_password` + `create_access_token`/`create_refresh_token`/`decode_token` (JWT חתום HS256, `PyJWT`). `routers/auth.py`: `POST /api/auth/login` (email+password → access+refresh+פרטי המשתמש), `POST /api/auth/refresh` (refresh→access חדש), `POST /api/auth/logout` (204, no-op — אין רשימת ביטול טוקנים בצד שרת; ה-JWT הוא stateless, ראו את ה-docstring של הראוטר), `GET /api/auth/me`. `app/seed.py` מפיק סיסמת דמו משותפת `Demo1234!` (מוצפנת בהאש) לכל 9 המשתמשים הזרועים.
+
+  אימות: `POST /login` עם `dana.cohen@company.co.il` / `Demo1234!` → 200 עם access+refresh תקינים; סיסמה שגויה → 401; `GET /me` עם הטוקן → פרטי המשתמש הנכונים; `GET /me` בלי טוקן → 401; `POST /refresh` עם ה-refresh token → access token חדש תקין.
+
+- [x] **RBAC — הרשאות לפי תפקיד**: Dependency ב-FastAPI החוסמת גישה לנתיבים לפי תפקיד המשתמש (CFO / מנהל סיכונים / מנהל נכס / שמאי).
   📁 קובץ חדש: `backend/app/dependencies/permissions.py` + החלה על כל ה-routers
 
-- [ ] **אינטגרציית SSO / Active Directory** (OAuth2 / SAML) לחיבור למערכת הזהויות הארגונית.
+  ✅ בוצע (אותו branch). `dependencies/permissions.py`: `get_current_user` (מפענח `Authorization: Bearer`, טוען את `models.User`, 401 אם חסר/לא תקף) ו-`require_roles(*roles)` — factory: ללא ארגומנטים = "מחובר בלבד, כל תפקיד"; עם תפקידים = גם בדיקת תפקיד (403 אם לא מתאים). הוחל על **כל** ה-endpoints המשנים מצב (POST/PUT/PATCH/DELETE) בכל 6 ה-routers שיש להם כאלה: `claims.py` (יצירה/עדכון/תשלום → RISK_MANAGER/CFO/ADJUSTER/ADMIN), `documents.py` (העלאה → כל מחובר; מחיקה → RISK_MANAGER/ADMIN), `media.py` (העלאה → כל מחובר; מחיקה → RISK_MANAGER/ADMIN), `mitigation.py` (יצירה/עדכון → RISK_MANAGER/PROPERTY_MANAGER/ADMIN), `incidents.py` (יצירה/עריכת טיוטה/הגשה → כל מחובר — כך שגם FIELD_WORKER יכול לדווח אירוע; שינוי סטטוס → RISK_MANAGER/PROPERTY_MANAGER/RISK_OFFICER/ADMIN), `policies.py` (הכל → RISK_MANAGER/CFO/ADMIN). נקודות GET/קריאה **לא** נחסמו בכוונה — כדי שלוחות המחוונים ימשיכו לעבוד גם לפני שהתחברות תחווט בפרונט (המשימה הבאה בשלב 6).
+
+  Role_Permissions הקיימת (הזרועה מראש ב-seed.py) נשארת טבלת עזר תיאורית ואינה מנגנון האכיפה בפועל — האכיפה היא ישירות מול `Users.role`, לא מפתחות ההרשאה שבה; הרחבה עתידית יכולה לגשר ביניהם.
+
+  אימות: יצירת מסמך ללא טוקן → 401; מחיקת מסמך כ-FIELD_WORKER → 403; יצירת פוליסה כ-RISK_MANAGER עם גוף לא תקין → 422 (כלומר עברה את שכבות ה-Auth וה-RBAC ונכשלה רק על ולידציית Pydantic — מוכיח שהבדיקה לא חוסמת false-positive).
+
+- [x] **אינטגרציית SSO / Active Directory** (OAuth2 / SAML) לחיבור למערכת הזהויות הארגונית.
   📁 `backend/app/services/auth.py` + `backend/app/config.py`
 
-- [ ] **Middleware ל-Audit Log**: תיעוד אוטומטי של כל פעולת כתיבה (מי, מה, מתי, ערך קודם/חדש).
+  ✅ בוצע כ-stub פונקציונלי (אותו branch) — אין ספק זהות (IdP) אמיתי בסביבה זו לבדוק כנגדו, אז זה נבנה באותה קונבנציית "הידרדרות חינה" (graceful degradation) שכבר קיימת ב-`/api/ai/*` כש-`ANTHROPIC_API_KEY` חסר: `config.py` מוסיף `sso_enabled`/`sso_provider`/`sso_client_id`/`sso_client_secret`/`sso_authorize_url`/`sso_token_url`/`sso_redirect_uri` (כולם ריקים כברירת מחדל). `GET /api/auth/sso/{provider}/login` בונה URL הרשאה בסגנון OAuth2 authorization-code כאשר `SSO_ENABLED=true`, ומחזיר 501 נקי עם הודעה בעברית כברירת מחדל. `POST /api/auth/sso/{provider}/callback` — שלד בלבד (501), כי חילופי code→token מול IdP אמיתי לא ניתנים לבדיקה בלי ספק אמיתי.
+
+  אימות: `GET /api/auth/sso/azure-ad/login` בהגדרות ברירת המחדל → 501.
+
+- [x] **Middleware ל-Audit Log**: תיעוד אוטומטי של כל פעולת כתיבה (מי, מה, מתי, ערך קודם/חדש).
   📁 קובץ חדש: `backend/app/middleware/audit.py`
 
-- [ ] **הצפנת נתונים רגישים ותצורת אבטחה**: הצפנה במנוחה לשדות פיננסיים, אכיפת HTTPS, CORS מוגבל, ניהול סודות בסביבה.
+  ✅ בוצע (אותו branch). `AuditLogMiddleware` (Starlette `BaseHTTPMiddleware`, רשום ב-`main.py`) מיירט כל בקשת POST/PUT/PATCH/DELETE תחת `/api/`, מחלץ `entity_type`/`entity_id` מה-path (regex best-effort, אותה קונבנציה פולימורפית ש-`Documents`/`Audit_Log` כבר משתמשים בה), מפענח את זהות הקורא מה-JWT (ללא תלות ב-DI graph — Middleware רץ מחוץ לו), וכותב שורת `Audit_Log` עם ה-body (מקוצר ל-2000 תווים) כ-`new_value`. כשל בכתיבת ה-audit עצמה נבלע (`try/except` + `rollback`) כדי שלעולם לא ישבור בקשה אמיתית.
+
+  אימות: לאחר מספר קריאות login/POST, `SELECT TOP 5 ... FROM Audit_Log ORDER BY log_id DESC` הראה שורות חדשות אמיתיות (`AUTH`/`POLICIES` וכו') עם `ip_address=127.0.0.1` ו-`user_id` נכון כשהיה טוקן.
+
+- [x] **הצפנת נתונים רגישים ותצורת אבטחה**: הצפנה במנוחה לשדות פיננסיים, אכיפת HTTPS, CORS מוגבל, ניהול סודות בסביבה.
   📁 `backend/app/config.py` + `backend/.env.example`
+
+  ✅ בוצע (אותו branch), עם היקף מצומצם באופן מכוון ומתועד: `services/kpi.py` מחשב TIV/MFL/Loss Ratio/ROI/VaR באמצעות **צבירת SQL** (SUM/AVG) ישירות על עמודות כמו `Claim_Payments.amount` — הצפנת עמודות כאלה הייתה מחייבת פענוח-ואז-צבירה ב-Python, מה שסותר את הארכיטקטורה הקיימת (וזו בדיוק הסיבה ש-CLAUDE.md ציין את הנושא כמחוץ לתחום מלכתחילה). לכן ההצפנה הוחלה על שדה פיננסי לא-מצטבר וריאלי: `Claim_Payments.reference_number` (הורחב מ-`NVARCHAR(50)` ל-`NVARCHAR(255)` כדי להכיל ciphertext). `services/encryption.py`: `EncryptedString` — SQLAlchemy `TypeDecorator` מבוסס Fernet (מפתח סימטרי מ-`FIELD_ENCRYPTION_KEY`); כתיבה מצפינה אוטומטית, קריאה מפענחת אוטומטית, ונתוני seed ישנים (שמוזרעו כטקסט רגיל לפני השינוי) ממשיכים להיקרא כרגיל בזכות fallback על `InvalidToken`. `config.py` הוסיף גם `jwt_secret_key`/`jwt_algorithm`/תוקפי טוקן, ו-`force_https` (Middleware ב-`main.py`, כבוי כברירת מחדל כי `uvicorn --reload` המקומי חסר תעודת TLS). CORS כבר היה מוגבל ל-`http://localhost:5173` בלבד — לא שונה. `.env.example` עודכן עם כל המשתנים החדשים + הוראות ליצירת מפתחות (`secrets.token_urlsafe`, `Fernet.generate_key`).
+
+  אימות: `services/encryption.py` נבדק ישירות — `encrypt_value("TEST-ENC-42")` → ciphertext (`gAAAAAB...`), `decrypt_value(ciphertext)` → `"TEST-ENC-42"` תואם. תשלומים קיימים בטבלת `Claim_Payments` (שמוזרעו לפני ההצפנה, כטקסט רגיל כמו `PMT-10021`) נקראו בהצלחה דרך `GET /api/claims/1/payments` — מוכיח שה-fallback לנתונים לא-מוצפנים עובד.
 
 - [x] **הגבלת קצב ו-API Key מסודר לשירותי AI**: חיזוק המנגנון הקיים והסרת מפתחות מהקוד.
   📁 `backend/app/routers/ai.py` + `backend/app/config.py`

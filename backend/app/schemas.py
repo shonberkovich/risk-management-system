@@ -25,6 +25,28 @@ class UserOut(BaseModel):
     role: str
 
 
+# --- Auth ---
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenPair(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class AccessToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 # --- Properties ---
 class RiskProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

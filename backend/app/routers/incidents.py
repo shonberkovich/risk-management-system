@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+_STATUS_WRITE_ROLES = ("RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "ADMIN")
 
 _STATUS_ORDER = ["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED", "CLOSED"]
 
@@ -82,7 +85,11 @@ def get_incident_drilldown(incident_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.IncidentOut, status_code=201)
-def create_incident(payload: schemas.IncidentCreate, db: Session = Depends(get_db)):
+def create_incident(
+    payload: schemas.IncidentCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),  # any authenticated role — field workers report incidents
+):
     prop = db.get(models.Property, payload.property_id)
     if not prop:
         raise HTTPException(404, "Property not found")
@@ -113,7 +120,12 @@ def create_incident(payload: schemas.IncidentCreate, db: Session = Depends(get_d
 
 
 @router.patch("/{incident_id}", response_model=schemas.IncidentOut)
-def update_draft_incident(incident_id: int, payload: schemas.IncidentUpdate, db: Session = Depends(get_db)):
+def update_draft_incident(
+    incident_id: int,
+    payload: schemas.IncidentUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """Edits a draft's fields before it's submitted. Once an incident has been
     submitted (is_draft=False) its report content is frozen here — status still
     progresses via PATCH /{incident_id}/status as usual."""
@@ -135,7 +147,11 @@ def update_draft_incident(incident_id: int, payload: schemas.IncidentUpdate, db:
 
 
 @router.patch("/{incident_id}/submit", response_model=schemas.IncidentOut)
-def submit_draft_incident(incident_id: int, db: Session = Depends(get_db)):
+def submit_draft_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """Draft → Submitted: flips is_draft off. Idempotent-unsafe by design — a
     second call on an already-submitted incident is rejected, mirroring the
     guard on PATCH /{incident_id}/status not allowing status to move backwards."""
@@ -152,7 +168,12 @@ def submit_draft_incident(incident_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{incident_id}/status", response_model=schemas.IncidentOut)
-def update_incident_status(incident_id: int, payload: schemas.IncidentStatusUpdate, db: Session = Depends(get_db)):
+def update_incident_status(
+    incident_id: int,
+    payload: schemas.IncidentStatusUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_STATUS_WRITE_ROLES)),
+):
     incident = db.get(models.Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
