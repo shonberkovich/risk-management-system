@@ -254,6 +254,17 @@ export interface Alert {
   threshold: number;
 }
 
+export interface GeographicExposureCluster {
+  property_ids: number[];
+  property_names: string[];
+  property_count: number;
+  center_lat: number;
+  center_lon: number;
+  radius_km: number;
+  cluster_mfl_total: number;
+  cluster_tiv_total: number;
+}
+
 export interface IncidentMedia {
   media_id: number;
   incident_id: number;
@@ -344,6 +355,8 @@ export const fetchHazardDistribution = () =>
 export const fetchLossRatioTrend = () =>
   api.get<LossRatioTrendPoint[]>("/analytics/loss-ratio-trend").then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
+export const fetchGeographicExposureClusters = () =>
+  api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
 
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);
