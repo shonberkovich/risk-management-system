@@ -76,6 +76,7 @@ export interface IncidentCreate {
   description: string;
   ai_classified?: boolean;
   ai_confidence?: number | null;
+  reported_coordinates?: string | null;
 }
 
 export interface ClaimTrackingRow {
