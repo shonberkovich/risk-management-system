@@ -267,6 +267,71 @@ def calculate_mitigation_roi(task: models.MitigationTask) -> float | None:
     return round((float(task.expected_annual_savings) / float(task.cost_estimate)) * 100, 1)
 
 
+# --- Mitigation ROI, full breakdown ---
+# Mitigation_Tasks only stores one number, expected_annual_savings — the task owner's
+# estimate of the total dollar benefit of completing the task. This service turns that
+# single figure into a cost-vs-savings breakdown for the dashboard: where the expected
+# savings come from (premium credit vs. reduced expected losses), the ROI %, and a
+# simple payback period.
+#
+# The schema has no separate "premium savings" vs. "loss savings" columns, so the split
+# below is a fixed, documented assumption (course demo, not an actuarial pricing model —
+# see docs/README.md §8, and mirrors the fixed-rate style already used in
+# retention.PREMIUM_SURCHARGE_RATE): a property under an active insurance policy is
+# assumed to get part of its savings as a premium credit (insurers reward risk-reducing
+# investments like sprinklers), with the remainder counted as reduced expected losses
+# (the retained/self-insured portion, e.g. amounts below the deductible). A property
+# with no active policy has no premium to get credit against, so all of its savings are
+# attributed to reduced expected losses.
+MITIGATION_PREMIUM_SAVINGS_SHARE = 0.40  # share of expected_annual_savings booked as premium credit, when insured
+
+
+def calculate_mitigation_roi_breakdown(db: Session, task_id: int) -> dict | None:
+    """Cost-vs-savings breakdown for one mitigation task. Returns None if the task
+    doesn't exist. See module comment above calculate_mitigation_roi_breakdown for the
+    premium/loss savings split assumption."""
+    task = db.get(models.MitigationTask, task_id)
+    if task is None:
+        return None
+
+    # Local import to avoid a module-load-order cycle (retention.py doesn't import kpi.py).
+    from app.services.retention import get_active_policy_for_property
+
+    cost = float(task.cost_estimate)
+    total_savings = float(task.expected_annual_savings)
+    has_active_policy = get_active_policy_for_property(db, task.property_id) is not None
+
+    if has_active_policy and total_savings > 0:
+        premium_savings = round(total_savings * MITIGATION_PREMIUM_SAVINGS_SHARE, 2)
+        loss_savings = round(total_savings - premium_savings, 2)
+    else:
+        premium_savings = 0.0
+        loss_savings = round(total_savings, 2)
+
+    return {
+        "task_id": task_id,
+        "property_id": task.property_id,
+        "title": task.title,
+        "status": task.status,
+        "cost_estimate": round(cost, 2),
+        "expected_annual_savings_total": round(total_savings, 2),
+        "expected_premium_savings": premium_savings,
+        "expected_loss_savings": loss_savings,
+        "has_active_policy": has_active_policy,
+        "roi_percent": calculate_mitigation_roi(task),
+        "payback_years": round(cost / total_savings, 2) if total_savings > 0 else None,
+    }
+
+
+def calculate_mitigation_roi_summary(db: Session) -> list[dict]:
+    """calculate_mitigation_roi_breakdown for every mitigation task, sorted descending
+    by roi_percent (tasks with no cost_estimate, hence no ROI, sort last)."""
+    task_ids = db.scalars(select(models.MitigationTask.task_id)).all()
+    results = [calculate_mitigation_roi_breakdown(db, task_id) for task_id in task_ids]
+    results.sort(key=lambda r: (r["roi_percent"] is None, -(r["roi_percent"] or 0)))
+    return results
+
+
 # --- Threshold alerts ---
 # Deliberately simple, fixed thresholds (no per-tenant configuration) — the goal is to
 # demonstrate a working alerts mechanism, not a full rules engine (see docs/README.md §8).
