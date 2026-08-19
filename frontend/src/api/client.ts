@@ -228,6 +228,16 @@ export interface Alert {
   threshold: number;
 }
 
+export interface IncidentMedia {
+  media_id: number;
+  incident_id: number;
+  file_path: string;
+  file_type: string;
+  captured_at: string;
+  gps_latitude: number | null;
+  gps_longitude: number | null;
+}
+
 export interface IncidentClassification {
   hazard_type: HazardType;
   severity_level: SeverityLevel;
@@ -251,6 +261,20 @@ export const updateIncidentStatus = (id: number, status: IncidentStatus) =>
   api.patch<Incident>(`/incidents/${id}/status`, { status }).then((r) => r.data);
 export const fetchEligiblePolicies = (incidentId: number) =>
   api.get<Policy[]>(`/incidents/${incidentId}/eligible-policies`).then((r) => r.data);
+
+export const uploadIncidentMedia = (incidentId: number, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api
+    .post<IncidentMedia>(`/incidents/${incidentId}/media`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data);
+};
+export const fetchIncidentMedia = (incidentId: number) =>
+  api.get<IncidentMedia[]>(`/incidents/${incidentId}/media`).then((r) => r.data);
+export const deleteIncidentMedia = (mediaId: number) =>
+  api.delete(`/media/${mediaId}`).then(() => undefined);
 
 export const fetchClaims = (status?: string) =>
   api.get<ClaimTrackingRow[]>("/claims", { params: status ? { status } : undefined }).then((r) => r.data);
