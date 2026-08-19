@@ -31,8 +31,9 @@
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/documents-dms`: נוספה מחלקת `Document` (models.py) + טבלת `Documents` ב-schema.sql. המשויכות הפוליארפית לישויות (`policy`/`claim`/`property`/`incident`) מומשה בדפוס `entity_type` + `entity_id` (זהה לדפוס שכבר קיים ב-`Audit_Log`) עם CHECK על `entity_type` בארבעת הערכים, במקום ארבעה FK-ים נפרדים nullable — כדי לשמור על עקביות עם המוסכמה הקיימת בסכימה. נוספו `s3_url`, `doc_type`, `uploaded_by` (FK אופציונלי ל-Users), `uploaded_at`. אינדקסים על (entity_type, entity_id) ועל uploaded_by.
 
-- [ ] **טבלת אזורים גיאוגרפיים**: `Regions` (region_code, name) + שדה `region_id` ב-`Property`, לצורך דוח חשיפה לפי מרכז/צפון/דרום.
+- [x] **טבלת אזורים גיאוגרפיים**: `Regions` (region_code, name) + שדה `region_id` ב-`Property`, לצורך דוח חשיפה לפי מרכז/צפון/דרום.
   📁 `backend/app/models.py` (Class `Property`) + `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/regions-table`: נוספה מחלקת `Region` (models.py) + טבלת `Regions` ב-schema.sql (`region_code` UNIQUE, `name`), ממוקמת לפני `Users`/`Properties` ב-schema כי `Properties.region_id` מפנה אליה. נוסף שדה `region_id` ל-`Property` כ-FK אופציונלי (nullable) ל-`Regions`, **לצד** שדה `region` (מחרוזת חופשית) הקיים ולא במקומו — כדי לא לשבור קוד/seed קיימים שכבר משתמשים ב-`region`. נוסף אינדקס `IX_Properties_RegionId`.
 
 - [ ] **טבלת נתוני מאקרו פיננסיים**: `Financial_Statements` (year, total_assets, revenue, net_income, insurance_expense) לניתוח רב-שנתי.
   📁 `backend/app/models.py` + `backend/sql/schema.sql`

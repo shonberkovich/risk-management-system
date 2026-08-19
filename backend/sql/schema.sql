@@ -30,6 +30,19 @@ IF OBJECT_ID('dbo.Asset_Risk_Profiles', 'U') IS NOT NULL DROP TABLE dbo.Asset_Ri
 IF OBJECT_ID('dbo.Insurance_Policies', 'U') IS NOT NULL DROP TABLE dbo.Insurance_Policies;
 IF OBJECT_ID('dbo.Properties', 'U') IS NOT NULL DROP TABLE dbo.Properties;
 IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL DROP TABLE dbo.Users;
+IF OBJECT_ID('dbo.Regions', 'U') IS NOT NULL DROP TABLE dbo.Regions;
+GO
+
+-- ============================================================================
+-- Regions
+-- ============================================================================
+IF OBJECT_ID('dbo.Regions', 'U') IS NOT NULL DROP TABLE dbo.Regions;
+GO
+CREATE TABLE dbo.Regions (
+    region_id       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    region_code     NVARCHAR(20) NOT NULL UNIQUE,
+    name            NVARCHAR(100) NOT NULL
+);
 GO
 
 -- ============================================================================
@@ -57,6 +70,7 @@ CREATE TABLE dbo.Properties (
     name                 NVARCHAR(200) NOT NULL,
     address              NVARCHAR(300) NOT NULL,
     region               NVARCHAR(50) NOT NULL,           -- e.g. center/north/south
+    region_id            BIGINT NULL REFERENCES dbo.Regions(region_id),
     latitude             DECIMAL(9,6) NOT NULL,
     longitude            DECIMAL(9,6) NOT NULL,
     asset_type           NVARCHAR(30) NOT NULL
@@ -70,6 +84,8 @@ CREATE TABLE dbo.Properties (
 );
 GO
 CREATE INDEX IX_Properties_Coordinates ON dbo.Properties(latitude, longitude);
+GO
+CREATE INDEX IX_Properties_RegionId ON dbo.Properties(region_id);
 GO
 
 -- ============================================================================
