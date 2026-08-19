@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Claims from "./pages/Claims";
 import Dashboard from "./pages/Dashboard";
+import Documents from "./pages/Documents";
 import IncidentDetail from "./pages/IncidentDetail";
 import IncidentReport from "./pages/IncidentReport";
 import Incidents from "./pages/Incidents";
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/simulation" element={<Simulation />} />
         <Route path="/retention" element={<Retention />} />
+        <Route path="/documents" element={<Documents />} />
       </Routes>
     </Layout>
   );
