@@ -18,6 +18,14 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class Region(Base):
+    __tablename__ = "Regions"
+
+    region_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    region_code: Mapped[str] = mapped_column(Unicode(20), unique=True)
+    name: Mapped[str] = mapped_column(Unicode(100))
+
+
 class Property(Base):
     __tablename__ = "Properties"
 
@@ -26,6 +34,7 @@ class Property(Base):
     name: Mapped[str] = mapped_column(Unicode(200))
     address: Mapped[str] = mapped_column(Unicode(300))
     region: Mapped[str] = mapped_column(Unicode(50))
+    region_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Regions.region_id"), nullable=True)
     latitude: Mapped[float] = mapped_column(Numeric(9, 6))
     longitude: Mapped[float] = mapped_column(Numeric(9, 6))
     asset_type: Mapped[str] = mapped_column(Unicode(30))
