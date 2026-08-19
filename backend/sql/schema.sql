@@ -17,6 +17,7 @@ GO
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
+IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
 IF OBJECT_ID('dbo.Claims', 'U') IS NOT NULL DROP TABLE dbo.Claims;
 IF OBJECT_ID('dbo.Incident_Media', 'U') IS NOT NULL DROP TABLE dbo.Incident_Media;
 IF OBJECT_ID('dbo.Incidents', 'U') IS NOT NULL DROP TABLE dbo.Incidents;
@@ -210,6 +211,22 @@ CREATE TABLE dbo.Claim_Payments (
     payment_type                      NVARCHAR(20) NOT NULL
         CHECK (payment_type IN ('ADVANCE','FINAL_SETTLEMENT'))
 );
+GO
+
+-- ============================================================================
+-- Claim_Reserves
+-- ============================================================================
+IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
+GO
+CREATE TABLE dbo.Claim_Reserves (
+    reserve_id            BIGINT IDENTITY(1,1) PRIMARY KEY,
+    claim_id                 BIGINT NOT NULL REFERENCES dbo.Claims(claim_id),
+    reserve_amount              DECIMAL(18,2) NOT NULL,
+    expected_payment_date          DATE NULL,
+    updated_at                        DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+CREATE INDEX IX_ClaimReserves_Claim ON dbo.Claim_Reserves(claim_id);
 GO
 
 -- ============================================================================

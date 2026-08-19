@@ -138,6 +138,7 @@ class Claim(Base):
 
     incident: Mapped["Incident"] = relationship(back_populates="claims")
     payments: Mapped[list["ClaimPayment"]] = relationship(back_populates="claim")
+    reserves: Mapped[list["ClaimReserve"]] = relationship(back_populates="claim")
 
 
 class ClaimPayment(Base):
@@ -151,6 +152,18 @@ class ClaimPayment(Base):
     payment_type: Mapped[str] = mapped_column(Unicode(20))
 
     claim: Mapped["Claim"] = relationship(back_populates="payments")
+
+
+class ClaimReserve(Base):
+    __tablename__ = "Claim_Reserves"
+
+    reserve_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id"))
+    reserve_amount: Mapped[float] = mapped_column(Numeric(18, 2))
+    expected_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+    claim: Mapped["Claim"] = relationship(back_populates="reserves")
 
 
 class MitigationTask(Base):
