@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
 import { Circle, CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
 
-import type { Incident, Property, PropertyMapPoint } from "../api/client";
+import type { GeographicExposureCluster, Incident, Property, PropertyMapPoint } from "../api/client";
 import { HAZARD_LABELS, formatIlsCompact } from "../format";
 
 const COLOR_MAP: Record<PropertyMapPoint["status_color"], string> = {
@@ -31,15 +31,18 @@ export default function RiskMap({
   points,
   properties,
   incidents,
+  exposureClusters,
 }: {
   points: PropertyMapPoint[];
   properties?: Property[];
   incidents?: Incident[];
+  exposureClusters?: GeographicExposureCluster[];
 }) {
   const [showProperties, setShowProperties] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
   const [showFloodZones, setShowFloodZones] = useState(false);
   const [showFireZones, setShowFireZones] = useState(false);
+  const [showExposureClusters, setShowExposureClusters] = useState(false);
 
   const center: [number, number] =
     points.length > 0
@@ -54,6 +57,13 @@ export default function RiskMap({
   const propertiesWithRiskProfile = useMemo(
     () => (properties ?? []).filter((p) => p.risk_profile !== null),
     [properties],
+  );
+
+  // Single-property "clusters" (radius_km = 0) aren't a concentration — only draw
+  // circles for clusters that actually group multiple nearby properties.
+  const multiPropertyClusters = useMemo(
+    () => (exposureClusters ?? []).filter((c) => c.property_count > 1),
+    [exposureClusters],
   );
 
   return (
@@ -74,6 +84,16 @@ export default function RiskMap({
         <FormControlLabel
           control={<Switch size="small" checked={showFireZones} onChange={(e) => setShowFireZones(e.target.checked)} />}
           label={<Typography variant="caption">אזורי שריפה</Typography>}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={showExposureClusters}
+              onChange={(e) => setShowExposureClusters(e.target.checked)}
+            />
+          }
+          label={<Typography variant="caption">אשכולות חשיפה (TIV) ({multiPropertyClusters.length})</Typography>}
         />
       </Stack>
 
@@ -106,6 +126,40 @@ export default function RiskMap({
               radius={(p.risk_profile?.fire_risk_score ?? 0) * HAZARD_ZONE_METERS_PER_SCORE}
               pathOptions={{ color: "#d84315", fillColor: "#d84315", fillOpacity: 0.12, weight: 1 }}
             />
+          ))}
+
+        {showExposureClusters &&
+          multiPropertyClusters.map((c, idx) => (
+            <Circle
+              key={`cluster-${c.property_ids.join("-")}`}
+              center={[c.center_lat, c.center_lon]}
+              // radius_km is the actual distance from the cluster center to its
+              // farthest member (see kpi.calculate_geographic_exposure_clusters);
+              // a floor keeps small/tight clusters visible at portfolio zoom.
+              radius={Math.max(c.radius_km * 1000, 1500)}
+              pathOptions={{
+                color: "#8e24aa",
+                fillColor: "#8e24aa",
+                fillOpacity: 0.08,
+                weight: 2,
+                dashArray: "6 4",
+              }}
+            >
+              <Popup>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  אשכול חשיפה #{idx + 1} ({c.property_count} נכסים)
+                </Typography>
+                <Typography variant="caption" display="block">
+                  {c.property_names.join(", ")}
+                </Typography>
+                <Typography variant="caption" display="block">
+                  TIV מצטבר: {formatIlsCompact(c.cluster_tiv_total)}
+                </Typography>
+                <Typography variant="caption" display="block">
+                  MFL מצטבר: {formatIlsCompact(c.cluster_mfl_total)}
+                </Typography>
+              </Popup>
+            </Circle>
           ))}
 
         {showProperties &&

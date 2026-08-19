@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchAlerts,
   fetchClaims,
+  fetchGeographicExposureClusters,
   fetchHazardDistribution,
   fetchIncidents,
   fetchKpis,
@@ -43,6 +44,10 @@ export default function Dashboard() {
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
+  const exposureClusters = useQuery({
+    queryKey: ["geographic-exposure-clusters"],
+    queryFn: fetchGeographicExposureClusters,
+  });
   const riskMatrix = useQuery({ queryKey: ["risk-matrix"], queryFn: fetchRiskMatrix });
   const hazardDist = useQuery({ queryKey: ["hazard-distribution"], queryFn: fetchHazardDistribution });
   const lossRatioTrend = useQuery({ queryKey: ["loss-ratio-trend"], queryFn: fetchLossRatioTrend });
@@ -140,7 +145,12 @@ export default function Dashboard() {
                 )}
               </Stack>
               {filteredMapPoints && (
-                <RiskMap points={filteredMapPoints} properties={properties.data} incidents={incidents.data} />
+                <RiskMap
+                  points={filteredMapPoints}
+                  properties={properties.data}
+                  incidents={incidents.data}
+                  exposureClusters={exposureClusters.data}
+                />
               )}
             </CardContent>
           </Card>
