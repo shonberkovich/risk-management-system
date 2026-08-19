@@ -49,6 +49,10 @@ SEVERITY_MODE_FRACTION = 0.30
 
 VAR_CONFIDENCE_LEVELS = (0.95, 0.99)
 
+# Default number of equal-width buckets used to summarize the simulated loss
+# distribution for charting (see _build_histogram).
+DEFAULT_HISTOGRAM_BUCKETS = 20
+
 
 @dataclass
 class _PropertyExposure:
@@ -98,12 +102,48 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
     return sorted_values[idx]
 
 
+def _build_histogram(sorted_values: list[float], bucket_count: int) -> list[dict]:
+    """Buckets an already-ascending-sorted list of simulated loss totals into
+    bucket_count equal-width bins spanning [min, max], for charting the "distribution
+    of results" (a single VaR/mean readout hides the shape of the distribution — e.g.
+    how fat the right tail is). Returns one dict per bucket, in ascending order, even
+    when count is 0 for a bucket, so callers can render a continuous axis."""
+    if not sorted_values or bucket_count < 1:
+        return []
+
+    lo, hi = sorted_values[0], sorted_values[-1]
+    if hi <= lo:
+        # Degenerate case (every simulated year had the same total, e.g. all zero
+        # losses) — a single bucket holding every value, rather than dividing by zero.
+        return [{"bucket_min": lo, "bucket_max": hi, "count": len(sorted_values)}]
+
+    width = (hi - lo) / bucket_count
+    buckets = [
+        {"bucket_min": round(lo + i * width, 2), "bucket_max": round(lo + (i + 1) * width, 2), "count": 0}
+        for i in range(bucket_count)
+    ]
+    for value in sorted_values:
+        idx = min(int((value - lo) / width), bucket_count - 1)
+        buckets[idx]["count"] += 1
+    return buckets
+
+
 def run_portfolio_simulation(
-    db: Session, iterations: int = DEFAULT_ITERATIONS, seed: int | None = None
+    db: Session,
+    iterations: int = DEFAULT_ITERATIONS,
+    horizon_years: int = 1,
+    seed: int | None = None,
+    histogram_buckets: int = DEFAULT_HISTOGRAM_BUCKETS,
 ) -> dict:
     """Runs the Monte Carlo simulation across the whole portfolio and summarizes the
-    resulting loss distribution: expected (mean) annual loss, worst simulated year,
-    and VaR at each level in VAR_CONFIDENCE_LEVELS.
+    resulting loss distribution: expected (mean) cumulative loss over horizon_years,
+    worst simulated horizon, VaR at each level in VAR_CONFIDENCE_LEVELS, and a
+    histogram of the full simulated distribution for charting.
+
+    Each iteration simulates horizon_years independent years (same yearly
+    probability/severity model each year, no year-over-year trend — see module
+    docstring) and sums them into one cumulative-loss draw; horizon_years=1 (the
+    default) reproduces the original single-year behavior.
 
     seed is optional and only useful for reproducible/deterministic runs (e.g. tests);
     omit it for a fresh random draw each call.
@@ -111,36 +151,45 @@ def run_portfolio_simulation(
     exposures = _get_property_exposures(db)
     rng = random.Random(seed)
 
-    yearly_totals: list[float] = []
+    horizon_totals: list[float] = []
     for _ in range(iterations):
         total = 0.0
-        for exp in exposures:
-            if rng.random() < exp.event_probability:
-                total += _sample_event_loss(exp.mfl_amount, rng)
-        yearly_totals.append(total)
+        for _year in range(horizon_years):
+            for exp in exposures:
+                if rng.random() < exp.event_probability:
+                    total += _sample_event_loss(exp.mfl_amount, rng)
+        horizon_totals.append(total)
 
-    yearly_totals.sort()
-    mean_loss = statistics.fmean(yearly_totals) if yearly_totals else 0.0
+    horizon_totals.sort()
+    mean_loss = statistics.fmean(horizon_totals) if horizon_totals else 0.0
 
     var_by_confidence = {
-        f"var_{int(level * 100)}": round(_percentile(yearly_totals, level), 2)
+        f"var_{int(level * 100)}": round(_percentile(horizon_totals, level), 2)
         for level in VAR_CONFIDENCE_LEVELS
     }
 
     return {
         "iterations": iterations,
+        "horizon_years": horizon_years,
         "properties_simulated": len(exposures),
         "expected_annual_loss": round(mean_loss, 2),
-        "worst_case_simulated_loss": round(yearly_totals[-1], 2) if yearly_totals else 0.0,
+        "worst_case_simulated_loss": round(horizon_totals[-1], 2) if horizon_totals else 0.0,
         **var_by_confidence,
+        "distribution": _build_histogram(horizon_totals, histogram_buckets),
     }
 
 
 def simulate_property(
-    db: Session, property_id: int, iterations: int = DEFAULT_ITERATIONS, seed: int | None = None
+    db: Session,
+    property_id: int,
+    iterations: int = DEFAULT_ITERATIONS,
+    horizon_years: int = 1,
+    seed: int | None = None,
+    histogram_buckets: int = DEFAULT_HISTOGRAM_BUCKETS,
 ) -> dict | None:
-    """Same simulation, scoped to a single property. Returns None if the property has
-    no risk profile to simulate against."""
+    """Same simulation, scoped to a single property, with the same horizon_years
+    cumulative-loss and histogram semantics as run_portfolio_simulation. Returns None
+    if the property has no risk profile to simulate against."""
     profile = db.scalars(
         select(models.AssetRiskProfile).where(models.AssetRiskProfile.property_id == property_id)
     ).first()
@@ -152,24 +201,29 @@ def simulate_property(
     mfl_amount = float(profile.mfl_amount)
     rng = random.Random(seed)
 
-    yearly_losses = [
-        _sample_event_loss(mfl_amount, rng) if rng.random() < probability else 0.0
+    horizon_losses = [
+        sum(
+            _sample_event_loss(mfl_amount, rng) if rng.random() < probability else 0.0
+            for _year in range(horizon_years)
+        )
         for _ in range(iterations)
     ]
-    yearly_losses.sort()
-    mean_loss = statistics.fmean(yearly_losses) if yearly_losses else 0.0
+    horizon_losses.sort()
+    mean_loss = statistics.fmean(horizon_losses) if horizon_losses else 0.0
 
     var_by_confidence = {
-        f"var_{int(level * 100)}": round(_percentile(yearly_losses, level), 2)
+        f"var_{int(level * 100)}": round(_percentile(horizon_losses, level), 2)
         for level in VAR_CONFIDENCE_LEVELS
     }
 
     return {
         "property_id": property_id,
         "iterations": iterations,
+        "horizon_years": horizon_years,
         "annual_event_probability": round(probability, 4),
         "mfl_amount": round(mfl_amount, 2),
         "expected_annual_loss": round(mean_loss, 2),
-        "worst_case_simulated_loss": round(yearly_losses[-1], 2) if yearly_losses else 0.0,
+        "worst_case_simulated_loss": round(horizon_losses[-1], 2) if horizon_losses else 0.0,
         **var_by_confidence,
+        "distribution": _build_histogram(horizon_losses, histogram_buckets),
     }
