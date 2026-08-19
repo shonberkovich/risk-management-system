@@ -203,3 +203,15 @@ class RolePermission(Base):
     role: Mapped[str] = mapped_column(Unicode(30))
     permission_key: Mapped[str] = mapped_column(Unicode(100))
     description: Mapped[str | None] = mapped_column(Unicode(200), nullable=True)
+
+
+class Document(Base):
+    __tablename__ = "Documents"
+
+    document_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    entity_type: Mapped[str] = mapped_column(Unicode(20))
+    entity_id: Mapped[int] = mapped_column(BigInteger)
+    s3_url: Mapped[str] = mapped_column(Unicode(500))
+    doc_type: Mapped[str] = mapped_column(Unicode(30))
+    uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime)

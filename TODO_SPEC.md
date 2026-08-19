@@ -27,8 +27,9 @@
   📁 `backend/app/models.py` (Class `User`) + `backend/sql/schema.sql`
   ✅ בוצע ב-branch `feature/roles-permissions`: ה-CHECK constraint על `Users.role` הורחב לכלול גם `RISK_OFFICER` ו-`ADJUSTER` (בנוסף לערכים הקיימים `RISK_MANAGER`/`FIELD_WORKER` בהם משתמש `seed.py` הקיים, כדי לא לשבור נתוני הזרעה) — כך שכל חמשת התפקידים מהמפרט (`RISK_OFFICER`/`PROPERTY_MANAGER`/`CFO`/`ADJUSTER`/`ADMIN`) נתמכים. נוספה מחלקת `RolePermission` (models.py) + טבלת `Role_Permissions` ב-schema.sql (`role`, `permission_key`, `description`, UNIQUE על role+permission_key, אינדקס על role).
 
-- [ ] **טבלת מסמכים כללית (DMS)**: טבלה `Documents` המקשרת קבצים לכל ישות (policy / claim / property / incident) עם `s3_url`, `doc_type`, `uploaded_by`.
+- [x] **טבלת מסמכים כללית (DMS)**: טבלה `Documents` המקשרת קבצים לכל ישות (policy / claim / property / incident) עם `s3_url`, `doc_type`, `uploaded_by`.
   📁 `backend/app/models.py` + `backend/sql/schema.sql`
+  ✅ בוצע ב-branch `feature/documents-dms`: נוספה מחלקת `Document` (models.py) + טבלת `Documents` ב-schema.sql. המשויכות הפוליארפית לישויות (`policy`/`claim`/`property`/`incident`) מומשה בדפוס `entity_type` + `entity_id` (זהה לדפוס שכבר קיים ב-`Audit_Log`) עם CHECK על `entity_type` בארבעת הערכים, במקום ארבעה FK-ים נפרדים nullable — כדי לשמור על עקביות עם המוסכמה הקיימת בסכימה. נוספו `s3_url`, `doc_type`, `uploaded_by` (FK אופציונלי ל-Users), `uploaded_at`. אינדקסים על (entity_type, entity_id) ועל uploaded_by.
 
 - [ ] **טבלת אזורים גיאוגרפיים**: `Regions` (region_code, name) + שדה `region_id` ב-`Property`, לצורך דוח חשיפה לפי מרכז/צפון/דרום.
   📁 `backend/app/models.py` (Class `Property`) + `backend/sql/schema.sql`
