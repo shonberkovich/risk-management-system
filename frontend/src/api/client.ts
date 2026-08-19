@@ -472,6 +472,24 @@ export const fetchDocumentsForEntity = (entityType: DocumentEntityType, entityId
   api.get<DocumentFile[]>(`/documents/entity/${entityType}/${entityId}`).then((r) => r.data);
 export const fetchDocumentSignedUrl = (documentId: number) =>
   api.get<SignedUrl>(`/documents/${documentId}/signed-url`).then((r) => r.data);
+export const uploadDocument = (
+  entityType: DocumentEntityType,
+  entityId: number,
+  file: File,
+  docType: string,
+  uploadedBy?: number | null,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api
+    .post<DocumentFile>(`/documents/entity/${entityType}/${entityId}`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      params: { doc_type: docType, uploaded_by: uploadedBy ?? undefined },
+    })
+    .then((r) => r.data);
+};
+export const deleteDocument = (documentId: number) =>
+  api.delete(`/documents/${documentId}`).then(() => undefined);
 
 export const fetchClaims = (status?: string) =>
   api.get<ClaimTrackingRow[]>("/claims", { params: status ? { status } : undefined }).then((r) => r.data);
