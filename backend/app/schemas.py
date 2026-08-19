@@ -27,6 +27,15 @@ class RiskProfileOut(BaseModel):
     notes: str | None = None
 
 
+class PropertyActivePolicyOut(BaseModel):
+    policy_id: int
+    policy_number: str
+    insurer_name: str
+    total_limit: float
+    per_event_limit: float | None = None
+    specific_deductible: float | None = None
+
+
 class PropertyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     property_id: int
@@ -41,6 +50,8 @@ class PropertyOut(BaseModel):
     book_value: float
     is_active: bool
     risk_profile: RiskProfileOut | None = None
+    manager_name: str | None = None
+    active_policy: PropertyActivePolicyOut | None = None
 
 
 class PropertyMapPoint(BaseModel):

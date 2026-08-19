@@ -48,6 +48,8 @@ class Property(Base):
     risk_profile: Mapped["AssetRiskProfile"] = relationship(back_populates="property_", uselist=False)
     incidents: Mapped[list["Incident"]] = relationship(back_populates="property_")
     mitigation_tasks: Mapped[list["MitigationTask"]] = relationship(back_populates="property_")
+    primary_manager: Mapped["User | None"] = relationship()
+    policy_assets: Mapped[list["PolicyAsset"]] = relationship(back_populates="property_")
 
 
 class AssetRiskProfile(Base):
@@ -89,6 +91,9 @@ class PolicyAsset(Base):
     policy_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Insurance_Policies.policy_id"), primary_key=True)
     property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id"), primary_key=True)
     specific_deductible: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+
+    policy: Mapped["InsurancePolicy"] = relationship()
+    property_: Mapped["Property"] = relationship(back_populates="policy_assets")
 
 
 class Incident(Base):
