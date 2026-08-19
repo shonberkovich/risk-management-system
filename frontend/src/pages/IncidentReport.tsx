@@ -8,8 +8,10 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
@@ -86,6 +88,7 @@ export default function IncidentReport() {
   const [impact, setImpact] = useState<OperationalImpact | "">("");
   const [loss, setLoss] = useState("");
   const [description, setDescription] = useState("");
+  const [businessInterruption, setBusinessInterruption] = useState(false);
   const [aiResult, setAiResult] = useState<IncidentClassification | null>(null);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
@@ -120,6 +123,7 @@ export default function IncidentReport() {
         setImpact(incident.operational_impact);
         setLoss(String(incident.initial_estimated_loss));
         setDescription(incident.description);
+        setBusinessInterruption(incident.business_interruption_requested);
         setDraftNotice(`נטענה טיוטה קודמת (מס' ${incident.incident_code}) — ניתן להמשיך למלא ולשלוח.`);
       })
       .catch(() => localStorage.removeItem(DRAFT_STORAGE_KEY));
@@ -141,6 +145,7 @@ export default function IncidentReport() {
       setSeverity(result.severity_level);
       setImpact(result.operational_impact);
       setLoss(String(result.estimated_loss_ils));
+      if (result.business_interruption_likely) setBusinessInterruption(true);
     },
   });
 
@@ -156,6 +161,7 @@ export default function IncidentReport() {
           operational_impact: impact || undefined,
           initial_estimated_loss: loss ? Number(loss) : undefined,
           description,
+          business_interruption_requested: businessInterruption,
           reported_coordinates: reportedCoordinates,
         });
       }
@@ -171,6 +177,7 @@ export default function IncidentReport() {
         initial_estimated_loss: Number(loss) || 0,
         description: description || "(טיוטה — יושלם מאוחר יותר)",
         is_draft: true,
+        business_interruption_requested: businessInterruption,
         reported_coordinates: reportedCoordinates,
       });
     },
@@ -194,6 +201,7 @@ export default function IncidentReport() {
           operational_impact: impact as OperationalImpact,
           initial_estimated_loss: Number(loss) || 0,
           description,
+          business_interruption_requested: businessInterruption,
           reported_coordinates: reportedCoordinates,
         });
         return submitDraftIncident(draftId);
@@ -208,6 +216,7 @@ export default function IncidentReport() {
         description,
         ai_classified: aiResult !== null,
         ai_confidence: aiResult?.confidence ?? null,
+        business_interruption_requested: businessInterruption,
         reported_coordinates: reportedCoordinates,
       });
     },
@@ -267,6 +276,7 @@ export default function IncidentReport() {
             setImpact("");
             setLoss("");
             setDescription("");
+            setBusinessInterruption(false);
             setAiResult(null);
             setMediaFiles([]);
             setMediaUploadError(null);
@@ -481,6 +491,27 @@ export default function IncidentReport() {
                 type="number"
                 value={loss}
                 onChange={(e) => setLoss(e.target.value)}
+              />
+
+              <FormControlLabel
+                sx={{ alignSelf: "flex-start" }}
+                control={
+                  <Checkbox
+                    checked={businessInterruption}
+                    onChange={(e) => setBusinessInterruption(e.target.checked)}
+                    sx={{ p: 1.25 }}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      בקשה לכיסוי אובדן רווחים (הפסקת פעילות)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      סמן אם האירוע גרם, או צפוי לגרום, לאובדן הכנסות עקב הפסקת פעילות בנכס
+                    </Typography>
+                  </Box>
+                }
               />
             </Stack>
           )}
