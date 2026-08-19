@@ -50,7 +50,25 @@ const NEARBY_RADIUS_KM = 15;
 // a closed tab / different device login, not just a page refresh.
 const DRAFT_STORAGE_KEY = "rmis_incident_draft_id";
 
-const HAZARD_OPTIONS: HazardType[] = ["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"];
+// Pill-shaped, color-coded, large-touch-target choice buttons — sized for
+// gloved/one-handed use in the field on a phone, not just desktop mouse use.
+const PILL_BUTTON_SX = {
+  borderRadius: 999,
+  px: 3,
+  py: 1.5,
+  minHeight: 48,
+  fontSize: "1rem",
+  fontWeight: 600,
+};
+
+const HAZARD_OPTIONS: { value: HazardType; color: string }[] = [
+  { value: "FLOOD", color: "#0277bd" },
+  { value: "FIRE", color: "#c62828" },
+  { value: "STRUCTURAL_FAILURE", color: "#6d4c41" },
+  { value: "THEFT", color: "#6a1b9a" },
+  { value: "ELECTRICAL", color: "#f9a825" },
+  { value: "OTHER", color: "#616161" },
+];
 const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
   { value: "LOW", color: "#2e7d32" },
   { value: "MEDIUM", color: "#e69413" },
@@ -265,7 +283,11 @@ export default function IncidentReport() {
 
   return (
     <Box sx={{ maxWidth: 720, mx: "auto" }}>
-      <Alert severity="error" icon={<WarningAmberIcon />} sx={{ mb: 3, fontWeight: 700 }}>
+      <Alert
+        severity="error"
+        icon={<WarningAmberIcon sx={{ fontSize: 32 }} />}
+        sx={{ mb: 3, fontWeight: 700, fontSize: "1.05rem", py: 1.5, alignItems: "center" }}
+      >
         במקרה של סכנת חיים חייג 102/100 מיד
       </Alert>
 
@@ -299,7 +321,7 @@ export default function IncidentReport() {
                 startIcon={geo.loading ? <CircularProgress size={16} /> : <MyLocationIcon />}
                 disabled={geo.loading}
                 onClick={geo.request}
-                sx={{ alignSelf: "flex-start" }}
+                sx={{ alignSelf: "flex-start", minHeight: 48, px: 2.5, fontSize: "1rem" }}
               >
                 אתר את מיקומי והצע נכסים קרובים
               </Button>
@@ -322,7 +344,7 @@ export default function IncidentReport() {
                         label={`${p.name} · ${distance.toFixed(1)} ק"מ`}
                         color={property?.property_id === p.property_id ? "primary" : "default"}
                         onClick={() => setProperty(p)}
-                        sx={{ mb: 1 }}
+                        sx={{ mb: 1, height: 40, fontSize: "0.9rem", px: 0.5 }}
                       />
                     ))}
                   </Stack>
@@ -352,36 +374,41 @@ export default function IncidentReport() {
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   סוג הנזק
                 </Typography>
-                <ToggleButtonGroup
-                  value={hazardType}
-                  exclusive
-                  onChange={(_, v) => v && setHazardType(v)}
-                  sx={{ flexWrap: "wrap", gap: 1 }}
-                >
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {HAZARD_OPTIONS.map((h) => (
-                    <ToggleButton key={h} value={h} sx={{ borderRadius: 2, px: 2 }}>
-                      {HAZARD_LABELS[h]}
-                    </ToggleButton>
+                    <Button
+                      key={h.value}
+                      variant="outlined"
+                      onClick={() => setHazardType(h.value)}
+                      style={{
+                        backgroundColor: hazardType === h.value ? h.color : "transparent",
+                        color: hazardType === h.value ? "white" : h.color,
+                        borderColor: h.color,
+                      }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: h.color, color: "white" } }}
+                    >
+                      {HAZARD_LABELS[h.value]}
+                    </Button>
                   ))}
-                </ToggleButtonGroup>
+                </Stack>
               </Box>
 
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   רמת חומרה
                 </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {SEVERITY_OPTIONS.map((s) => (
                     <Button
                       key={s.value}
-                      variant={severity === s.value ? "contained" : "outlined"}
+                      variant="outlined"
                       onClick={() => setSeverity(s.value)}
-                      sx={{
-                        borderColor: s.color,
+                      style={{
+                        backgroundColor: severity === s.value ? s.color : "transparent",
                         color: severity === s.value ? "white" : s.color,
-                        bgcolor: severity === s.value ? s.color : "transparent",
-                        "&:hover": { bgcolor: s.color, color: "white" },
+                        borderColor: s.color,
                       }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: s.color, color: "white" } }}
                     >
                       {SEVERITY_LABELS[s.value]}
                     </Button>
@@ -393,9 +420,14 @@ export default function IncidentReport() {
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   סטטוס פעילות בנכס
                 </Typography>
-                <ToggleButtonGroup value={impact} exclusive onChange={(_, v) => v && setImpact(v)}>
+                <ToggleButtonGroup
+                  value={impact}
+                  exclusive
+                  onChange={(_, v) => v && setImpact(v)}
+                  sx={{ flexWrap: "wrap", gap: 1 }}
+                >
                   {IMPACT_OPTIONS.map((i) => (
-                    <ToggleButton key={i} value={i} sx={{ borderRadius: 2, px: 2 }}>
+                    <ToggleButton key={i} value={i} sx={{ ...PILL_BUTTON_SX, border: "1px solid" }}>
                       {OPERATIONAL_IMPACT_LABELS[i]}
                     </ToggleButton>
                   ))}
@@ -471,19 +503,37 @@ export default function IncidentReport() {
             </Stack>
           )}
 
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 4 }}>
-            <Button disabled={activeStep === 0} onClick={() => setActiveStep((s) => s - 1)}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            gap={1}
+            sx={{ mt: 4 }}
+          >
+            <Button
+              disabled={activeStep === 0}
+              onClick={() => setActiveStep((s) => s - 1)}
+              sx={{ minHeight: 48, px: 2.5, fontSize: "1rem" }}
+            >
               חזרה
             </Button>
             <Button
               startIcon={saveDraftMutation.isPending ? <CircularProgress size={16} /> : undefined}
               disabled={!property || saveDraftMutation.isPending}
               onClick={() => saveDraftMutation.mutate()}
+              sx={{ minHeight: 48, px: 2.5, fontSize: "1rem" }}
             >
               שמור כטיוטה
             </Button>
             {activeStep < STEPS.length - 1 ? (
-              <Button variant="contained" disabled={!canNext} onClick={() => setActiveStep((s) => s + 1)}>
+              <Button
+                variant="contained"
+                disabled={!canNext}
+                onClick={() => setActiveStep((s) => s + 1)}
+                sx={{ minHeight: 48, px: 3, fontSize: "1rem" }}
+              >
                 המשך
               </Button>
             ) : (
@@ -492,6 +542,7 @@ export default function IncidentReport() {
                 color="secondary"
                 disabled={submitMutation.isPending}
                 onClick={() => submitMutation.mutate()}
+                sx={{ minHeight: 48, px: 3, fontSize: "1rem" }}
               >
                 שלח דיווח למטה
               </Button>
