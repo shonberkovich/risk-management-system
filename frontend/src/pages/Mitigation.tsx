@@ -1,7 +1,9 @@
+import AddIcon from "@mui/icons-material/Add";
 import AssignmentLateIcon from "@mui/icons-material/AssignmentLate";
 import PaidIcon from "@mui/icons-material/Paid";
 import SavingsIcon from "@mui/icons-material/Savings";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -10,12 +12,14 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { fetchMitigationTasks, fetchProperties, type MitigationStatus } from "../api/client";
+import { fetchMitigationTasks, fetchProperties, fetchUsers, updateMitigationTask, type MitigationStatus, type MitigationTask } from "../api/client";
 import KpiCard from "../components/KpiCard";
+import MitigationRoiDialog from "../components/MitigationRoiDialog";
 import MitigationTable, { type MitigationRow } from "../components/MitigationTable";
+import MitigationTaskDialog from "../components/MitigationTaskDialog";
 import { MITIGATION_STATUS_LABELS, formatIlsCompact } from "../format";
 
 const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
@@ -29,15 +33,27 @@ const STATUS_ORDER: Record<MitigationStatus, number> = {
 
 export default function Mitigation() {
   const [status, setStatus] = useState<MitigationStatus | "">("");
+  const [dialogTask, setDialogTask] = useState<MitigationTask | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [roiTaskId, setRoiTaskId] = useState<number | null>(null);
 
+  const queryClient = useQueryClient();
   const tasks = useQuery({ queryKey: ["mitigation-tasks"], queryFn: fetchMitigationTasks });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+  const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers });
+
+  const markComplete = useMutation({
+    mutationFn: (taskId: number) => updateMitigationTask(taskId, { status: "COMPLETED" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["mitigation-tasks"] }),
+  });
 
   const rows: MitigationRow[] = useMemo(() => {
     const propertyNames = new Map((properties.data ?? []).map((p) => [p.property_id, p.name]));
+    const userNames = new Map((users.data ?? []).map((u) => [u.user_id, u.full_name]));
     const all = (tasks.data ?? []).map((t) => ({
       ...t,
       property_name: propertyNames.get(t.property_id) ?? `נכס #${t.property_id}`,
+      assigned_to_name: t.assigned_to_user_id !== null ? userNames.get(t.assigned_to_user_id) ?? `משתמש #${t.assigned_to_user_id}` : null,
     }));
     const filtered = status ? all.filter((t) => t.status === status) : all;
     return [...filtered].sort((a, b) => {
@@ -45,7 +61,7 @@ export default function Mitigation() {
       if (orderDiff !== 0) return orderDiff;
       return a.due_date.localeCompare(b.due_date);
     });
-  }, [tasks.data, properties.data, status]);
+  }, [tasks.data, properties.data, users.data, status]);
 
   const summary = useMemo(() => {
     const all = tasks.data ?? [];
@@ -60,6 +76,15 @@ export default function Mitigation() {
     return { openOrOverdueCount: openOrOverdue.length, overdueCount, activeCost, totalSavings, avgRoi };
   }, [tasks.data]);
 
+  const openCreate = () => {
+    setDialogTask(null);
+    setDialogOpen(true);
+  };
+  const openEdit = (task: MitigationTask) => {
+    setDialogTask(task);
+    setDialogOpen(true);
+  };
+
   const loading = tasks.isLoading || properties.isLoading;
 
   if (loading) {
@@ -72,9 +97,14 @@ export default function Mitigation() {
 
   return (
     <Stack spacing={3}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        משימות הפחתת סיכון
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          משימות הפחתת סיכון
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+          משימה חדשה
+        </Button>
+      </Stack>
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
@@ -135,9 +165,17 @@ export default function Mitigation() {
               ))}
             </TextField>
           </Stack>
-          <MitigationTable rows={rows} />
+          <MitigationTable
+            rows={rows}
+            onEdit={openEdit}
+            onShowRoi={(t) => setRoiTaskId(t.task_id)}
+            onMarkComplete={(t) => markComplete.mutate(t.task_id)}
+          />
         </CardContent>
       </Card>
+
+      <MitigationTaskDialog open={dialogOpen} task={dialogTask} onClose={() => setDialogOpen(false)} />
+      <MitigationRoiDialog open={roiTaskId !== null} taskId={roiTaskId} onClose={() => setRoiTaskId(null)} />
     </Stack>
   );
 }

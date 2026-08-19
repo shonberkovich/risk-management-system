@@ -14,6 +14,17 @@ PolicyStatus = Literal["ACTIVE", "EXPIRED", "PENDING_RENEWAL"]
 PaymentType = Literal["ADVANCE", "FINAL_SETTLEMENT"]
 
 
+# --- Users ---
+# Read-only lookup (name + role) for UI pickers such as mitigation-task executor
+# assignment. Deliberately excludes email/created_at and any auth concern — full
+# user administration (login, RBAC, SSO) is out of scope, see CLAUDE.md.
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: int
+    full_name: str
+    role: str
+
+
 # --- Properties ---
 class RiskProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

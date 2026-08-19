@@ -14,6 +14,7 @@ from app.routers import (
     properties,
     retention,
     simulation,
+    users,
 )
 
 app = FastAPI(title="RMIS API", description="Risk Management Information System", version="0.1.0")
@@ -36,6 +37,7 @@ app.include_router(analytics.router)
 app.include_router(simulation.router)
 app.include_router(retention.router)
 app.include_router(documents.router)
+app.include_router(users.router)
 app.include_router(ai.router)
 
 
