@@ -18,9 +18,11 @@ import {
   fetchAlerts,
   fetchClaims,
   fetchHazardDistribution,
+  fetchIncidents,
   fetchKpis,
   fetchLossRatioTrend,
   fetchMapPoints,
+  fetchProperties,
   fetchRiskMatrix,
   type RiskMatrixCell,
 } from "../api/client";
@@ -39,6 +41,8 @@ export default function Dashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const alerts = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
+  const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+  const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
   const riskMatrix = useQuery({ queryKey: ["risk-matrix"], queryFn: fetchRiskMatrix });
   const hazardDist = useQuery({ queryKey: ["hazard-distribution"], queryFn: fetchHazardDistribution });
   const lossRatioTrend = useQuery({ queryKey: ["loss-ratio-trend"], queryFn: fetchLossRatioTrend });
@@ -135,7 +139,9 @@ export default function Dashboard() {
                   />
                 )}
               </Stack>
-              {filteredMapPoints && <RiskMap points={filteredMapPoints} />}
+              {filteredMapPoints && (
+                <RiskMap points={filteredMapPoints} properties={properties.data} incidents={incidents.data} />
+              )}
             </CardContent>
           </Card>
         </Grid>
