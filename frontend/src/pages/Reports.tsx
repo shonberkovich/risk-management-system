@@ -17,7 +17,7 @@ import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { askQuestion, fetchClaims, fetchKpis } from "../api/client";
+import { askQuestion, fetchClaims, fetchExposureByRegion, fetchKpis } from "../api/client";
 import ExecutiveReportPrintable from "../components/ExecutiveReportPrintable";
 import { exportElementToPdf } from "../exportPdf";
 
@@ -42,11 +42,12 @@ export default function Reports() {
   // --- PDF export ---
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
+  const exposureByRegion = useQuery({ queryKey: ["exposure-by-region"], queryFn: fetchExposureByRegion });
   const printableRef = useRef<HTMLDivElement>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
 
   async function exportPdf() {
-    if (!printableRef.current || !kpis.data || !claims.data) return;
+    if (!printableRef.current || !kpis.data || !claims.data || !exposureByRegion.data) return;
     setPdfExporting(true);
     try {
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -135,7 +136,7 @@ export default function Reports() {
                     variant="outlined"
                     startIcon={pdfExporting ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
                     onClick={exportPdf}
-                    disabled={pdfExporting || !kpis.data || !claims.data}
+                    disabled={pdfExporting || !kpis.data || !claims.data || !exposureByRegion.data}
                   >
                     ייצוא ל-PDF
                   </Button>
@@ -230,10 +231,15 @@ export default function Reports() {
 
       {/* Off-screen (not display:none — html2canvas needs a laid-out element to capture)
           printable layout for the PDF export button above. */}
-      {kpis.data && claims.data && (
+      {kpis.data && claims.data && exposureByRegion.data && (
         <Box sx={{ position: "fixed", top: 0, left: "-9999px" }}>
           <div ref={printableRef}>
-            <ExecutiveReportPrintable kpis={kpis.data} claims={claims.data} summaryText={summaryText || undefined} />
+            <ExecutiveReportPrintable
+              kpis={kpis.data}
+              claims={claims.data}
+              regions={exposureByRegion.data}
+              summaryText={summaryText || undefined}
+            />
           </div>
         </Box>
       )}

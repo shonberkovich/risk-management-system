@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import type { ClaimTrackingRow, KpiSummary } from "../api/client";
+import type { ClaimTrackingRow, KpiSummary, RegionExposure } from "../api/client";
 import { CLAIM_STATUS_LABELS, formatDate, formatIls, formatPercent } from "../format";
 
 /** Off-screen printable layout captured by exportElementToPdf for the executive PDF
@@ -12,10 +12,12 @@ import { CLAIM_STATUS_LABELS, formatDate, formatIls, formatPercent } from "../fo
 export default function ExecutiveReportPrintable({
   kpis,
   claims,
+  regions,
   summaryText,
 }: {
   kpis: KpiSummary;
   claims: ClaimTrackingRow[];
+  regions: RegionExposure[];
   summaryText?: string;
 }) {
   const cardStyle: CSSProperties = {
@@ -59,6 +61,29 @@ export default function ExecutiveReportPrintable({
           <p style={{ fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{summaryText}</p>
         </div>
       )}
+
+      <h2 style={{ fontSize: 15, marginBottom: 6 }}>חשיפה לפי אזורים</h2>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 16 }}>
+        <thead>
+          <tr style={{ background: "#f0f0f0" }}>
+            {["אזור", "שווי מבוטח (TIV)", "חשיפה מקסימלית (MFL)", "סך נתבע"].map((h) => (
+              <th key={h} style={{ border: "1px solid #ddd", padding: "4px 6px", textAlign: "right" }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {regions.map((r) => (
+            <tr key={r.region_id ?? "unassigned"}>
+              <td style={{ border: "1px solid #ddd", padding: "4px 6px" }}>{r.region_name}</td>
+              <td style={{ border: "1px solid #ddd", padding: "4px 6px" }}>{formatIls(r.tiv)}</td>
+              <td style={{ border: "1px solid #ddd", padding: "4px 6px" }}>{formatIls(r.mfl)}</td>
+              <td style={{ border: "1px solid #ddd", padding: "4px 6px" }}>{formatIls(r.total_claimed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       <h2 style={{ fontSize: 15, marginBottom: 6 }}>תביעות</h2>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
