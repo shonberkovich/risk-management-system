@@ -185,6 +185,9 @@ class PolicyOut(BaseModel):
     deductible_default: float
     annual_premium: float
     status: PolicyStatus
+    per_event_limit: float | None = None
+    bi_waiting_period_hours: int | None = None
+    exclusions: str | None = None
 
 
 class PolicyCreate(BaseModel):
@@ -196,6 +199,9 @@ class PolicyCreate(BaseModel):
     deductible_default: float
     annual_premium: float
     status: PolicyStatus = "ACTIVE"
+    per_event_limit: float | None = None
+    bi_waiting_period_hours: int | None = None
+    exclusions: str | None = None
 
 
 class PolicyUpdate(BaseModel):
@@ -206,6 +212,9 @@ class PolicyUpdate(BaseModel):
     deductible_default: float | None = None
     annual_premium: float | None = None
     status: PolicyStatus | None = None
+    per_event_limit: float | None = None
+    bi_waiting_period_hours: int | None = None
+    exclusions: str | None = None
 
 
 class PolicyAssetOut(BaseModel):

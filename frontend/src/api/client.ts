@@ -181,6 +181,9 @@ export interface Policy {
   deductible_default: number;
   annual_premium: number;
   status: PolicyStatus;
+  per_event_limit: number | null;
+  bi_waiting_period_hours: number | null;
+  exclusions: string | null;
 }
 
 export interface PolicyCreate {
@@ -192,6 +195,9 @@ export interface PolicyCreate {
   deductible_default: number;
   annual_premium: number;
   status?: PolicyStatus;
+  per_event_limit?: number | null;
+  bi_waiting_period_hours?: number | null;
+  exclusions?: string | null;
 }
 
 export type PolicyUpdate = Partial<PolicyCreate>;
