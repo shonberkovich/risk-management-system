@@ -180,3 +180,17 @@ class MitigationTask(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
     property_: Mapped["Property"] = relationship(back_populates="mitigation_tasks")
+
+
+class AuditLog(Base):
+    __tablename__ = "Audit_Log"
+
+    log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
+    entity_type: Mapped[str] = mapped_column(Unicode(50))
+    entity_id: Mapped[int] = mapped_column(BigInteger)
+    action: Mapped[str] = mapped_column(Unicode(20))
+    old_value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime)
+    ip_address: Mapped[str | None] = mapped_column(Unicode(45), nullable=True)

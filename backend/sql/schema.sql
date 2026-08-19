@@ -16,6 +16,7 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
 IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
 IF OBJECT_ID('dbo.Claims', 'U') IS NOT NULL DROP TABLE dbo.Claims;
@@ -248,4 +249,26 @@ CREATE TABLE dbo.Mitigation_Tasks (
 );
 GO
 CREATE INDEX IX_Mitigation_Property ON dbo.Mitigation_Tasks(property_id);
+GO
+
+-- ============================================================================
+-- Audit_Log
+-- ============================================================================
+IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
+GO
+CREATE TABLE dbo.Audit_Log (
+    log_id           BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_id             BIGINT NULL REFERENCES dbo.Users(user_id),
+    entity_type            NVARCHAR(50) NOT NULL,     -- e.g. 'Incident', 'Claim', 'Policy'
+    entity_id                 BIGINT NOT NULL,
+    action                       NVARCHAR(20) NOT NULL
+        CHECK (action IN ('CREATE','UPDATE','DELETE')),
+    old_value                     NVARCHAR(MAX) NULL,   -- JSON snapshot before change
+    new_value                       NVARCHAR(MAX) NULL, -- JSON snapshot after change
+    timestamp                         DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    ip_address                          NVARCHAR(45) NULL  -- IPv4/IPv6
+);
+GO
+CREATE INDEX IX_AuditLog_Entity ON dbo.Audit_Log(entity_type, entity_id);
+CREATE INDEX IX_AuditLog_User ON dbo.Audit_Log(user_id);
 GO
