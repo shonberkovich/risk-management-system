@@ -59,6 +59,11 @@ export default function RiskMap({
     [properties],
   );
 
+  const propertiesById = useMemo(
+    () => new Map((properties ?? []).map((p) => [p.property_id, p])),
+    [properties],
+  );
+
   // Single-property "clusters" (radius_km = 0) aren't a concentration — only draw
   // circles for clusters that actually group multiple nearby properties.
   const multiPropertyClusters = useMemo(
@@ -163,26 +168,47 @@ export default function RiskMap({
           ))}
 
         {showProperties &&
-          points.map((p) => (
-            <CircleMarker
-              key={p.property_id}
-              center={[p.latitude, p.longitude]}
-              radius={10}
-              pathOptions={{ color: COLOR_MAP[p.status_color], fillColor: COLOR_MAP[p.status_color], fillOpacity: 0.8 }}
-            >
-              <Popup>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                  {p.name}
-                </Typography>
-                <Typography variant="caption" display="block">
-                  שווי כינון: {formatIlsCompact(p.replacement_value)}
-                </Typography>
-                <Typography variant="caption" display="block">
-                  אירועים פתוחים: {p.open_incidents}
-                </Typography>
-              </Popup>
-            </CircleMarker>
-          ))}
+          points.map((p) => {
+            const detail = propertiesById.get(p.property_id);
+            const policy = detail?.active_policy;
+            return (
+              <CircleMarker
+                key={p.property_id}
+                center={[p.latitude, p.longitude]}
+                radius={10}
+                pathOptions={{ color: COLOR_MAP[p.status_color], fillColor: COLOR_MAP[p.status_color], fillOpacity: 0.8 }}
+              >
+                <Popup>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    {p.name}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    שווי כינון: {formatIlsCompact(p.replacement_value)}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    אירועים פתוחים: {p.open_incidents}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    מנהל אחראי: {detail?.manager_name ?? "לא משויך"}
+                  </Typography>
+                  {policy ? (
+                    <>
+                      <Typography variant="caption" display="block">
+                        פוליסה פעילה: {policy.policy_number} ({policy.insurer_name})
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        גבול אחריות: {formatIlsCompact(policy.per_event_limit ?? policy.total_limit)}
+                      </Typography>
+                    </>
+                  ) : (
+                    <Typography variant="caption" display="block">
+                      אין פוליסה פעילה משויכת
+                    </Typography>
+                  )}
+                </Popup>
+              </CircleMarker>
+            );
+          })}
 
         {showIncidents &&
           activeIncidents.map((inc) => {

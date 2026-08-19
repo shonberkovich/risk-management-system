@@ -24,6 +24,15 @@ export interface RiskProfile {
   notes: string | null;
 }
 
+export interface PropertyActivePolicy {
+  policy_id: number;
+  policy_number: string;
+  insurer_name: string;
+  total_limit: number;
+  per_event_limit: number | null;
+  specific_deductible: number | null;
+}
+
 export interface Property {
   property_id: number;
   property_code: string;
@@ -37,6 +46,8 @@ export interface Property {
   book_value: number;
   is_active: boolean;
   risk_profile: RiskProfile | null;
+  manager_name: string | null;
+  active_policy: PropertyActivePolicy | null;
 }
 
 export interface PropertyMapPoint {
