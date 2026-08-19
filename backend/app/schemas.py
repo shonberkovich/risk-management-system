@@ -293,6 +293,19 @@ class LossRatioTrendPoint(BaseModel):
     total_annual_premium: float
 
 
+class CashflowMonthPoint(BaseModel):
+    month: str  # "YYYY-MM"
+    expected_receipts: float
+    open_reserves: float
+
+
+class CashflowSummary(BaseModel):
+    total_open_reserves: float
+    total_expected_receipts: float
+    unscheduled_reserves: float
+    monthly: list[CashflowMonthPoint]
+
+
 class AlertOut(BaseModel):
     alert_type: Literal["geographic_exposure", "incident_concentration"]
     severity: Literal["warning", "critical"]
