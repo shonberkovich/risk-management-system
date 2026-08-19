@@ -306,6 +306,21 @@ export interface PropertySimulationResult {
   distribution: HistogramBucket[];
 }
 
+export interface RetentionRecommendation {
+  policy_id: number;
+  property_id: number;
+  estimated_loss: number;
+  deductible: number;
+  claim_recoverable_amount: number;
+  claim_out_of_pocket: number;
+  expected_premium_surcharge: number;
+  claim_total_cost: number;
+  absorb_total_cost: number;
+  recommendation: "ABSORB" | "CLAIM";
+  estimated_savings: number;
+  incident_id: number | null;
+}
+
 export interface Alert {
   alert_type: "geographic_exposure" | "incident_concentration";
   severity: "warning" | "critical";
@@ -465,6 +480,8 @@ export const fetchPropertySimulation = (
   propertyId: number,
   params: { iterations?: number; horizon_years?: number; seed?: number },
 ) => api.get<PropertySimulationResult>(`/simulation/properties/${propertyId}`, { params }).then((r) => r.data);
+export const fetchRetentionRecommendation = (params: { policy_id: number; property_id: number; estimated_loss: number }) =>
+  api.get<RetentionRecommendation>("/retention/recommendation", { params }).then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
