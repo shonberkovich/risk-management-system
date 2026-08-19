@@ -25,6 +25,9 @@ const emptyForm = {
   deductible_default: "",
   annual_premium: "",
   status: "ACTIVE" as PolicyStatus,
+  per_event_limit: "",
+  bi_waiting_period_hours: "",
+  exclusions: "",
 };
 
 export default function PolicyDialog({
@@ -51,6 +54,10 @@ export default function PolicyDialog({
         deductible_default: String(policy.deductible_default),
         annual_premium: String(policy.annual_premium),
         status: policy.status,
+        per_event_limit: policy.per_event_limit != null ? String(policy.per_event_limit) : "",
+        bi_waiting_period_hours:
+          policy.bi_waiting_period_hours != null ? String(policy.bi_waiting_period_hours) : "",
+        exclusions: policy.exclusions ?? "",
       });
     } else {
       setForm(emptyForm);
@@ -68,6 +75,10 @@ export default function PolicyDialog({
         deductible_default: Number(form.deductible_default) || 0,
         annual_premium: Number(form.annual_premium) || 0,
         status: form.status,
+        per_event_limit: form.per_event_limit !== "" ? Number(form.per_event_limit) : null,
+        bi_waiting_period_hours:
+          form.bi_waiting_period_hours !== "" ? Number(form.bi_waiting_period_hours) : null,
+        exclusions: form.exclusions.trim() ? form.exclusions.trim() : null,
       };
       return isEdit ? updatePolicy(policy!.policy_id, payload) : createPolicy(payload);
     },
@@ -170,6 +181,36 @@ export default function PolicyDialog({
                   </MenuItem>
                 ))}
               </TextField>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                label="גבול אחריות לאירוע בודד (₪)"
+                type="number"
+                fullWidth
+                value={form.per_event_limit}
+                onChange={(e) => setForm((f) => ({ ...f, per_event_limit: e.target.value }))}
+                helperText="ריק = ללא גבול נפרד לאירוע בודד"
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                label="תקופת המתנה לאובדן רווחים (שעות)"
+                type="number"
+                fullWidth
+                value={form.bi_waiting_period_hours}
+                onChange={(e) => setForm((f) => ({ ...f, bi_waiting_period_hours: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="החרגות פוליסה"
+                fullWidth
+                multiline
+                minRows={2}
+                value={form.exclusions}
+                onChange={(e) => setForm((f) => ({ ...f, exclusions: e.target.value }))}
+                placeholder="לדוגמה: נזקי טבע קיצוניים, מלחמה, נזק הדרגתי..."
+              />
             </Grid>
           </Grid>
 
