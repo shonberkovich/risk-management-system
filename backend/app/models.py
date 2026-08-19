@@ -6,6 +6,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.services.encryption import EncryptedString
 
 
 class User(Base):
@@ -15,6 +16,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(Unicode(100))
     email: Mapped[str] = mapped_column(Unicode(200), unique=True)
     role: Mapped[str] = mapped_column(Unicode(30))
+    password_hash: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
@@ -164,7 +166,10 @@ class ClaimPayment(Base):
     claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id"))
     payment_date: Mapped[date] = mapped_column(Date)
     amount: Mapped[float] = mapped_column(Numeric(18, 2))
-    reference_number: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    # Encrypted at rest (see services/encryption.py) — deliberately not `amount`, which
+    # services/kpi.py aggregates in SQL (SUM/AVG); encrypting an aggregated column would
+    # force decrypt-then-aggregate in Python, defeating the point of SQL-side aggregation.
+    reference_number: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
     payment_type: Mapped[str] = mapped_column(Unicode(20))
 
     claim: Mapped["Claim"] = relationship(back_populates="payments")

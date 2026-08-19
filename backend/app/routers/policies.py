@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 
 router = APIRouter(prefix="/api/policies", tags=["policies"])
+
+_POLICIES_WRITE_ROLES = ("RISK_MANAGER", "CFO", "ADMIN")
 
 
 @router.get("", response_model=list[schemas.PolicyOut])
@@ -26,7 +29,11 @@ def get_policy(policy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.PolicyOut, status_code=201)
-def create_policy(payload: schemas.PolicyCreate, db: Session = Depends(get_db)):
+def create_policy(
+    payload: schemas.PolicyCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_WRITE_ROLES)),
+):
     policy = models.InsurancePolicy(**payload.model_dump())
     db.add(policy)
     try:
@@ -39,7 +46,12 @@ def create_policy(payload: schemas.PolicyCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{policy_id}", response_model=schemas.PolicyOut)
-def update_policy(policy_id: int, payload: schemas.PolicyUpdate, db: Session = Depends(get_db)):
+def update_policy(
+    policy_id: int,
+    payload: schemas.PolicyUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_WRITE_ROLES)),
+):
     policy = db.get(models.InsurancePolicy, policy_id)
     if not policy:
         raise HTTPException(404, "Policy not found")
@@ -73,7 +85,12 @@ def list_policy_assets(policy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{policy_id}/assets", response_model=schemas.PolicyAssetOut, status_code=201)
-def assign_policy_asset(policy_id: int, payload: schemas.PolicyAssetCreate, db: Session = Depends(get_db)):
+def assign_policy_asset(
+    policy_id: int,
+    payload: schemas.PolicyAssetCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_WRITE_ROLES)),
+):
     policy = db.get(models.InsurancePolicy, policy_id)
     if not policy:
         raise HTTPException(404, "Policy not found")
@@ -100,7 +117,12 @@ def assign_policy_asset(policy_id: int, payload: schemas.PolicyAssetCreate, db: 
 
 
 @router.delete("/{policy_id}/assets/{property_id}", status_code=204)
-def unassign_policy_asset(policy_id: int, property_id: int, db: Session = Depends(get_db)):
+def unassign_policy_asset(
+    policy_id: int,
+    property_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_WRITE_ROLES)),
+):
     asset = db.get(models.PolicyAsset, {"policy_id": policy_id, "property_id": property_id})
     if not asset:
         raise HTTPException(404, "Assignment not found")

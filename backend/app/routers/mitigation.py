@@ -20,9 +20,12 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services.kpi import calculate_mitigation_roi, calculate_mitigation_roi_breakdown
 
 router = APIRouter(prefix="/api/mitigation-tasks", tags=["mitigation"])
+
+_MITIGATION_WRITE_ROLES = ("RISK_MANAGER", "PROPERTY_MANAGER", "ADMIN")
 
 
 def _sync_overdue(task: models.MitigationTask) -> None:
@@ -70,7 +73,11 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.MitigationTaskOut, status_code=201)
-def create_task(payload: schemas.MitigationTaskCreate, db: Session = Depends(get_db)):
+def create_task(
+    payload: schemas.MitigationTaskCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_MITIGATION_WRITE_ROLES)),
+):
     property_ = db.get(models.Property, payload.property_id)
     if not property_:
         raise HTTPException(404, "Property not found")
@@ -95,7 +102,12 @@ def create_task(payload: schemas.MitigationTaskCreate, db: Session = Depends(get
 
 
 @router.patch("/{task_id}", response_model=schemas.MitigationTaskOut)
-def update_task(task_id: int, payload: schemas.MitigationTaskUpdate, db: Session = Depends(get_db)):
+def update_task(
+    task_id: int,
+    payload: schemas.MitigationTaskUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_MITIGATION_WRITE_ROLES)),
+):
     task = db.get(models.MitigationTask, task_id)
     if not task:
         raise HTTPException(404, "Mitigation task not found")

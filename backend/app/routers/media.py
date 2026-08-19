@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services import storage
 
 router = APIRouter(tags=["media"])
@@ -47,7 +48,12 @@ def _parse_exif_datetime(value: str | None) -> datetime | None:
 
 
 @router.post("/api/incidents/{incident_id}/media", response_model=schemas.IncidentMediaOut, status_code=201)
-async def upload_incident_media(incident_id: int, file: UploadFile, db: Session = Depends(get_db)):
+async def upload_incident_media(
+    incident_id: int,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),  # any authenticated role
+):
     incident = db.get(models.Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
@@ -99,7 +105,11 @@ def list_incident_media(incident_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/api/media/{media_id}", status_code=204)
-def delete_incident_media(media_id: int, db: Session = Depends(get_db)):
+def delete_incident_media(
+    media_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles("RISK_MANAGER", "ADMIN")),
+):
     media = db.get(models.IncidentMedia, media_id)
     if not media:
         raise HTTPException(404, "Media not found")

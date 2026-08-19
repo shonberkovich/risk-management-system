@@ -7,6 +7,12 @@ correctly regardless of console/file codepage issues that affect sqlcmd.
 import pyodbc
 
 from app.database import get_connection_string
+from app.services.auth import hash_password
+
+# Demo login password for every seeded user (see routers/auth.py POST /api/auth/login).
+# A course-demo convenience, not a security posture — real deployments provision
+# passwords per-user, never a shared constant.
+DEMO_PASSWORD = "Demo1234!"
 
 
 def run():
@@ -41,8 +47,10 @@ def run():
         ("נעם פרידמן", "noam.friedman@company.co.il", "RISK_OFFICER"),
         ("שרה כהן", "sara.cohen@adjusters.co.il", "ADJUSTER"),
     ]
+    password_hash = hash_password(DEMO_PASSWORD)
     cur.executemany(
-        "INSERT INTO Users (full_name, email, role) VALUES (?, ?, ?)", users
+        "INSERT INTO Users (full_name, email, role, password_hash) VALUES (?, ?, ?, ?)",
+        [(*u, password_hash) for u in users],
     )
 
     # --- Regions ---
