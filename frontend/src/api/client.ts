@@ -179,7 +179,46 @@ export interface MitigationTask {
   expected_annual_savings: number;
   due_date: string;
   status: MitigationStatus;
+  assigned_to_user_id: number | null;
   roi_percent: number | null;
+}
+
+export interface MitigationTaskCreate {
+  property_id: number;
+  title: string;
+  cost_estimate: number;
+  expected_annual_savings: number;
+  due_date: string;
+  assigned_to_user_id?: number | null;
+}
+
+export interface MitigationTaskUpdate {
+  title?: string;
+  cost_estimate?: number;
+  expected_annual_savings?: number;
+  due_date?: string;
+  status?: MitigationStatus;
+  assigned_to_user_id?: number | null;
+}
+
+export interface MitigationRoiBreakdown {
+  task_id: number;
+  property_id: number;
+  title: string;
+  status: MitigationStatus;
+  cost_estimate: number;
+  expected_annual_savings_total: number;
+  expected_premium_savings: number;
+  expected_loss_savings: number;
+  has_active_policy: boolean;
+  roi_percent: number | null;
+  payback_years: number | null;
+}
+
+export interface User {
+  user_id: number;
+  full_name: string;
+  role: string;
 }
 
 export interface Policy {
@@ -447,6 +486,14 @@ export const createClaimPayment = (claimId: number, payload: ClaimPaymentCreate)
 
 export const fetchMitigationTasks = () =>
   api.get<MitigationTask[]>("/mitigation-tasks").then((r) => r.data);
+export const createMitigationTask = (payload: MitigationTaskCreate) =>
+  api.post<MitigationTask>("/mitigation-tasks", payload).then((r) => r.data);
+export const updateMitigationTask = (id: number, payload: MitigationTaskUpdate) =>
+  api.patch<MitigationTask>(`/mitigation-tasks/${id}`, payload).then((r) => r.data);
+export const fetchMitigationTaskRoi = (id: number) =>
+  api.get<MitigationRoiBreakdown>(`/mitigation-tasks/${id}/roi`).then((r) => r.data);
+
+export const fetchUsers = () => api.get<User[]>("/users").then((r) => r.data);
 
 export const fetchPolicies = (status?: string) =>
   api.get<Policy[]>("/policies", { params: status ? { status } : undefined }).then((r) => r.data);
