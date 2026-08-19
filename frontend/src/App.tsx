@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Claims from "./pages/Claims";
 import Dashboard from "./pages/Dashboard";
+import IncidentDetail from "./pages/IncidentDetail";
 import IncidentReport from "./pages/IncidentReport";
 import Incidents from "./pages/Incidents";
 import Mitigation from "./pages/Mitigation";
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/properties" element={<Properties />} />
         <Route path="/report-incident" element={<IncidentReport />} />
         <Route path="/incidents" element={<Incidents />} />
+        <Route path="/incidents/:id" element={<IncidentDetail />} />
         <Route path="/claims" element={<Claims />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/mitigation" element={<Mitigation />} />

@@ -81,6 +81,14 @@ export const POLICY_STATUS_LABELS: Record<string, string> = {
   PENDING_RENEWAL: "ממתינה לחידוש",
 };
 
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  POLICY_DOCUMENT: "פוליסת ביטוח",
+  ADJUSTER_REPORT: "דוח שמאי",
+  CORRESPONDENCE: "תכתובת",
+  PHOTO: "תמונה",
+  SURVEY_REPORT: "דוח סקר",
+};
+
 export const SEVERITY_COLORS: Record<string, "success" | "warning" | "error" | "default"> = {
   LOW: "success",
   MEDIUM: "warning",

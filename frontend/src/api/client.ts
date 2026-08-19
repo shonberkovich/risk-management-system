@@ -286,6 +286,36 @@ export interface IncidentMedia {
   gps_longitude: number | null;
 }
 
+export type DocumentEntityType = "INCIDENT" | "CLAIM" | "PROPERTY" | "POLICY";
+
+export interface DocumentFile {
+  document_id: number;
+  entity_type: DocumentEntityType;
+  entity_id: number;
+  s3_url: string;
+  doc_type: string;
+  uploaded_by: number | null;
+  uploaded_at: string;
+}
+
+export interface SignedUrl {
+  url: string;
+  download_url: string;
+  storage_key: string;
+  expires_at: number;
+}
+
+export interface ClaimWithPayments extends Claim {
+  payments: ClaimPayment[];
+}
+
+export interface IncidentDrillDown {
+  incident: Incident;
+  media: IncidentMedia[];
+  claims: ClaimWithPayments[];
+  documents: DocumentFile[];
+}
+
 export interface IncidentClassification {
   hazard_type: HazardType;
   severity_level: SeverityLevel;
@@ -314,6 +344,8 @@ export const updateIncidentStatus = (id: number, status: IncidentStatus) =>
   api.patch<Incident>(`/incidents/${id}/status`, { status }).then((r) => r.data);
 export const fetchEligiblePolicies = (incidentId: number) =>
   api.get<Policy[]>(`/incidents/${incidentId}/eligible-policies`).then((r) => r.data);
+export const fetchIncidentDrilldown = (incidentId: number) =>
+  api.get<IncidentDrillDown>(`/incidents/${incidentId}/full`).then((r) => r.data);
 
 export const uploadIncidentMedia = (incidentId: number, file: File) => {
   const form = new FormData();
@@ -328,6 +360,13 @@ export const fetchIncidentMedia = (incidentId: number) =>
   api.get<IncidentMedia[]>(`/incidents/${incidentId}/media`).then((r) => r.data);
 export const deleteIncidentMedia = (mediaId: number) =>
   api.delete(`/media/${mediaId}`).then(() => undefined);
+export const fetchMediaSignedUrl = (mediaId: number) =>
+  api.get<SignedUrl>(`/media/${mediaId}/signed-url`).then((r) => r.data);
+
+export const fetchDocumentsForEntity = (entityType: DocumentEntityType, entityId: number) =>
+  api.get<DocumentFile[]>(`/documents/entity/${entityType}/${entityId}`).then((r) => r.data);
+export const fetchDocumentSignedUrl = (documentId: number) =>
+  api.get<SignedUrl>(`/documents/${documentId}/signed-url`).then((r) => r.data);
 
 export const fetchClaims = (status?: string) =>
   api.get<ClaimTrackingRow[]>("/claims", { params: status ? { status } : undefined }).then((r) => r.data);
