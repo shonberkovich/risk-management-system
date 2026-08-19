@@ -226,7 +226,40 @@ class MitigationTaskOut(BaseModel):
     expected_annual_savings: float
     due_date: date
     status: MitigationStatus
+    assigned_to_user_id: int | None = None
     roi_percent: float | None = None
+
+
+class MitigationTaskCreate(BaseModel):
+    property_id: int
+    title: str
+    cost_estimate: float
+    expected_annual_savings: float = 0
+    due_date: date
+    assigned_to_user_id: int | None = None
+
+
+class MitigationTaskUpdate(BaseModel):
+    title: str | None = None
+    cost_estimate: float | None = None
+    expected_annual_savings: float | None = None
+    due_date: date | None = None
+    status: MitigationStatus | None = None
+    assigned_to_user_id: int | None = None
+
+
+class MitigationRoiBreakdown(BaseModel):
+    task_id: int
+    property_id: int
+    title: str
+    status: MitigationStatus
+    cost_estimate: float
+    expected_annual_savings_total: float
+    expected_premium_savings: float
+    expected_loss_savings: float
+    has_active_policy: bool
+    roi_percent: float | None = None
+    payback_years: float | None = None
 
 
 # --- Analytics ---
