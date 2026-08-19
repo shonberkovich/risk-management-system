@@ -1,6 +1,7 @@
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
@@ -34,9 +35,12 @@ import {
   type Property,
   type SeverityLevel,
 } from "../api/client";
+import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
 
 const STEPS = ["מיקום וזיהוי הנכס", "פרטי הנזק והחומרה", "אומדן כספי ותיאור", "תיעוד ושליחה"];
+
+const NEARBY_RADIUS_KM = 15;
 
 const HAZARD_OPTIONS: HazardType[] = ["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"];
 const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
@@ -61,6 +65,15 @@ export default function IncidentReport() {
   const [submitted, setSubmitted] = useState<string | null>(null);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+  const geo = useGeolocation();
+
+  const nearbyProperties = geo.coords
+    ? (properties ?? [])
+        .map((p) => ({ property: p, distance: distanceKm(geo.coords!, { latitude: p.latitude, longitude: p.longitude }) }))
+        .filter((x) => x.distance <= NEARBY_RADIUS_KM)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 5)
+    : [];
 
   const classifyMutation = useMutation({
     mutationFn: () => classifyIncident(description),
@@ -85,6 +98,7 @@ export default function IncidentReport() {
         description,
         ai_classified: aiResult !== null,
         ai_confidence: aiResult?.confidence ?? null,
+        reported_coordinates: geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null,
       }),
     onSuccess: (incident) => setSubmitted(incident.incident_code),
   });
@@ -150,6 +164,41 @@ export default function IncidentReport() {
         <CardContent>
           {activeStep === 0 && (
             <Stack spacing={2}>
+              <Button
+                variant="outlined"
+                startIcon={geo.loading ? <CircularProgress size={16} /> : <MyLocationIcon />}
+                disabled={geo.loading}
+                onClick={geo.request}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                אתר את מיקומי והצע נכסים קרובים
+              </Button>
+
+              {geo.error && <Alert severity="warning">{geo.error}</Alert>}
+
+              {geo.coords && nearbyProperties.length === 0 && (
+                <Alert severity="info">לא נמצאו נכסים ברדיוס {NEARBY_RADIUS_KM} ק"מ מהמיקום הנוכחי.</Alert>
+              )}
+
+              {nearbyProperties.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    נכסים קרובים למיקום שלך
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {nearbyProperties.map(({ property: p, distance }) => (
+                      <Chip
+                        key={p.property_id}
+                        label={`${p.name} · ${distance.toFixed(1)} ק"מ`}
+                        color={property?.property_id === p.property_id ? "primary" : "default"}
+                        onClick={() => setProperty(p)}
+                        sx={{ mb: 1 }}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+
               <Autocomplete
                 options={properties ?? []}
                 getOptionLabel={(p) => `${p.name} (${p.property_code})`}
