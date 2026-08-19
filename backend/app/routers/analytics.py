@@ -126,6 +126,15 @@ def get_exposure_by_region(db: Session = Depends(get_db)):
     return kpi.calculate_exposure_by_region(db)
 
 
+@router.get("/geographic-exposure-clusters", response_model=list[schemas.GeographicExposureCluster])
+def get_geographic_exposure_clusters(db: Session = Depends(get_db)):
+    """Geographic exposure clusters for drawing exposure circles on the map: properties
+    within CLUSTER_RADIUS_KM of one another, with centroid, actual radius, and cumulative
+    MFL/TIV per cluster. See kpi.calculate_geographic_exposure_clusters for the full
+    calculation (sorted descending by cluster_mfl_total)."""
+    return kpi.calculate_geographic_exposure_clusters(db)
+
+
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
 def get_hazard_distribution(db: Session = Depends(get_db)):
     rows = db.execute(

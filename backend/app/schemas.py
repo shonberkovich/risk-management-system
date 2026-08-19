@@ -314,6 +314,17 @@ class RegionExposure(BaseModel):
     total_claimed: float
 
 
+class GeographicExposureCluster(BaseModel):
+    property_ids: list[int]
+    property_names: list[str]
+    property_count: int
+    center_lat: float
+    center_lon: float
+    radius_km: float
+    cluster_mfl_total: float
+    cluster_tiv_total: float
+
+
 class AlertOut(BaseModel):
     alert_type: Literal["geographic_exposure", "incident_concentration"]
     severity: Literal["warning", "critical"]
