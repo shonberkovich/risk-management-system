@@ -276,6 +276,36 @@ export interface RegionExposure {
   total_claimed: number;
 }
 
+export interface HistogramBucket {
+  bucket_min: number;
+  bucket_max: number;
+  count: number;
+}
+
+export interface PortfolioSimulationResult {
+  iterations: number;
+  horizon_years: number;
+  properties_simulated: number;
+  expected_annual_loss: number;
+  worst_case_simulated_loss: number;
+  var_95: number;
+  var_99: number;
+  distribution: HistogramBucket[];
+}
+
+export interface PropertySimulationResult {
+  property_id: number;
+  iterations: number;
+  horizon_years: number;
+  annual_event_probability: number;
+  mfl_amount: number;
+  expected_annual_loss: number;
+  worst_case_simulated_loss: number;
+  var_95: number;
+  var_99: number;
+  distribution: HistogramBucket[];
+}
+
 export interface Alert {
   alert_type: "geographic_exposure" | "incident_concentration";
   severity: "warning" | "critical";
@@ -429,6 +459,12 @@ export const fetchCashflowSummary = (monthsAhead = 12) =>
   api.get<CashflowSummary>("/analytics/cashflow", { params: { months_ahead: monthsAhead } }).then((r) => r.data);
 export const fetchExposureByRegion = () =>
   api.get<RegionExposure[]>("/analytics/exposure-by-region").then((r) => r.data);
+export const fetchPortfolioSimulation = (params: { iterations?: number; horizon_years?: number; seed?: number }) =>
+  api.get<PortfolioSimulationResult>("/simulation/portfolio", { params }).then((r) => r.data);
+export const fetchPropertySimulation = (
+  propertyId: number,
+  params: { iterations?: number; horizon_years?: number; seed?: number },
+) => api.get<PropertySimulationResult>(`/simulation/properties/${propertyId}`, { params }).then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
