@@ -209,6 +209,20 @@ class IncidentMediaOut(BaseModel):
     gps_longitude: float | None = None
 
 
+DocumentEntityType = Literal["INCIDENT", "CLAIM", "PROPERTY", "POLICY"]
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    document_id: int
+    entity_type: DocumentEntityType
+    entity_id: int
+    s3_url: str  # storage_key within media_storage — see services/storage.py (mirrors IncidentMediaOut.file_path)
+    doc_type: str
+    uploaded_by: int | None = None
+    uploaded_at: datetime
+
+
 class SignedUrlOut(BaseModel):
     url: str  # illustrative S3-style reference (see services/storage.py) — not fetchable
     download_url: str  # actually fetchable: GET /api/media/download?key=...&expires=...&token=...
