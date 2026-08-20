@@ -57,6 +57,43 @@ def dispatch_notifications(
     return notifications.dispatch_notifications(db)
 
 
+def _log_to_out(log: models.NotificationLog) -> schemas.NotificationLogOut:
+    return schemas.NotificationLogOut(
+        log_id=log.log_id,
+        alert_type=log.alert_type,
+        severity=log.severity,
+        recipient_role=log.recipient_role,
+        recipient_name=log.recipient_name,
+        channel=log.channel,
+        contact=log.contact,
+        title=log.title,
+        message=log.message,
+        property_ids=[int(pid) for pid in log.property_ids.split(",") if pid.strip()],
+        value=float(log.value),
+        threshold=float(log.threshold),
+        status=log.status,
+        sent_at=log.sent_at,
+    )
+
+
+@router.get("/log", response_model=list[schemas.NotificationLogOut])
+def list_notification_log(
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_NOTIFICATIONS_ROLES)),
+):
+    """Audit trail of notifications actually dispatched (Notification_Log), most
+    recent first — see services/notifications.dispatch_notifications, which is the
+    only writer. Same read role set as preview/dispatch; this table has no write
+    endpoints of its own since app code is its only intended writer."""
+    rows = db.scalars(
+        select(models.NotificationLog)
+        .order_by(models.NotificationLog.sent_at.desc(), models.NotificationLog.log_id.desc())
+        .limit(limit)
+    ).all()
+    return [_log_to_out(r) for r in rows]
+
+
 def _recipient_to_out(recipient: models.NotificationRecipient) -> schemas.NotificationRecipientOut:
     return schemas.NotificationRecipientOut(
         recipient_id=recipient.recipient_id,

@@ -276,3 +276,31 @@ class NotificationRecipient(Base):
     channels: Mapped[str] = mapped_column(Unicode(30))
     min_severity: Mapped[str] = mapped_column(Unicode(20), default="warning")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class NotificationLog(Base):
+    """Audit trail of notifications actually dispatched by
+    services/notifications.dispatch_notifications — one row per (alert, recipient,
+    channel) combination that was "sent" (simulated, see that module's docstring).
+    Write-only from the app's perspective at dispatch time; read via
+    GET /api/notifications/log (TODO_SPEC.md §1, "טבלת Notification_Log"). Distinct
+    from Notification_Recipients (who *can* be paged) — this is what was actually
+    paged, and when. `property_ids` mirrors the comma-separated-string convention
+    used for Notification_Recipients.channels (no array column type in SQL Server
+    LocalDB)."""
+    __tablename__ = "Notification_Log"
+
+    log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    alert_type: Mapped[str] = mapped_column(Unicode(50))
+    severity: Mapped[str] = mapped_column(Unicode(20))
+    recipient_role: Mapped[str] = mapped_column(Unicode(30))
+    recipient_name: Mapped[str] = mapped_column(Unicode(100))
+    channel: Mapped[str] = mapped_column(Unicode(10))
+    contact: Mapped[str] = mapped_column(Unicode(200))
+    title: Mapped[str] = mapped_column(Unicode(200))
+    message: Mapped[str] = mapped_column(UnicodeText)
+    property_ids: Mapped[str] = mapped_column(Unicode(500))  # comma-separated bigint list
+    value: Mapped[float] = mapped_column(Numeric(18, 4))
+    threshold: Mapped[float] = mapped_column(Numeric(18, 4))
+    status: Mapped[str] = mapped_column(Unicode(20))
+    sent_at: Mapped[datetime] = mapped_column(DateTime)

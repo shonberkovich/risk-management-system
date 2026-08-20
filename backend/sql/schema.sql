@@ -20,6 +20,7 @@ IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
 IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
 IF OBJECT_ID('dbo.Documents', 'U') IS NOT NULL DROP TABLE dbo.Documents;
 IF OBJECT_ID('dbo.Financial_Statements', 'U') IS NOT NULL DROP TABLE dbo.Financial_Statements;
+IF OBJECT_ID('dbo.Notification_Log', 'U') IS NOT NULL DROP TABLE dbo.Notification_Log;
 IF OBJECT_ID('dbo.Notification_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Notification_Recipients;
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
 IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
@@ -376,4 +377,31 @@ CREATE TABLE dbo.Notification_Recipients (
     min_severity    NVARCHAR(20) NOT NULL DEFAULT 'warning',
     is_active       BIT NOT NULL DEFAULT 1
 );
+GO
+
+-- ============================================================================
+-- Notification_Log — audit trail of notifications actually dispatched by
+-- services/notifications.dispatch_notifications (one row per alert/recipient/
+-- channel combination "sent"). TODO_SPEC.md §1, "טבלת Notification_Log".
+-- ============================================================================
+IF OBJECT_ID('dbo.Notification_Log', 'U') IS NOT NULL DROP TABLE dbo.Notification_Log;
+GO
+CREATE TABLE dbo.Notification_Log (
+    log_id          BIGINT IDENTITY(1,1) PRIMARY KEY,
+    alert_type      NVARCHAR(50) NOT NULL,
+    severity        NVARCHAR(20) NOT NULL,
+    recipient_role  NVARCHAR(30) NOT NULL,
+    recipient_name  NVARCHAR(100) NOT NULL,
+    channel         NVARCHAR(10) NOT NULL,
+    contact         NVARCHAR(200) NOT NULL,
+    title           NVARCHAR(200) NOT NULL,
+    message         NVARCHAR(MAX) NOT NULL,
+    property_ids    NVARCHAR(500) NOT NULL,   -- comma-separated bigint list
+    value           DECIMAL(18,4) NOT NULL,
+    threshold       DECIMAL(18,4) NOT NULL,
+    status          NVARCHAR(20) NOT NULL,
+    sent_at         DATETIME2 NOT NULL
+);
+GO
+CREATE INDEX IX_Notification_Log_sent_at ON dbo.Notification_Log(sent_at);
 GO

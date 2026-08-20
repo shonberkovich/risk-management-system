@@ -17,6 +17,7 @@ feature is fully exercised end-to-end, just without an external side effect at t
 """
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -148,11 +149,17 @@ def dispatch_notifications(
     (see module docstring), so sending is simulated: each notification is logged at
     WARNING (critical) or INFO (warning) level and returned with status="simulated".
     A real integration would swap the logger.log call below for an actual
-    SendGrid/Twilio/FCM API call, keeping build_notifications unchanged."""
+    SendGrid/Twilio/FCM API call, keeping build_notifications unchanged.
+
+    Every "sent" record is also persisted to Notification_Log (models.NotificationLog)
+    as an audit trail — see TODO_SPEC.md §1, "טבלת Notification_Log" — independent of
+    the in-process `logger.log` call above, which is not queryable after the process
+    exits."""
     notifications = build_notifications(
         db, recipients, geo_exposure_threshold_ratio, incident_concentration_threshold
     )
 
+    sent_at = datetime.utcnow()
     for n in notifications:
         level = logging.WARNING if n["severity"] == "critical" else logging.INFO
         logger.log(
@@ -161,5 +168,22 @@ def dispatch_notifications(
             n["severity"].upper(), n["recipient_name"], n["contact"], n["channel"], n["title"], n["message"],
         )
         n["status"] = "simulated"
+        db.add(models.NotificationLog(
+            alert_type=n["alert_type"],
+            severity=n["severity"],
+            recipient_role=n["recipient_role"],
+            recipient_name=n["recipient_name"],
+            channel=n["channel"],
+            contact=n["contact"],
+            title=n["title"],
+            message=n["message"],
+            property_ids=",".join(str(pid) for pid in n["property_ids"]),
+            value=n["value"],
+            threshold=n["threshold"],
+            status=n["status"],
+            sent_at=sent_at,
+        ))
+    if notifications:
+        db.commit()
 
     return notifications
