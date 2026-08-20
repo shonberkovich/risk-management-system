@@ -828,6 +828,36 @@ class ComplianceReportOut(BaseModel):
     entries: list[ComplianceRiskEntryOut]
 
 
+class FinancialStatementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    statement_id: int
+    year: int
+    total_assets: float
+    revenue: float
+    net_income: float
+    insurance_expense: float
+    total_liabilities: float | None = None
+    total_equity: float | None = None
+    gross_profit: float | None = None
+    operating_profit: float | None = None
+
+
+class FinancialStatementCreate(BaseModel):
+    """Payload for POST /api/financials/statements — entering a multi-year financial
+    statement. total_liabilities/total_equity/gross_profit/operating_profit are
+    optional (nullable on the model, see models.FinancialStatement) so a statement can
+    be entered from a simpler income-statement-only source and completed later."""
+    year: int
+    total_assets: float
+    revenue: float
+    net_income: float
+    insurance_expense: float
+    total_liabilities: float | None = None
+    total_equity: float | None = None
+    gross_profit: float | None = None
+    operating_profit: float | None = None
+
+
 class MultiYearTrendOut(BaseModel):
     year: int
     revenue: float
