@@ -10,20 +10,27 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import SummarizeIcon from "@mui/icons-material/Summarize";
+import SyncIcon from "@mui/icons-material/Sync";
+import WifiIcon from "@mui/icons-material/Wifi";
+import WifiOffIcon from "@mui/icons-material/WifiOff";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../format";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
 
 // `roles: undefined` = visible to every authenticated role. Mirrors the write-role sets
 // enforced server-side in backend/app/routers/*.py (require_roles(...)) — a role that
@@ -83,6 +90,55 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] 
   },
 ];
 
+/** Small AppBar chip: shows live online/offline state and, when relevant, the offline-sync queue. */
+function ConnectionStatus() {
+  const online = useOnlineStatus();
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => subscribeToSyncQueue((state) => {
+    setPendingCount(state.pendingCount);
+    setSyncing(state.syncing);
+  }), []);
+
+  if (online && pendingCount === 0) {
+    return (
+      <Tooltip title="מחובר לרשת">
+        <Chip
+          icon={<WifiIcon fontSize="small" />}
+          label="מקוון"
+          size="small"
+          sx={{ height: 24, bgcolor: "rgba(255,255,255,0.15)", color: "white", "& .MuiChip-icon": { color: "white" } }}
+        />
+      </Tooltip>
+    );
+  }
+
+  const label = !online
+    ? pendingCount > 0
+      ? `לא מקוון · ${pendingCount} ממתינים`
+      : "לא מקוון"
+    : `${pendingCount} ממתינים לסנכרון`;
+
+  return (
+    <Tooltip title={online ? "יש דיווחים ממתינים לסנכרון — לחצו לניסיון סנכרון" : "אין חיבור לרשת — הדיווחים החדשים יישמרו במכשיר"}>
+      <Chip
+        icon={syncing ? <CircularProgress size={14} color="inherit" /> : !online ? <WifiOffIcon fontSize="small" /> : <SyncIcon fontSize="small" />}
+        label={syncing ? "מסנכרן..." : label}
+        size="small"
+        onClick={online && pendingCount > 0 && !syncing ? () => trySync() : undefined}
+        sx={{
+          height: 24,
+          bgcolor: "warning.main",
+          color: "warning.contrastText",
+          cursor: online && pendingCount > 0 && !syncing ? "pointer" : "default",
+          "& .MuiChip-icon": { color: "inherit" },
+        }}
+      />
+    </Tooltip>
+  );
+}
+
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -118,6 +174,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               </Button>
             ))}
           </Stack>
+          <ConnectionStatus />
           {user && (
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
               <Stack alignItems="flex-end" spacing={0}>

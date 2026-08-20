@@ -322,8 +322,15 @@
 
   נבדק: `npx tsc -b` ללא שגיאות חדשות. אומת ישירות מול המודול (`import('/src/offline/syncQueue.ts')` בקונסולת הדפדפן, מול `RiskDB`/שרתי preview מקומיים): `enqueueIncidentReport` עם מטען + קובץ בדיוני שמר רשומה תקינה ב-IndexedDB (`getQueuedReports()` החזיר אותה במלואה); `trySync()` יצר בהצלחה אירוע אמיתי בשרת (`INC-2026-012`, אומת ישירות מול `GET /api/incidents`) וניקה את התור (`remainingCount: 0`). אימות אינטראקציה מלא מול ה-UI (מילוי האשף ולחיצה על "שלח דיווח" תוך ניתוק השרת) נתקל במגבלת תשתית של ה-Browser pane של הכלים בסבב הזה — קליקים/הקלדות דרך `computer` לא תמיד הגיעו ל-DOM בפועל (נצפה גם ב-`login`/ב-Autocomplete של הטופס), ולכן הזרימה אומתה ברמת הלוגיקה/המודול ישירות במקום דרך UI end-to-end; קוד ה-`IncidentReport.tsx` עצמו עבר type-check נקי ותואם ישירות ל-API שנבדק.
 
-- [ ] **אינדיקציית מצב חיבור** בממשק הדיווח.
+- [x] **אינדיקציית מצב חיבור** בממשק הדיווח.
   📁 `frontend/src/components/Layout.tsx`
+  ✅ בוצע ונבדק ב-branch `feature/connection-status-indicator`: נבנה על גבי "מנגנון Offline Sync" שהושלם במשימה הקודמת — `subscribeToSyncQueue`/`trySync` כבר קיימים ב-`frontend/src/offline/syncQueue.ts` וסיפקו את כל המידע הדרוש (מצב סנכרון + מונה ממתינים); נותר רק לחשוף חיווי גלובלי ב-AppBar במקום רק בבאנר המקומי של `IncidentReport.tsx`.
+
+  נוסף hook חדש **`frontend/src/hooks/useOnlineStatus.ts`**: עוטף `navigator.onLine` ומאזין לאירועי `online`/`offline` על ה-`window` כדי לעדכן בזמן אמת.
+
+  **`Layout.tsx`**: נוסף רכיב פנימי `ConnectionStatus` המוצג ב-AppBar (גלוי בכל מסכי האפליקציה, לא רק בדיווח אירוע — מיקום מרכזי יותר מהבאנר שנוסף במשימה הקודמת ל-`IncidentReport.tsx` בלבד) המשלב שני מקורות מידע: `useOnlineStatus()` ו-`subscribeToSyncQueue()`. שלושה מצבי תצוגה: (1) מקוון וללא דיווחים ממתינים — `Chip` ירקרק שקוף עם אייקון `WifiIcon` ו"מקוון"; (2) לא מקוון — `Chip` בצבע אזהרה (`warning`) עם `WifiOffIcon` ו"לא מקוון" (או "לא מקוון · N ממתינים" אם יש גם דיווחים בתור מהמנגנון הקודם); (3) מקוון אך עם דיווחים שטרם סונכרנו (מצב ביניים אחרי חזרת רשת, לפני שה-`trySync` האוטומטי הספיק לרוץ/הצליח) — `Chip` אזהרה לחיץ עם "N ממתינים לסנכרון" שמפעיל `trySync()` ידני בלחיצה, ומציג `CircularProgress` בזמן הסנכרון עצמו. `Tooltip` על כל מצב מסביר את המשמעות בעברית.
+
+  נבדק: `npx tsc -b` ללא שגיאות חדשות (רק פער `stylis` הקיים). נבדק בפועל מול `RiskDB` מקומי דרך שרת preview: כניסה כ-`dana.cohen@company.co.il` הציגה נכון Chip "מקוון" ב-AppBar. הדמיית ניתוק (`Object.defineProperty(navigator,'onLine',...)` + `dispatchEvent(new Event('offline'))` בקונסולה) עדכנה מיידית ל-"לא מקוון". הוספת דיווח לתור (`enqueueIncidentReport` דרך ייבוא ישיר של המודול) בזמן ניתוק עדכנה את הטקסט ל-"לא מקוון · 1 ממתינים". שחזור החיבור (`dispatchEvent(new Event('online'))`) הפך את ה-Chip לכפתור לחיץ "1 ממתינים לסנכרון"; קריאה ל-`trySync()` נכשלה כצפוי (`422`) מכיוון שמטען הבדיקה שהוזן ידנית היה חלקי (חסרים שדות חובה שאינם רלוונטיים לבדיקת ה-UI עצמה) — ה-Chip המשיך להציג נכון את מצב ה"ממתינים" ללא קריסה, ולאחר ניקוי התור וריענון הדף חזר Chip "מקוון" הרגיל. אימות אינטראקציית לחיצה מלאה על ה-Chip עצמו (`computer click`) נתקל שוב במגבלת האוטומציה המתועדת כבר במשימת ה-Offline Sync הקודמת; הפונקציונליות שמאחורי הלחיצה (`trySync()`) אומתה ישירות.
 
 ---
 
