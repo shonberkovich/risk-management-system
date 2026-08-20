@@ -51,5 +51,15 @@ class Settings(BaseSettings):
     # real reverse proxy / load balancer that terminates TLS.
     force_https: bool = False
 
+    # --- Notifications (services/notifications.py) ---
+    # Real Email/SMS/Push delivery is out of scope for this course demo (no SendGrid/Twilio/
+    # FCM account, no credentials to put here) — dispatch is always simulated (logged, not
+    # actually sent), see notifications.py module docstring. This flag doesn't toggle "real vs
+    # simulated" (there's only ever simulated); it's an operational kill-switch so the dispatch
+    # endpoint can be turned off (e.g. during a demo, or if alert volume is noisy) without
+    # touching code, the same graceful-degradation shape as sso_enabled and the ANTHROPIC_API_KEY
+    # check in routers/ai.py — degrade to a clean 503 rather than silently no-op.
+    notifications_enabled: bool = True
+
 
 settings = Settings()
