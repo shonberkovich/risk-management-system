@@ -610,7 +610,7 @@ class RetentionRecommendation(BaseModel):
 
 
 class AlertOut(BaseModel):
-    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    alert_type: Literal["geographic_exposure", "incident_concentration", "critical_incident"]
     severity: Literal["warning", "critical"]
     title: str
     message: str
@@ -624,7 +624,7 @@ class NotificationOut(BaseModel):
     recipient_name: str
     channel: Literal["EMAIL", "SMS", "PUSH"]
     contact: str
-    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    alert_type: Literal["geographic_exposure", "incident_concentration", "critical_incident"]
     severity: Literal["warning", "critical"]
     title: str
     message: str
@@ -675,7 +675,7 @@ class NotificationLogOut(BaseModel):
     actually dispatched (status="simulated"), as opposed to NotificationOut which
     also covers not-yet-sent preview routing. See TODO_SPEC.md §1."""
     log_id: int
-    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    alert_type: Literal["geographic_exposure", "incident_concentration", "critical_incident"]
     severity: NotificationSeverity
     recipient_role: str
     recipient_name: str

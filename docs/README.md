@@ -95,7 +95,7 @@
 | `auth.py` (`/api/auth`) | login/refresh/me/logout, שלד SSO (501 כברירת מחדל) | — (public) |
 | `properties.py` (`/api/properties`) | CRUD נכסים (מחיקה = soft delete, `is_active=False`) + פרופיל סיכון | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `risk_profiles.py` (`/api/properties/{id}/risk-profile`) | יצירה/עדכון סקר סיכונים (Asset_Risk_Profiles) — יחס 1:1 לנכס: POST פעם ראשונה בלבד (409 אם כבר קיים), PUT לעדכון (404 אם עוד אין) | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
-| `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד | תלוי endpoint — ראו הקוד |
+| `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד; אירוע CRITICAL פותח אוטומטית משימת מיטיגציה + כרטיס ERP מדומה + התראת Push/SMS/Email מדומה לנמענים פעילים | תלוי endpoint — ראו הקוד |
 | `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
 | `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
 | `claims.py` (`/api/claims`) | פתיחת/עדכון תביעות, תשלומים, רזרבות (`Claim_Reserves`) | RISK_MANAGER/CFO/ADJUSTER/ADMIN |
