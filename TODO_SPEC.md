@@ -459,8 +459,11 @@
 
 ## שלב 10 — Quality & Ops
 
-- [ ] **בדיקות יחידה לשירותי החישוב** (TIV, MFL, Loss Ratio, ROI, VaR).
+- [x] **בדיקות יחידה לשירותי החישוב** (TIV, MFL, Loss Ratio, ROI, VaR).
   📁 תיקייה חדשה: `backend/tests/`
+  ✅ בוצע ב-branch `feature/backend-unit-tests`: נוסף `pytest>=8.3` ל-`requirements.txt` ו-`pytest.ini` (`testpaths = tests`). נוצרה תיקייה חדשה `backend/tests/` עם `conftest.py` שמריץ נגד SQLite בזיכרון (לא מול `RiskDB` האמיתי) — `app/models.py` משתמש רק בטיפוסי SQLAlchemy פורטביליים (`Unicode`/`Numeric`/`Date`/...), ללא קונסטרוקטים ספציפיים ל-dialect של mssql, כך ש-`Base.metadata.create_all()` מול SQLite מספיק כדי להריץ את שכבת ה-ORM ואת שירותי החישוב הטהורים ללא צורך ב-SQL Server אמיתי (חשוב גם ל-CI עתידי, ראו המשימה הבאה). מכיוון ש-SQLite מבצע auto-increment רק על `INTEGER PRIMARY KEY` רגיל ולא על `BigInteger` (הטיפוס שבו משתמש `models.py` לכל המפתחות הראשיים), ה-fixtures מקצות מזהים באופן מפורש (מונה גלובלי ל-fixture) במקום להסתמך על auto-increment. נוספו fixtures ל-factory: `make_property`/`make_risk_profile`/`make_policy`/`make_incident`/`make_claim`/`make_mitigation_task`, כל אחד עם ברירות מחדל סבירות שניתנות לדריסה חלקית.
+
+  נוצרו שני קבצי בדיקה: `test_kpi.py` (TIV — סכימת נכסים פעילים בלבד, תיק ריק; MFL — נכס בודד, שני נכסים קרובים שמתאחדים לאשכול אחד עם MFL מצטבר, שני נכסים רחוקים שלא מתאחדים, תיק ללא פרופילי סיכון; Loss Ratio — חישוב תקין, סינון לפי שנה, הגנה מפני חלוקה באפס בפרמיה; `calculate_mitigation_roi` — חישוב תקין והחזרת `None` בעלות אפס; `calculate_property_risk_score` — משקל האש הגבוה ביותר מבין שלושת גורמי הסיכון, והנחת 20% בגין מתזים) ו-`test_simulation.py` (VaR/Monte Carlo — דטרמיניזם מלא עם `seed` זהה, `VaR99 >= VaR95 >= 0` ו-`worst_case >= VaR99` כתכונות מבניות שחייבות להתקיים בכל הרצה, תיק ריק מחזיר אפסים, נכס לא פעיל מוחרג, `horizon_years=3` מגדיל את הנזק הצפוי פי ~3 (בסבילות 20%, כי אלה שתי הרצות מונטה-קרלו בלתי-תלויות ולא אותה הרצה זרועה פעמיים), `simulate_property` מחזיר `None` לנכס ללא פרופיל סיכון/לא קיים, ותוצאת `simulate_property` על תיק בעל נכס יחיד זהה לתוצאת `run_portfolio_simulation` על אותו תיק). סה"כ 21 בדיקות. נבדק בפועל: `python -m pytest -q` → `21 passed` (ריצה מקומית, ~0.8 שניות, ללא תלות ב-`RiskDB`).
 
 - [ ] **בדיקות אינטגרציה ל-API** (אירועים, תביעות, פוליסות, הרשאות).
   📁 `backend/tests/`
