@@ -11,6 +11,12 @@ JWTs are signed with HS256 using `settings.jwt_secret_key`. Two token types are 
 - refresh token (longer-lived, `type: "refresh"`) — exchanged at `POST /api/auth/refresh`
   for a new access token. There is no server-side revocation list (see routers/auth.py
   docstring on `/logout`); this is a stateless-JWT tradeoff acceptable for a course demo.
+
+Key rotation: `decode_token` verifies against `settings.jwt_secret_key` first, then falls back
+to each of `settings.jwt_previous_secret_keys_list` in order. Signing (`_create_token`) only
+ever uses `jwt_secret_key` — rotating means moving the old key into the "previous" list and
+picking a new current one (see config.py for the full procedure), so tokens issued before the
+rotation keep verifying until they expire naturally instead of logging every user out at once.
 """
 from __future__ import annotations
 
@@ -71,10 +77,17 @@ class TokenError(Exception):
 
 
 def decode_token(token: str, expected_type: str) -> dict:
-    try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except jwt.PyJWTError as exc:
-        raise TokenError(str(exc)) from exc
+    # Try the current signing key first (the common case), then each previous key in turn —
+    # lets a rotated-out key keep verifying already-issued tokens. See module docstring.
+    last_error: jwt.PyJWTError | None = None
+    for key in (settings.jwt_secret_key, *settings.jwt_previous_secret_keys_list):
+        try:
+            payload = jwt.decode(token, key, algorithms=[settings.jwt_algorithm])
+            break
+        except jwt.PyJWTError as exc:
+            last_error = exc
+    else:
+        raise TokenError(str(last_error))
     if payload.get("type") != expected_type:
         raise TokenError(f"expected a {expected_type} token, got {payload.get('type')!r}")
     return payload
