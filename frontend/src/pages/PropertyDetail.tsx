@@ -39,6 +39,7 @@ import {
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import PropertyDialog from "../components/PropertyDialog";
+import RiskSurveyDialog from "../components/RiskSurveyDialog";
 import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatIls, formatIlsCompact } from "../format";
 
 const DOC_TYPE_OPTIONS = Object.keys(DOCUMENT_TYPE_LABELS);
@@ -97,9 +98,8 @@ function DocumentRow({ doc, onDelete, canWrite }: { doc: DocumentFile; onDelete:
 
 /** Full property drill-down (TODO_SPEC.md §5, "ניהול נכסים ותיק נכס") — the active
  * policy, documents, and risk survey for one property, plus edit/deactivate actions.
- * Risk-survey editing itself is out of scope here (shown read-only) — that's the next
- * TODO item, RiskSurveyDialog.tsx, which this page's risk-profile card is written to
- * plug into once it exists. */
+ * Risk-survey create/update is handled by RiskSurveyDialog.tsx (TODO_SPEC.md's next item),
+ * opened from the risk-profile card's "סקר חדש"/"עדכון סקר" button below. */
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const propertyId = Number(id);
@@ -109,6 +109,7 @@ export default function PropertyDetail() {
   const canWrite = !!user && PROPERTY_WRITE_ROLES.includes(user.role);
 
   const [editOpen, setEditOpen] = useState(false);
+  const [surveyOpen, setSurveyOpen] = useState(false);
   const [docType, setDocType] = useState(DOC_TYPE_OPTIONS[0]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -321,9 +322,16 @@ export default function PropertyDetail() {
         <Grid item xs={12} md={6}>
           <Card variant="outlined" sx={{ height: "100%" }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                סקר סיכונים
-              </Typography>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  סקר סיכונים
+                </Typography>
+                {canWrite && (
+                  <Button size="small" startIcon={<EditIcon />} onClick={() => setSurveyOpen(true)}>
+                    {p.risk_profile ? "עדכון סקר" : "סקר חדש"}
+                  </Button>
+                )}
+              </Stack>
               {p.risk_profile ? (
                 <Stack spacing={1.5}>
                   <Typography variant="caption" color="text.secondary">
@@ -425,6 +433,12 @@ export default function PropertyDetail() {
       </Card>
 
       <PropertyDialog open={editOpen} property={p} onClose={() => setEditOpen(false)} />
+      <RiskSurveyDialog
+        open={surveyOpen}
+        propertyId={propertyId}
+        existing={p.risk_profile}
+        onClose={() => setSurveyOpen(false)}
+      />
     </Stack>
   );
 }
