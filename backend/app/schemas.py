@@ -635,3 +635,52 @@ class ComplianceReportOut(BaseModel):
     summary: ComplianceReportSummaryOut
     framework_sections: list[ComplianceFrameworkSectionOut]
     entries: list[ComplianceRiskEntryOut]
+
+
+class MultiYearTrendOut(BaseModel):
+    year: int
+    revenue: float
+    net_income: float
+    total_assets: float
+    insurance_expense: float
+    claim_losses_paid: float
+    premium_paid: float
+    insurance_expense_to_revenue: float | None = None
+    net_income_margin: float | None = None
+    losses_to_asset_value: float | None = None
+    loss_ratio: float | None = None
+    revenue_growth_pct: float | None = None
+    losses_growth_pct: float | None = None
+
+
+class TrendSummaryOut(BaseModel):
+    years_covered: list[int]
+    revenue_cagr_pct: float | None = None
+    claim_losses_cagr_pct: float | None = None
+    avg_insurance_expense_to_revenue: float | None = None
+    avg_loss_ratio: float | None = None
+    cost_of_risk_outpacing_revenue: bool
+
+
+class CapitalAdequacyOut(BaseModel):
+    eligible_own_funds: float | None = None
+    solvency_capital_requirement: float
+    solvency_ratio_percent: float | None = None
+    status: str
+    scr_confidence_level: str
+    scr_simulation_iterations: int
+
+
+class ConcentrationDisclosureOut(BaseModel):
+    total_insured_value: float
+    maximum_foreseeable_loss: float
+    concentration_percent: float | None = None
+
+
+class RegulatoryReportOut(BaseModel):
+    generated_at: str
+    reporting_year: int | None = None
+    capital_adequacy: CapitalAdequacyOut
+    concentration_disclosure: ConcentrationDisclosureOut
+    multi_year_trends: list[MultiYearTrendOut]
+    trend_summary: TrendSummaryOut | None = None
