@@ -524,3 +524,17 @@ class GisRiskLayerOut(BaseModel):
     source_system: str
     as_of: str
     status: str
+
+
+class WeatherAlertOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    latitude: float
+    longitude: float
+    alert_type: str
+    severity: str
+    as_of: str
+    issued_at: str
+    source_system: str
+    status: str
