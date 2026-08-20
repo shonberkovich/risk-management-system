@@ -37,11 +37,18 @@ const ECONOMICS_ROLES = ["RISK_MANAGER", "CFO", "ADMIN"];
 // Weather is open to every authenticated role server-side (routers/integrations.py) — a
 // field worker at a property needs the warning as much as a risk officer does.
 
-const WEATHER_SEVERITY_COLOR: Record<string, "warning" | "error" | "default"> = {
-  low: "default",
-  moderate: "warning",
-  high: "error",
-  extreme: "error",
+// Real values from app/integrations/weather.py's _SEVERITIES/_ALERT_TYPES — not the
+// low/moderate/high/extreme scale used elsewhere in the app for incident severity.
+const WEATHER_SEVERITY_LABELS: Record<string, string> = { ADVISORY: "מייעצת", WATCH: "מעקב", WARNING: "אזהרה" };
+const WEATHER_SEVERITY_COLOR: Record<string, "info" | "warning" | "error" | "default"> = {
+  ADVISORY: "info",
+  WATCH: "warning",
+  WARNING: "error",
+};
+const WEATHER_ALERT_TYPE_LABELS: Record<string, string> = {
+  STORM: "סופה",
+  FLOOD_WARNING: "אזהרת הצפה",
+  HEATWAVE: "גל חום",
 };
 
 function SectionHeader({
@@ -281,9 +288,13 @@ export default function Integrations() {
                   {(weatherAlerts.data ?? []).map((row) => (
                     <TableRow key={`${row.property_id}-${row.issued_at}`} hover>
                       <TableCell>{row.name}</TableCell>
-                      <TableCell>{row.alert_type}</TableCell>
+                      <TableCell>{WEATHER_ALERT_TYPE_LABELS[row.alert_type] ?? row.alert_type}</TableCell>
                       <TableCell>
-                        <Chip size="small" label={row.severity} color={WEATHER_SEVERITY_COLOR[row.severity] ?? "default"} />
+                        <Chip
+                          size="small"
+                          label={WEATHER_SEVERITY_LABELS[row.severity] ?? row.severity}
+                          color={WEATHER_SEVERITY_COLOR[row.severity] ?? "default"}
+                        />
                       </TableCell>
                       <TableCell>{formatDateTime(row.issued_at)}</TableCell>
                       <TableCell>{row.source_system}</TableCell>

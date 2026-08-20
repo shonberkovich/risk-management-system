@@ -17,7 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 
-import { fetchIncidents } from "../api/client";
+import { fetchIncidents, fetchWeatherAlerts } from "../api/client";
+import AlertsBanner from "../components/AlertsBanner";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
 import {
@@ -64,12 +65,18 @@ export default function FieldWorkerDashboard() {
 
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
   const recent = (incidents.data ?? []).slice(0, RECENT_LIMIT);
+  // Weather is open to every authenticated role server-side — a field worker on-site
+  // needs a storm/flood warning as much as (if not more than) a risk officer does
+  // (TODO_SPEC.md §5, "שילוב מזג אוויר").
+  const weatherAlerts = useQuery({ queryKey: ["weather-alerts"], queryFn: () => fetchWeatherAlerts() });
 
   return (
     <Stack spacing={3}>
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
         דשבורד שטח
       </Typography>
+
+      {weatherAlerts.data && <AlertsBanner alerts={[]} weatherAlerts={weatherAlerts.data} />}
 
       <Card
         variant="outlined"

@@ -26,6 +26,7 @@ import {
   fetchMapPoints,
   fetchProperties,
   fetchRiskMatrix,
+  fetchWeatherAlerts,
   type RiskMatrixCell,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -58,6 +59,7 @@ export default function Dashboard() {
 function ExecutiveDashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const alerts = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
+  const weatherAlerts = useQuery({ queryKey: ["weather-alerts"], queryFn: () => fetchWeatherAlerts() });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
@@ -103,7 +105,7 @@ function ExecutiveDashboard() {
         דשבורד מנהלים
       </Typography>
 
-      {alerts.data && <AlertsBanner alerts={alerts.data} />}
+      {alerts.data && <AlertsBanner alerts={alerts.data} weatherAlerts={weatherAlerts.data} />}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
