@@ -104,6 +104,10 @@ export default function IncidentReport() {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const draftResumeAttempted = useRef(false);
+  // Tracks whether the current `property` selection came from the GPS auto-pick below
+  // (vs. a deliberate manual choice) — a fresh GPS fix is allowed to update an
+  // auto-pick, but must never silently override a property the user picked themselves.
+  const autoSelectedPropertyId = useRef<number | null>(null);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const geo = useGeolocation();
@@ -152,6 +156,22 @@ export default function IncidentReport() {
         .sort((a, b) => a.distance - b.distance)
         .slice(0, 5)
     : [];
+
+  // Auto-select the nearest property once a GPS fix resolves — "בוחר אוטומטית את הנכס
+  // הקרוב ביותר" (TODO_SPEC.md). Still overridable: the chip list below lets the user
+  // pick a different nearby property, and the Autocomplete lets them pick any property
+  // at all — this effect only ever overwrites a *previous auto-pick*, never a manual one.
+  useEffect(() => {
+    if (nearbyProperties.length === 0) return;
+    const nearest = nearbyProperties[0].property;
+    if (property === null || property.property_id === autoSelectedPropertyId.current) {
+      autoSelectedPropertyId.current = nearest.property_id;
+      setProperty(nearest);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed off the
+    // GPS fix (geo.coords) and the property list, not the derived `nearbyProperties`
+    // array (a new reference every render) or `property` (would fight the user's own picks).
+  }, [geo.coords, properties]);
 
   const classifyMutation = useMutation({
     mutationFn: () => classifyIncident(description),
