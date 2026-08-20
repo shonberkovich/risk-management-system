@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -7,12 +7,44 @@ from sqlalchemy.orm import Session, selectinload
 from app import models, schemas
 from app.database import get_db
 from app.dependencies.permissions import require_roles
+from app.integrations import erp
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
 _STATUS_WRITE_ROLES = ("RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "ADMIN")
 
 _STATUS_ORDER = ["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED", "CLOSED"]
+
+# Days a CRITICAL-incident follow-up task gets before it's OVERDUE — short on
+# purpose, this is the "someone must look at this now" branch, not routine
+# mitigation planning.
+_CRITICAL_TICKET_TASK_DUE_DAYS = 3
+
+
+def _trigger_critical_incident_ticket(db: Session, incident: models.Incident) -> None:
+    """Fires the "auto-ticket on critical incident" side effect: a real
+    Mitigation_Tasks row (so it shows up on the mitigation board like any other
+    task) plus a simulated ERP/maintenance ticket (see
+    app/integrations/erp.py:open_maintenance_ticket). No-op below CRITICAL
+    severity. Caller is responsible for the incident already being committed/
+    flushed (has an incident_id) before calling this."""
+    if incident.severity_level != "CRITICAL":
+        return
+
+    task = models.MitigationTask(
+        property_id=incident.property_id,
+        title=f"טיפול דחוף באירוע קריטי {incident.incident_code} ({incident.hazard_type})",
+        cost_estimate=0,
+        expected_annual_savings=0,
+        due_date=date.today() + timedelta(days=_CRITICAL_TICKET_TASK_DUE_DAYS),
+        status="OPEN",
+        assigned_to_user_id=None,
+        created_at=datetime.now(),
+    )
+    db.add(task)
+    db.commit()
+
+    erp.open_maintenance_ticket(incident)
 
 
 def _next_incident_code(db: Session) -> str:
@@ -116,6 +148,10 @@ def create_incident(
     db.add(incident)
     db.commit()
     db.refresh(incident)
+
+    if not incident.is_draft:
+        _trigger_critical_incident_ticket(db, incident)
+
     return incident
 
 
@@ -164,6 +200,9 @@ def submit_draft_incident(
     incident.is_draft = False
     db.commit()
     db.refresh(incident)
+
+    _trigger_critical_incident_ticket(db, incident)
+
     return incident
 
 
