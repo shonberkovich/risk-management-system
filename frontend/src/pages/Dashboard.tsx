@@ -28,6 +28,7 @@ import {
   fetchRiskMatrix,
   type RiskMatrixCell,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import AlertsBanner from "../components/AlertsBanner";
 import CashflowChart from "../components/CashflowChart";
 import ClaimsTable from "../components/ClaimsTable";
@@ -37,10 +38,24 @@ import LossRatioTrendChart from "../components/LossRatioTrendChart";
 import RiskMap from "../components/RiskMap";
 import RiskMatrix from "../components/RiskMatrix";
 import { formatIlsCompact, formatPercent } from "../format";
+import FieldWorkerDashboard from "./FieldWorkerDashboard";
 
 const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
 
+/** Routes "/" to a role-appropriate dashboard rather than gating individual widgets on
+ * the executive view below: FIELD_WORKER has no server-side access to the financial
+ * data (KPIs, cashflow, policies — see routers/analytics.py's _FINANCIAL_READ_ROLES)
+ * this page is built around, so it gets FieldWorkerDashboard.tsx instead
+ * (TODO_SPEC.md §5, "דשבורד מותאם לשטח"). */
 export default function Dashboard() {
+  const { user } = useAuth();
+  if (user?.role === "FIELD_WORKER") {
+    return <FieldWorkerDashboard />;
+  }
+  return <ExecutiveDashboard />;
+}
+
+function ExecutiveDashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const alerts = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
