@@ -140,7 +140,7 @@ CREATE TABLE dbo.Insurance_Policies (
     annual_premium             DECIMAL(18,2) NOT NULL,
     status                      NVARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('ACTIVE','EXPIRED','PENDING_RENEWAL')),
-    per_event_limit             DECIMAL(18,2) NULL,          -- גבול אחריות לאירוע בודד
+    per_event_limit             NVARCHAR(64) NULL,           -- גבול אחריות לאירוע בודד; מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2)
     bi_waiting_period_hours     SMALLINT NULL,                -- תקופת המתנה לכיסוי אובדן רווחים (שעות)
     exclusions                  NVARCHAR(MAX) NULL           -- החרגות פוליסה (טקסט חופשי / JSON)
 );
@@ -154,7 +154,7 @@ GO
 CREATE TABLE dbo.Policy_Assets (
     policy_id           BIGINT NOT NULL REFERENCES dbo.Insurance_Policies(policy_id),
     property_id           BIGINT NOT NULL REFERENCES dbo.Properties(property_id),
-    specific_deductible     DECIMAL(18,2) NULL,
+    specific_deductible     NVARCHAR(64) NULL,        -- מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2)
     PRIMARY KEY (policy_id, property_id)
 );
 GO
@@ -232,7 +232,7 @@ CREATE TABLE dbo.Claims (
     approved_amount                   DECIMAL(18,2) NOT NULL DEFAULT 0,
     claim_status                        NVARCHAR(20) NOT NULL DEFAULT 'DRAFT'
         CHECK (claim_status IN ('DRAFT','SUBMITTED','IN_ADJUSTMENT','APPROVED','REJECTED','SETTLED')),
-    adjuster_name                         NVARCHAR(100) NULL,
+    adjuster_name                         NVARCHAR(255) NULL,   -- מוצפן at-rest (Fernet, ר' app/services/encryption.py) — הורחב מ-100 כדי להכיל טקסט מוצפן
     expected_payment_date                   DATE NULL,
     created_at                                DATETIME2 NOT NULL DEFAULT SYSDATETIME()
 );
@@ -314,8 +314,8 @@ CREATE TABLE dbo.Audit_Log (
     entity_id                 BIGINT NOT NULL,
     action                       NVARCHAR(20) NOT NULL
         CHECK (action IN ('CREATE','UPDATE','DELETE')),
-    old_value                     NVARCHAR(MAX) NULL,   -- JSON snapshot before change
-    new_value                       NVARCHAR(MAX) NULL, -- JSON snapshot after change
+    old_value                     NVARCHAR(MAX) NULL,   -- JSON snapshot before change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
+    new_value                       NVARCHAR(MAX) NULL, -- JSON snapshot after change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
     timestamp                         DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
     ip_address                          NVARCHAR(45) NULL  -- IPv4/IPv6
 );
