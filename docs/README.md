@@ -19,10 +19,11 @@
                          │ REST (JSON) — proxy /api → :8000, JWT bearer
 ┌───────────────────────▼─────────────────────────────────────────┐
 │  Backend — Python 3.12 · FastAPI · SQLAlchemy 2.0 ORM           │
-│  19 routers (auth/RBAC, properties, risk_profiles, incidents,   │
+│  20 routers (auth/RBAC, properties, risk_profiles, incidents,   │
 │  policies, claims, mitigation, media, documents, analytics,     │
 │  simulation, retention, financials, compliance, integrations,   │
-│  notifications, audit-log, users, ai) — see §5 for the full list│
+│  notifications, audit-log, users, role_permissions, ai)         │
+│  — see §5 for the full list                                     │
 │  ~15 services: kpi / cashflow / retention / simulation /        │
 │  financials / compliance / notifications / storage / auth /     │
 │  encryption / llm (Anthropic) + integrations/ (erp, gis,        │
@@ -109,6 +110,7 @@
 | `notifications.py` (`/api/notifications`) | ניתוב התראות Email/SMS/Push (מסומל) | RISK_MANAGER/CFO/ADMIN |
 | `audit.py` (`/api/audit-log`) | קריאה מיומן הביקורת, ADMIN-בלבד גם לקריאה | ADMIN (גם קריאה) |
 | `users.py` (`/api/users`) | רשימה פתוחה (UI pickers) + יצירה/עריכה/שינוי תפקיד/השבתה (`is_active`, נאכף מיידית גם על טוקן קיים) | ADMIN לכתיבה |
+| `role_permissions.py` (`/api/role-permissions`) | CRUD קטלוג הרשאות לפי תפקיד (`Role_Permissions`, מחליף את רשימת ה-Seed הקבועה) — **תיעודי בלבד**: אינו משפיע על אכיפת RBAC בפועל, שממשיכה להתבצע דרך `require_roles()` בכל router | ADMIN לכתיבה |
 | `ai.py` (`/api/ai`) | סיווג אירוע, דוח הנהלה (streaming), Q&A — כולם עם rate-limit | authenticated |
 
 מוסכמת RBAC: `Depends(require_roles())` ללא ארגומנטים = "מחייב התחברות, כל תפקיד"; עם ארגומנטים = תפקיד ברשימה בלבד (403 אחרת); ללא `Depends` כלל = פתוח (ראו `backend/app/dependencies/permissions.py`). רוב ה-`GET` נשארו פתוחים בכוונה כדי שדשבורדים ימשיכו לעבוד לפני התחברות; `/api/audit-log` הוא היוצא-מן-הכלל המכוון (גם קריאה חסומה ל-ADMIN, ראו [AuditLog.tsx](../frontend/src/pages/AuditLog.tsx)).
@@ -120,7 +122,7 @@ risk-management-system/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py, config.py, database.py, models.py, schemas.py
-│   │   ├── routers/         # 19 routers — ראו §6 לרשימה המלאה
+│   │   ├── routers/         # 20 routers — ראו §6 לרשימה המלאה
 │   │   ├── services/        # kpi, cashflow, retention, simulation, financials,
 │   │   │                    # compliance, notifications, storage, auth, encryption, llm
 │   │   ├── integrations/    # erp.py, gis.py, weather.py, economics.py (מסומלים, §9)

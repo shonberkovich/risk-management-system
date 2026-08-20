@@ -47,6 +47,27 @@ class UserCreate(BaseModel):
     password: str | None = None  # None = no local password (SSO-only), same as seed.py's convention
 
 
+class RolePermissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    role_permission_id: int
+    role: UserRole
+    permission_key: str
+    description: str | None = None
+
+
+class RolePermissionCreate(BaseModel):
+    role: UserRole
+    permission_key: str
+    description: str | None = None
+
+
+class RolePermissionUpdate(BaseModel):
+    """description only — role and permission_key together identify the row
+    (UQ_RolePermissions_RoleKey); changing either is really "delete this row, create a
+    different one", not an edit, so they're left out of the update shape."""
+    description: str | None = None
+
+
 class UserUpdate(BaseModel):
     """Partial update — also how role changes and disabling happen (is_active=False),
     rather than separate dedicated endpoints, same convention as ClaimUpdate covering

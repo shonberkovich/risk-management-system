@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Numeric, SmallInteger, Unicode, UnicodeText,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -220,6 +221,15 @@ class AuditLog(Base):
 
 class RolePermission(Base):
     __tablename__ = "Role_Permissions"
+    __table_args__ = (
+        # Mirrors schema.sql's UQ_RolePermissions_RoleKey — was previously only
+        # enforced at the DB level (SQL Server), not on the in-memory SQLite test DB
+        # built from this metadata, so tests couldn't catch a duplicate (role,
+        # permission_key) pair. See CLAUDE.md's note on schema.sql/models.py index
+        # mirroring gaps — this one is a data-integrity constraint, not just an index,
+        # so it's mirrored here rather than left as a documented gap.
+        UniqueConstraint("role", "permission_key", name="uq_role_permissions_role_key"),
+    )
 
     role_permission_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     role: Mapped[str] = mapped_column(Unicode(30))
