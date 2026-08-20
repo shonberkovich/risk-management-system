@@ -38,6 +38,7 @@ import {
   type Incident,
   type IncidentClassification,
   type IncidentCreate,
+  type IncidentUpdate,
   type OperationalImpact,
   type Property,
   type SeverityLevel,
@@ -45,7 +46,14 @@ import {
 import MediaUploader from "../components/MediaUploader";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
-import { enqueueIncidentReport, subscribeToSyncQueue, trySync } from "../offline/syncQueue";
+import {
+  enqueueDraftSubmit,
+  enqueueDraftUpdate,
+  enqueueIncidentReport,
+  enqueueMediaUpload,
+  subscribeToSyncQueue,
+  trySync,
+} from "../offline/syncQueue";
 
 const STEPS = ["מיקום וזיהוי הנכס", "פרטי הנזק והחומרה", "אומדן כספי ותיאור", "תיעוד ושליחה"];
 
@@ -185,26 +193,28 @@ export default function IncidentReport() {
     },
   });
 
+  type SaveDraftResult =
+    | { offline: false; incident: Incident }
+    | { offline: true; hadExistingDraftId: boolean };
+
   const saveDraftMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<SaveDraftResult> => {
       const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
-      if (draftId != null) {
-        return updateDraftIncident(draftId, {
-          property_id: property?.property_id,
-          incident_timestamp: timestamp ? new Date(timestamp).toISOString() : undefined,
-          hazard_type: hazardType || undefined,
-          severity_level: severity || undefined,
-          operational_impact: impact || undefined,
-          initial_estimated_loss: loss ? Number(loss) : undefined,
-          description,
-          business_interruption_requested: businessInterruption,
-          reported_coordinates: reportedCoordinates,
-        });
-      }
+      const draftUpdatePayload: IncidentUpdate = {
+        property_id: property?.property_id,
+        incident_timestamp: timestamp ? new Date(timestamp).toISOString() : undefined,
+        hazard_type: hazardType || undefined,
+        severity_level: severity || undefined,
+        operational_impact: impact || undefined,
+        initial_estimated_loss: loss ? Number(loss) : undefined,
+        description,
+        business_interruption_requested: businessInterruption,
+        reported_coordinates: reportedCoordinates,
+      };
       // Draft rows still need a value in every required column — fields the
       // user hasn't reached yet get a placeholder that PATCH will overwrite
       // once they fill them in (see update_draft_incident in incidents.py).
-      return createIncident({
+      const newDraftPayload: IncidentCreate = {
         property_id: property!.property_id,
         incident_timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
         hazard_type: hazardType || "OTHER",
@@ -215,9 +225,41 @@ export default function IncidentReport() {
         is_draft: true,
         business_interruption_requested: businessInterruption,
         reported_coordinates: reportedCoordinates,
-      });
+      };
+      try {
+        const incident = draftId != null
+          ? await updateDraftIncident(draftId, draftUpdatePayload)
+          : await createIncident(newDraftPayload);
+        return { offline: false, incident };
+      } catch (err) {
+        const isNetworkFailure = !navigator.onLine || (isAxiosError(err) && !err.response);
+        if (!isNetworkFailure) throw err;
+
+        if (draftId != null) {
+          // A draft that already has a server-side id: queue the edit against that same
+          // id, so it applies to the existing draft instead of creating a duplicate.
+          await enqueueDraftUpdate(draftId, draftUpdatePayload, []);
+        } else {
+          // First-ever save of this draft, offline: no server-side id exists yet to PATCH
+          // against, so this queues as a plain "create" (is_draft: true) — see
+          // src/offline/syncQueue.ts's module docstring for why that's the scope boundary
+          // ("resume this draft on another device/after closing the tab" isn't supported
+          // until the create actually reaches the server and gets a real id).
+          await enqueueIncidentReport(newDraftPayload, []);
+        }
+        return { offline: true, hadExistingDraftId: draftId != null };
+      }
     },
-    onSuccess: (incident) => {
+    onSuccess: (result) => {
+      if (result.offline) {
+        setDraftNotice(
+          result.hadExistingDraftId
+            ? `אין חיבור לרשת — העדכון לטיוטה (מס' ${draftCode}) נשמר במכשיר וישלח אוטומטית ברגע שהחיבור יחזור.`
+            : "אין חיבור לרשת — הטיוטה נשמרה במכשיר וישלח אוטומטית ברגע שהחיבור יחזור. שימו לב: לא ניתן לחדש אותה במכשיר/הפעלה אחרים עד שהסנכרון יושלם.",
+        );
+        return;
+      }
+      const { incident } = result;
       setDraftId(incident.incident_id);
       setDraftCode(incident.incident_code);
       localStorage.setItem(DRAFT_STORAGE_KEY, String(incident.incident_id));
@@ -230,34 +272,34 @@ export default function IncidentReport() {
   const submitMutation = useMutation({
     mutationFn: async (): Promise<SubmitResult> => {
       const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
+      const draftUpdatePayload: IncidentUpdate = {
+        property_id: property!.property_id,
+        incident_timestamp: new Date(timestamp).toISOString(),
+        hazard_type: hazardType as HazardType,
+        severity_level: severity as SeverityLevel,
+        operational_impact: impact as OperationalImpact,
+        initial_estimated_loss: Number(loss) || 0,
+        description,
+        business_interruption_requested: businessInterruption,
+        reported_coordinates: reportedCoordinates,
+      };
       try {
         if (draftId != null) {
-          await updateDraftIncident(draftId, {
-            property_id: property!.property_id,
-            incident_timestamp: new Date(timestamp).toISOString(),
-            hazard_type: hazardType as HazardType,
-            severity_level: severity as SeverityLevel,
-            operational_impact: impact as OperationalImpact,
-            initial_estimated_loss: Number(loss) || 0,
-            description,
-            business_interruption_requested: businessInterruption,
-            reported_coordinates: reportedCoordinates,
-          });
+          await updateDraftIncident(draftId, draftUpdatePayload);
           const incident = await submitDraftIncident(draftId);
           return { offline: false, incident };
         }
         const incident = await createIncident({
+          ...draftUpdatePayload,
           property_id: property!.property_id,
-          incident_timestamp: new Date(timestamp).toISOString(),
-          hazard_type: hazardType as HazardType,
-          severity_level: severity as SeverityLevel,
-          operational_impact: impact as OperationalImpact,
+          incident_timestamp: draftUpdatePayload.incident_timestamp!,
+          hazard_type: draftUpdatePayload.hazard_type!,
+          severity_level: draftUpdatePayload.severity_level!,
+          operational_impact: draftUpdatePayload.operational_impact!,
           initial_estimated_loss: Number(loss) || 0,
           description,
           ai_classified: aiResult !== null,
           ai_confidence: aiResult?.confidence ?? null,
-          business_interruption_requested: businessInterruption,
-          reported_coordinates: reportedCoordinates,
         });
         return { offline: false, incident };
       } catch (err) {
@@ -267,22 +309,26 @@ export default function IncidentReport() {
         const isNetworkFailure = !navigator.onLine || (isAxiosError(err) && !err.response);
         if (!isNetworkFailure) throw err;
 
-        // Offline fallback only ever queues a full new-incident submission — draft PATCH/submit
-        // itself isn't queued (see src/offline/syncQueue.ts for the rationale).
-        const payload: IncidentCreate = {
-          property_id: property!.property_id,
-          incident_timestamp: new Date(timestamp).toISOString(),
-          hazard_type: hazardType as HazardType,
-          severity_level: severity as SeverityLevel,
-          operational_impact: impact as OperationalImpact,
-          initial_estimated_loss: Number(loss) || 0,
-          description,
-          ai_classified: aiResult !== null,
-          ai_confidence: aiResult?.confidence ?? null,
-          business_interruption_requested: businessInterruption,
-          reported_coordinates: reportedCoordinates,
-        };
-        await enqueueIncidentReport(payload, mediaFiles);
+        if (draftId != null) {
+          // This draft already has a server-side id — queue *finalizing that same draft*
+          // (PATCH + submit) rather than a brand-new incident, so syncing doesn't produce
+          // a duplicate report alongside the original draft.
+          await enqueueDraftSubmit(draftId, draftUpdatePayload, mediaFiles);
+        } else {
+          const payload: IncidentCreate = {
+            ...draftUpdatePayload,
+            property_id: property!.property_id,
+            incident_timestamp: draftUpdatePayload.incident_timestamp!,
+            hazard_type: draftUpdatePayload.hazard_type!,
+            severity_level: draftUpdatePayload.severity_level!,
+            operational_impact: draftUpdatePayload.operational_impact!,
+            initial_estimated_loss: Number(loss) || 0,
+            description,
+            ai_classified: aiResult !== null,
+            ai_confidence: aiResult?.confidence ?? null,
+          };
+          await enqueueIncidentReport(payload, mediaFiles);
+        }
         return { offline: true };
       }
     },
@@ -298,16 +344,23 @@ export default function IncidentReport() {
       const { incident } = result;
       setMediaUploadError(null);
       if (mediaFiles.length > 0) {
-        const failed: string[] = [];
+        const failed: File[] = [];
         for (const file of mediaFiles) {
           try {
             await uploadIncidentMedia(incident.incident_id, file);
           } catch {
-            failed.push(file.name);
+            failed.push(file);
           }
         }
         if (failed.length > 0) {
-          setMediaUploadError(`העלאת הקבצים הבאים נכשלה: ${failed.join(", ")}. הדיווח עצמו נשלח בהצלחה.`);
+          // The report itself is already safely on the server (we're in the online success
+          // branch) — a photo upload failing here is almost always the network dropping
+          // mid-flow, not a bad file, so queue those specific photos against the now-known
+          // incident id instead of just discarding them; trySync will retry once reconnected.
+          await enqueueMediaUpload(incident.incident_id, failed);
+          setMediaUploadError(
+            `אין חיבור לרשת — הקבצים הבאים נשמרו במכשיר ויעלו אוטומטית ברגע שהחיבור יחזור: ${failed.map((f) => f.name).join(", ")}. הדיווח עצמו נשלח בהצלחה.`,
+          );
         }
       }
       localStorage.removeItem(DRAFT_STORAGE_KEY);
