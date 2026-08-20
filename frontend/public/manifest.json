@@ -1,0 +1,18 @@
+{
+  "name": "RMIS - מערכת ניהול סיכונים",
+  "short_name": "RMIS",
+  "description": "מערכת ניהול סיכונים ותביעות ביטוח - נכסים, אירועים, פוליסות ותביעות",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "dir": "rtl",
+  "lang": "he",
+  "background_color": "#f4f6f8",
+  "theme_color": "#1e5b8a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
