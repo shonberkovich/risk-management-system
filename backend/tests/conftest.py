@@ -14,12 +14,28 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
-from sqlalchemy import create_engine
+from fastapi.testclient import TestClient
+from sqlalchemy import BigInteger, create_engine
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.database import Base
+from app.database import Base, get_db
+from app.services.auth import create_access_token, hash_password
+
+
+# SQLite only auto-increments a primary key column whose *declared* type is exactly
+# "INTEGER" (its ROWID-alias rule) — "BIGINT" (what SQLAlchemy's BigInteger normally
+# compiles to, and what every primary key in app/models.py uses, to match SQL Server)
+# is just a regular NOT NULL column with no default there, so router code that inserts
+# a row without setting the PK by hand (the normal pattern everywhere in app/routers/,
+# relying on SQL Server IDENTITY) would fail on SQLite with a NOT NULL violation. This
+# makes the SQLite dialect compile BigInteger as INTEGER so its autoincrement rule
+# applies — dialect-scoped, so it has no effect on the real mssql engine.
+@compiles(BigInteger, "sqlite")
+def _bigint_as_integer_on_sqlite(type_, compiler, **kw):
+    return "INTEGER"
 
 
 @pytest.fixture()
@@ -44,6 +60,78 @@ def db(engine) -> Session:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture()
+def client(engine, monkeypatch):
+    """FastAPI TestClient wired to the same in-memory SQLite engine as the `db` fixture
+    (both are bound to `engine`, and StaticPool means every session shares the one
+    underlying SQLite connection — so data a test writes via `db`/the `make_*` factory
+    fixtures is visible to requests made through this client, and vice versa).
+
+    Two things need overriding to keep the whole request cleanly inside SQLite:
+    1. `app.database.get_db` — the normal FastAPI dependency-injection path.
+    2. `app.middleware.audit.SessionLocal` — AuditLogMiddleware opens its own session
+       directly from the module-level `SessionLocal` (it runs outside the DI graph),
+       which by default is bound to the real SQL Server engine; left un-patched, every
+       mutating request in a test would try to open a real SQL Server connection.
+    """
+    import app.middleware.audit as audit_middleware
+    from app.main import app
+
+    session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    def _override_get_db():
+        session = session_local()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    monkeypatch.setattr(audit_middleware, "SessionLocal", session_local)
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def make_user(db: Session):
+    """Factory fixture: make_user(role="ADMIN", **overrides) -> (User, auth_headers).
+    Password is always DEMO_PASSWORD (matches app/seed.py's convention) — tests log in
+    through the real /api/auth/login flow rather than minting tokens by hand, so the
+    integration tests actually exercise the login endpoint too."""
+    counter = {"n": 0}
+    DEMO_PASSWORD = "Demo1234!"
+
+    def _make(role: str = "ADMIN", **overrides) -> models.User:
+        counter["n"] += 1
+        n = counter["n"]
+        defaults = dict(
+            user_id=n,
+            full_name=f"משתמש בדיקה {n}",
+            email=f"test-user-{n}@example.com",
+            role=role,
+            password_hash=hash_password(DEMO_PASSWORD),
+            created_at=datetime(2024, 1, 1),
+        )
+        defaults.update(overrides)
+        user = models.User(**defaults)
+        db.add(user)
+        db.commit()
+        return user
+
+    return _make
+
+
+def auth_headers(user: models.User) -> dict[str, str]:
+    """Bearer header for `user`, minted directly via create_access_token (not through
+    /api/auth/login) — used by tests that only care about RBAC on a *different*
+    endpoint and don't need to re-exercise the login flow each time."""
+    token = create_access_token(user.user_id, user.role)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
@@ -74,7 +162,7 @@ def make_property(db: Session):
         defaults.update(overrides)
         prop = models.Property(**defaults)
         db.add(prop)
-        db.flush()
+        db.commit()
         return prop
 
     return _make
@@ -99,7 +187,7 @@ def make_risk_profile(db: Session):
         defaults.update(overrides)
         profile = models.AssetRiskProfile(**defaults)
         db.add(profile)
-        db.flush()
+        db.commit()
         return profile
 
     return _make
@@ -126,7 +214,7 @@ def make_policy(db: Session):
         defaults.update(overrides)
         policy = models.InsurancePolicy(**defaults)
         db.add(policy)
-        db.flush()
+        db.commit()
         return policy
 
     return _make
@@ -155,7 +243,7 @@ def make_incident(db: Session):
         defaults.update(overrides)
         incident = models.Incident(**defaults)
         db.add(incident)
-        db.flush()
+        db.commit()
         return incident
 
     return _make
@@ -182,7 +270,7 @@ def make_claim(db: Session):
         defaults.update(overrides)
         claim = models.Claim(**defaults)
         db.add(claim)
-        db.flush()
+        db.commit()
         return claim
 
     return _make
@@ -208,7 +296,7 @@ def make_mitigation_task(db: Session):
         defaults.update(overrides)
         task = models.MitigationTask(**defaults)
         db.add(task)
-        db.flush()
+        db.commit()
         return task
 
     return _make
