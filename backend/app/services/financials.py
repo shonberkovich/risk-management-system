@@ -24,10 +24,13 @@ this module derives per-year totals from them:
     the fixed-assumption pattern used throughout this service layer (e.g.
     retention.PREMIUM_SURCHARGE_RATE) since this is a course demo, not a GL system.
 """
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.services import kpi, simulation
 
 
 def _annual_claim_losses(db: Session) -> dict[int, float]:
@@ -152,4 +155,90 @@ def calculate_trend_summary(db: Session) -> dict | None:
             and _cagr(first["insurance_expense"], last["insurance_expense"]) is not None
             and _cagr(first["insurance_expense"], last["insurance_expense"]) > _cagr(first["revenue"], last["revenue"])
         ),
+    }
+
+
+# --- Regulatory disclosure report (Capital Market Authority / Solvency II style) -----
+#
+# Solvency II's Pillar 1 (and the equivalent Israeli Capital Market, Insurance and
+# Savings Authority — רשות שוק ההון — capital regime it's modeled on) boils down to one
+# headline ratio: Eligible Own Funds / Solvency Capital Requirement (SCR), where SCR is
+# defined as the Value-at-Risk of the insurer's own funds at 99.5% confidence over one
+# year. This module doesn't run an insurer's balance sheet, but the same shape applies
+# to a corporate risk-management program: "if a 1-in-100-year bad year hit us, could our
+# balance sheet absorb it?" We approximate:
+#
+#   - Eligible own funds  -> latest Financial_Statements.total_assets (a simplifying
+#     proxy — a real filing would net liabilities out to shareholders' equity, but
+#     total_assets is the only balance-sheet figure this schema captures; documented
+#     assumption, consistent with financials.py's other simplifications).
+#   - SCR                 -> simulation.run_portfolio_simulation's VaR_99 (the closest
+#     analog available to Solvency II's 99.5% VaR; this schema's Monte Carlo model
+#     doesn't distinguish 99% from 99.5%, so 99% is used as-is rather than manufacturing
+#     false precision).
+#   - Solvency ratio       = own_funds / SCR * 100, with the two-tier status band Israeli
+#     regulation and Solvency II both use in spirit: below 100% is a capital breach
+#     requiring a recovery plan; 100-150% covers the regulatory minimum but below the
+#     "target capital" buffer regulators expect for resilience; 150%+ is adequate.
+#
+# Also included: TIV/MFL concentration disclosure (Pillar 3-style large-exposure
+# transparency) and the multi-year trend/ratio data above, all built from data already
+# on file — no new tables, no LLM calls, same as the rest of this module.
+
+_SCR_SIMULATION_ITERATIONS = 5_000
+_SOLVENCY_MINIMUM_PERCENT = 100.0
+_SOLVENCY_TARGET_PERCENT = 150.0
+
+
+def _solvency_status(ratio_percent: float | None) -> str:
+    if ratio_percent is None:
+        return "לא ניתן לחשב"
+    if ratio_percent < _SOLVENCY_MINIMUM_PERCENT:
+        return "הפרת דרישת הון (Breach)"
+    if ratio_percent < _SOLVENCY_TARGET_PERCENT:
+        return "מעל המינימום הרגולטורי, מתחת ליעד"
+    return "יעד הון מולא"
+
+
+def build_regulatory_report(db: Session, seed: int | None = None) -> dict:
+    """Capital-adequacy-style regulatory disclosure: Solvency ratio (own funds vs. a
+    VaR-based capital requirement), TIV/MFL concentration disclosure, and the
+    multi-year financial trend already computed by calculate_multi_year_trends /
+    calculate_trend_summary above. Read-only, same as build_iso31000_report.
+
+    seed is optional and only useful for a reproducible/deterministic SCR simulation
+    (e.g. tests); omit it for a fresh random draw each call.
+    """
+    trends = calculate_multi_year_trends(db)
+    trend_summary = calculate_trend_summary(db)
+    latest_year = trends[-1] if trends else None
+    own_funds = latest_year["total_assets"] if latest_year else None
+
+    sim = simulation.run_portfolio_simulation(db, iterations=_SCR_SIMULATION_ITERATIONS, seed=seed)
+    scr = sim["var_99"]
+
+    solvency_ratio_percent = round(own_funds / scr * 100, 1) if own_funds and scr else None
+
+    tiv = kpi.calculate_tiv(db)
+    mfl = kpi.calculate_mfl(db)
+    concentration_percent = round(mfl / tiv * 100, 2) if tiv else None
+
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "reporting_year": latest_year["year"] if latest_year else None,
+        "capital_adequacy": {
+            "eligible_own_funds": own_funds,
+            "solvency_capital_requirement": scr,
+            "solvency_ratio_percent": solvency_ratio_percent,
+            "status": _solvency_status(solvency_ratio_percent),
+            "scr_confidence_level": "99%",
+            "scr_simulation_iterations": _SCR_SIMULATION_ITERATIONS,
+        },
+        "concentration_disclosure": {
+            "total_insured_value": round(tiv, 2),
+            "maximum_foreseeable_loss": round(mfl, 2),
+            "concentration_percent": concentration_percent,
+        },
+        "multi_year_trends": trends,
+        "trend_summary": trend_summary,
     }

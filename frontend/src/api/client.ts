@@ -534,6 +534,55 @@ export interface ComplianceReport {
   entries: ComplianceRiskEntry[];
 }
 
+export interface MultiYearTrend {
+  year: number;
+  revenue: number;
+  net_income: number;
+  total_assets: number;
+  insurance_expense: number;
+  claim_losses_paid: number;
+  premium_paid: number;
+  insurance_expense_to_revenue: number | null;
+  net_income_margin: number | null;
+  losses_to_asset_value: number | null;
+  loss_ratio: number | null;
+  revenue_growth_pct: number | null;
+  losses_growth_pct: number | null;
+}
+
+export interface TrendSummary {
+  years_covered: [number, number];
+  revenue_cagr_pct: number | null;
+  claim_losses_cagr_pct: number | null;
+  avg_insurance_expense_to_revenue: number | null;
+  avg_loss_ratio: number | null;
+  cost_of_risk_outpacing_revenue: boolean;
+}
+
+export interface CapitalAdequacy {
+  eligible_own_funds: number | null;
+  solvency_capital_requirement: number;
+  solvency_ratio_percent: number | null;
+  status: string;
+  scr_confidence_level: string;
+  scr_simulation_iterations: number;
+}
+
+export interface ConcentrationDisclosure {
+  total_insured_value: number;
+  maximum_foreseeable_loss: number;
+  concentration_percent: number | null;
+}
+
+export interface RegulatoryReport {
+  generated_at: string;
+  reporting_year: number | null;
+  capital_adequacy: CapitalAdequacy;
+  concentration_disclosure: ConcentrationDisclosure;
+  multi_year_trends: MultiYearTrend[];
+  trend_summary: TrendSummary | null;
+}
+
 export interface IncidentMedia {
   media_id: number;
   incident_id: number;
@@ -715,6 +764,11 @@ export const fetchGeographicExposureClusters = () =>
 
 export const fetchIso31000Report = () =>
   api.get<ComplianceReport>("/compliance/iso31000-report").then((r) => r.data);
+
+export const fetchMultiYearTrends = () =>
+  api.get<MultiYearTrend[]>("/financials/trends").then((r) => r.data);
+export const fetchRegulatoryReport = () =>
+  api.get<RegulatoryReport>("/financials/regulatory-report").then((r) => r.data);
 
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);
