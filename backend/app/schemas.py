@@ -484,6 +484,21 @@ class AlertOut(BaseModel):
     threshold: float
 
 
+class NotificationOut(BaseModel):
+    recipient_role: str
+    recipient_name: str
+    channel: Literal["EMAIL", "SMS", "PUSH"]
+    contact: str
+    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    severity: Literal["warning", "critical"]
+    title: str
+    message: str
+    property_ids: list[int]
+    value: float
+    threshold: float
+    status: str | None = None  # None for a routing preview (not yet "sent"); "simulated" after dispatch
+
+
 class ErpBookValueOut(BaseModel):
     property_id: int
     property_code: str

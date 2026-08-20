@@ -14,6 +14,7 @@ from app.routers import (
     integrations,
     media,
     mitigation,
+    notifications,
     policies,
     properties,
     retention,
@@ -62,6 +63,7 @@ app.include_router(documents.router)
 app.include_router(users.router)
 app.include_router(ai.router)
 app.include_router(integrations.router)
+app.include_router(notifications.router)
 
 
 @app.get("/api/health")
