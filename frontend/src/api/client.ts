@@ -114,6 +114,26 @@ export interface RiskProfile {
   notes: string | null;
 }
 
+export interface RiskProfileCreate {
+  survey_date: string;
+  flood_risk_score: number;
+  fire_risk_score: number;
+  earthquake_risk_score: number;
+  mfl_amount: number;
+  has_sprinklers: boolean;
+  notes?: string | null;
+}
+
+export interface RiskProfileUpdate {
+  survey_date?: string;
+  flood_risk_score?: number;
+  fire_risk_score?: number;
+  earthquake_risk_score?: number;
+  mfl_amount?: number;
+  has_sprinklers?: boolean;
+  notes?: string | null;
+}
+
 export interface PropertyActivePolicy {
   policy_id: number;
   policy_number: string;
@@ -722,6 +742,11 @@ export const createProperty = (payload: PropertyCreate) =>
 export const updateProperty = (id: number, payload: PropertyUpdate) =>
   api.put<Property>(`/properties/${id}`, payload).then((r) => r.data);
 export const deactivateProperty = (id: number) => api.delete(`/properties/${id}`).then(() => undefined);
+
+export const createRiskProfile = (propertyId: number, payload: RiskProfileCreate) =>
+  api.post<RiskProfile>(`/properties/${propertyId}/risk-profile`, payload).then((r) => r.data);
+export const updateRiskProfile = (propertyId: number, payload: RiskProfileUpdate) =>
+  api.put<RiskProfile>(`/properties/${propertyId}/risk-profile`, payload).then((r) => r.data);
 
 export const fetchIncidents = (params?: { status?: string; property_id?: number }) =>
   api.get<Incident[]>("/incidents", { params }).then((r) => r.data);
