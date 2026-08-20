@@ -29,6 +29,17 @@ does not open a network connection to anything. Instead:
   a real integration would swap the `logger.log` call for an actual SAP
   RFC / Priority REST call, keeping the row-shaping helpers unchanged.
 
+A third, event-driven direction was added for the "פתיחת משימה אוטומטית
+ב-ERP/תחזוקה בעת אירוע בחומרה קריטית" task: `open_maintenance_ticket` shapes
+a single `Incidents` row (severity_level == "CRITICAL") into a maintenance
+work-order the way an ERP/CMMS ticket-creation call would expect it, and
+"opens" it the same simulated way — logged at WARNING (a critical incident is
+noisier than a routine claim posting) with status="simulated_ticket". Called
+from `routers/incidents.py` right after a CRITICAL incident is created or a
+CRITICAL draft is submitted; unlike the pull/post functions above it is a
+side effect of another router's write path, not its own endpoint, so it takes
+an already-loaded `Incident` ORM object rather than querying for one.
+
 Both directions are read-only with respect to RMIS's own data: nothing here
 writes back to `Properties.book_value` or marks a `Claim_Payments` row as
 "posted", because the schema has no ERP-sync-state column to persist that in
@@ -54,6 +65,8 @@ logger = logging.getLogger("rmis.integrations.erp")
 # fixed in notifications.py — no account-directory table in the schema.
 GL_CASH_ACCOUNT = "1010-CASH"
 GL_RECEIVABLE_ACCOUNT = "1200-AR-INSURANCE"
+
+_TICKET_TRIGGER_SEVERITY = "CRITICAL"
 
 
 def pull_asset_book_values(db: Session, property_ids: list[int] | None = None) -> list[dict]:
@@ -140,3 +153,36 @@ def post_claim_receipts(
         entry["status"] = "simulated_post"
         entry["posted_at"] = posted_at
     return postings
+
+
+def open_maintenance_ticket(incident: models.Incident) -> dict | None:
+    """Shapes a CRITICAL-severity incident into an ERP/CMMS maintenance work-order
+    and "opens" it (logged at WARNING, status="simulated_ticket"). Returns None
+    for any incident below CRITICAL severity — the router decides whether to call
+    this at all, but the guard is repeated here so the function is safe to call
+    unconditionally too. Takes an already-loaded Incident (not a db/id pair) since
+    the caller (routers/incidents.py) always already has the row in hand right
+    after creating or submitting it."""
+    if incident.severity_level != _TICKET_TRIGGER_SEVERITY:
+        return None
+
+    ticket = {
+        "ticket_number": f"ERP-TCK-{incident.incident_code}",
+        "incident_id": incident.incident_id,
+        "incident_code": incident.incident_code,
+        "property_id": incident.property_id,
+        "hazard_type": incident.hazard_type,
+        "severity_level": incident.severity_level,
+        "priority": "URGENT",
+        "summary": f"טיפול דחוף נדרש — אירוע קריטי {incident.incident_code} ({incident.hazard_type})",
+        "description": incident.description,
+        "opened_at": datetime.utcnow().isoformat(),
+        "source_system": "RMIS",
+        "target_system": "ERP-SIM",
+        "status": "simulated_ticket",
+    }
+    logger.warning(
+        "[SIMULATED ERP TICKET] opened %s for incident %s (property %s, hazard %s)",
+        ticket["ticket_number"], incident.incident_code, incident.property_id, incident.hazard_type,
+    )
+    return ticket
