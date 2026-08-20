@@ -78,3 +78,34 @@ def test_mitigation_task_read_is_open_to_everyone(client):
     # GET endpoints are intentionally left open (see dependencies/permissions.py
     # module docstring) — no auth required to list tasks.
     assert client.get("/api/mitigation-tasks").status_code == 200
+
+
+def test_financial_get_endpoints_block_field_worker_and_anonymous(client, make_user):
+    """TODO_SPEC.md §3, "אכיפת RBAC על בקשות ה-GET" — financial-disclosure GET
+    endpoints (KPIs, policies, ...) are the deliberate exception to the "reads are
+    open" default: blocked for FIELD_WORKER and for unauthenticated callers, allowed
+    for a broader financial/operational role."""
+    field_worker = make_user(role="FIELD_WORKER")
+    risk_manager = make_user(role="RISK_MANAGER")
+
+    financial_gets = [
+        "/api/analytics/kpis",
+        "/api/analytics/cashflow",
+        "/api/analytics/exposure-by-region",
+        "/api/analytics/geographic-exposure-clusters",
+        "/api/analytics/loss-ratio-trend",
+        "/api/policies",
+    ]
+    for path in financial_gets:
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers=auth_headers(field_worker)).status_code == 403, path
+        assert client.get(path, headers=auth_headers(risk_manager)).status_code == 200, path
+
+
+def test_operational_analytics_get_endpoints_stay_open(client):
+    """The counterpart to the above: endpoints that don't lead with a financial
+    figure (map, risk-matrix, alerts, hazard-distribution) are left open, unchanged
+    by this task."""
+    for path in ("/api/analytics/map", "/api/analytics/risk-matrix",
+                 "/api/analytics/alerts", "/api/analytics/hazard-distribution"):
+        assert client.get(path).status_code == 200, path

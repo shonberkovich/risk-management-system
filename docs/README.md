@@ -97,11 +97,11 @@
 | `risk_profiles.py` (`/api/properties/{id}/risk-profile`) | יצירה/עדכון סקר סיכונים (Asset_Risk_Profiles) — יחס 1:1 לנכס: POST פעם ראשונה בלבד (409 אם כבר קיים), PUT לעדכון (404 אם עוד אין) | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד; אירוע CRITICAL פותח אוטומטית משימת מיטיגציה + כרטיס ERP מדומה + התראת Push/SMS/Email מדומה לנמענים פעילים | תלוי endpoint — ראו הקוד |
 | `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
-| `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
+| `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) — **קריאה** דורשת אימות (כל תפקיד חוץ מ-FIELD_WORKER) | כתיבה: RISK_MANAGER/CFO/ADMIN; קריאה: גם PROPERTY_MANAGER/RISK_OFFICER/ADJUSTER |
 | `claims.py` (`/api/claims`) | פתיחת/עדכון תביעות, תשלומים, רזרבות (`Claim_Reserves`) | RISK_MANAGER/CFO/ADJUSTER/ADMIN |
 | `mitigation.py` (`/api/mitigation-tasks`) | CRUD משימות מיטיגציה, `OVERDUE` אוטומטי, `/roi-summary` | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `documents.py` (`/api/documents`) | DMS: העלאה/שליפה/מחיקה, Signed URL, לפי ישות | תלוי endpoint |
-| `analytics.py` (`/api/analytics`) | KPIs, risk-matrix, alerts, חשיפה לפי אזור/אשכול גיאוגרפי | קריאה פתוחה |
+| `analytics.py` (`/api/analytics`) | KPIs, risk-matrix, alerts, חשיפה לפי אזור/אשכול גיאוגרפי | `/kpis`,`/cashflow`,`/exposure-by-region`,`/geographic-exposure-clusters`,`/loss-ratio-trend`: כל תפקיד חוץ מ-FIELD_WORKER; שאר ה-endpoints (map/risk-matrix/alerts/hazard-distribution): קריאה פתוחה |
 | `simulation.py` (`/api/simulation`) | Monte Carlo VaR — תיק/נכס בודד, פרמטרי `iterations`/`horizon_years`/`seed` | קריאה פתוחה |
 | `retention.py` (`/api/retention`) | מחשבון "לספוג או לתבוע" (השתתפות עצמית) | קריאה פתוחה |
 | `financials.py` (`/api/financials`) | מגמות רב-שנתי + דוח רגולטורי (Solvency-style) + הזנת דוחות כספיים (`Financial_Statements`) | RISK_MANAGER/CFO/ADMIN |
