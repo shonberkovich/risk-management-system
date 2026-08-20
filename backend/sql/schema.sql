@@ -349,6 +349,10 @@ CREATE TABLE dbo.Financial_Statements (
     total_assets          DECIMAL(18,2) NOT NULL,
     revenue                DECIMAL(18,2) NOT NULL,
     net_income               DECIMAL(18,2) NOT NULL,
-    insurance_expense           DECIMAL(18,2) NOT NULL
+    insurance_expense           DECIMAL(18,2) NOT NULL,
+    total_liabilities            DECIMAL(18,2) NULL,
+    total_equity                  DECIMAL(18,2) NULL,
+    gross_profit                   DECIMAL(18,2) NULL,
+    operating_profit                 DECIMAL(18,2) NULL
 );
 GO

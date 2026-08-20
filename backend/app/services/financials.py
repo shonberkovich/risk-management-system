@@ -87,6 +87,10 @@ def calculate_multi_year_trends(db: Session) -> list[dict]:
         revenue = float(stmt.revenue)
         total_assets = float(stmt.total_assets)
         insurance_expense = float(stmt.insurance_expense)
+        total_liabilities = float(stmt.total_liabilities) if stmt.total_liabilities is not None else None
+        total_equity = float(stmt.total_equity) if stmt.total_equity is not None else None
+        gross_profit = float(stmt.gross_profit) if stmt.gross_profit is not None else None
+        operating_profit = float(stmt.operating_profit) if stmt.operating_profit is not None else None
         year_losses = claim_losses.get(stmt.year, 0.0)
         year_premium = premiums.get(stmt.year, 0.0)
 
@@ -107,10 +111,17 @@ def calculate_multi_year_trends(db: Session) -> list[dict]:
             "net_income": round(float(stmt.net_income), 2),
             "total_assets": round(total_assets, 2),
             "insurance_expense": round(insurance_expense, 2),
+            "total_liabilities": round(total_liabilities, 2) if total_liabilities is not None else None,
+            "total_equity": round(total_equity, 2) if total_equity is not None else None,
+            "gross_profit": round(gross_profit, 2) if gross_profit is not None else None,
+            "operating_profit": round(operating_profit, 2) if operating_profit is not None else None,
             "claim_losses_paid": round(year_losses, 2),
             "premium_paid": round(year_premium, 2),
             "insurance_expense_to_revenue": round(insurance_expense / revenue, 4) if revenue else None,
             "net_income_margin": round(float(stmt.net_income) / revenue, 4) if revenue else None,
+            "gross_margin": round(gross_profit / revenue, 4) if revenue and gross_profit is not None else None,
+            "operating_margin": round(operating_profit / revenue, 4) if revenue and operating_profit is not None else None,
+            "equity_ratio": round(total_equity / total_assets, 4) if total_assets and total_equity is not None else None,
             "losses_to_asset_value": round(year_losses / total_assets, 4) if total_assets else None,
             "loss_ratio": round(year_losses / year_premium, 4) if year_premium else None,
             "revenue_growth_pct": revenue_growth,
@@ -168,10 +179,11 @@ def calculate_trend_summary(db: Session) -> dict | None:
 # to a corporate risk-management program: "if a 1-in-100-year bad year hit us, could our
 # balance sheet absorb it?" We approximate:
 #
-#   - Eligible own funds  -> latest Financial_Statements.total_assets (a simplifying
-#     proxy — a real filing would net liabilities out to shareholders' equity, but
-#     total_assets is the only balance-sheet figure this schema captures; documented
-#     assumption, consistent with financials.py's other simplifications).
+#   - Eligible own funds  -> latest Financial_Statements.total_equity (shareholders'
+#     equity, i.e. assets net of liabilities — the actual Solvency II "own funds"
+#     definition). Falls back to total_assets for any statement row that predates
+#     the total_liabilities/total_equity columns (nullable, added after the schema's
+#     first release) rather than failing the report outright.
 #   - SCR                 -> simulation.run_portfolio_simulation's VaR_99 (the closest
 #     analog available to Solvency II's 99.5% VaR; this schema's Monte Carlo model
 #     doesn't distinguish 99% from 99.5%, so 99% is used as-is rather than manufacturing
@@ -212,7 +224,11 @@ def build_regulatory_report(db: Session, seed: int | None = None) -> dict:
     trends = calculate_multi_year_trends(db)
     trend_summary = calculate_trend_summary(db)
     latest_year = trends[-1] if trends else None
-    own_funds = latest_year["total_assets"] if latest_year else None
+    own_funds = (
+        latest_year["total_equity"] if latest_year and latest_year["total_equity"] is not None
+        else latest_year["total_assets"] if latest_year
+        else None
+    )
 
     sim = simulation.run_portfolio_simulation(db, iterations=_SCR_SIMULATION_ITERATIONS, seed=seed)
     scr = sim["var_99"]

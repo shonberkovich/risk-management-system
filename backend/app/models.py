@@ -247,3 +247,12 @@ class FinancialStatement(Base):
     revenue: Mapped[float] = mapped_column(Numeric(18, 2))
     net_income: Mapped[float] = mapped_column(Numeric(18, 2))
     insurance_expense: Mapped[float] = mapped_column(Numeric(18, 2))
+    # Full balance sheet / P&L fields (nullable: existing rows and any statement
+    # loaded before a full breakdown is available won't have these yet). Together
+    # with total_assets these let financials.py compute shareholders' equity-based
+    # capital adequacy instead of the total_assets proxy it used to fall back on,
+    # and gross/operating margins alongside the existing net_income_margin.
+    total_liabilities: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    total_equity: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    gross_profit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    operating_profit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
