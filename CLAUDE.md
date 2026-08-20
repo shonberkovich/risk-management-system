@@ -12,9 +12,12 @@ RMIS (Risk Management Information System) — a full-stack demo built for a grad
 ```bash
 uvicorn app.main:app --reload          # dev server → http://localhost:8000 (Swagger at /docs)
 python -m app.seed                     # reset + reload demo data (see "Hebrew text" gotcha below)
-sqlcmd -S "(localdb)\MSSQLLocalDB" -C -i sql\schema.sql   # (re)create schema — run before seeding on a fresh DB
+sqlcmd -S "(localdb)\MSSQLLocalDB" -C -i sql\schema.sql   # (re)create schema on a FRESH DB — run before seeding
+python -m pytest -q                    # backend/tests/ — in-memory SQLite, no real DB needed, ~50 tests
+alembic revision --autogenerate -m "..."  # generate a migration for a *schema change* to an EXISTING DB
+alembic upgrade head                      # apply pending migrations
 ```
-No lint/test tooling is configured in this repo yet.
+`sql/schema.sql` is still how a fresh DB gets its schema (see `backend/alembic/versions/*_baseline_*.py`'s docstring for why); Alembic (`backend/alembic/`) is for incremental changes to an already-provisioned DB going forward — after editing `models.py`, also update `sql/schema.sql` to match (fresh installs) *and* add an Alembic revision (existing installs), same as this repo has always kept `models.py`/`schema.sql` in sync by hand. `alembic revision --autogenerate` reliably flags real model changes but also always re-flags a fixed set of cosmetic diffs (DATETIME2 vs DateTime rendering, a few indexes schema.sql created that aren't mirrored as `Index(...)` in models.py) — review the generated migration by hand before trusting it, don't apply it blindly.
 
 **Frontend** (from `frontend/`):
 ```bash
