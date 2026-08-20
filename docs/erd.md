@@ -69,7 +69,7 @@ erDiagram
         decimal deductible_default
         decimal annual_premium
         nvarchar status
-        decimal per_event_limit "חדש: גבול לאירוע בודד"
+        nvarchar per_event_limit "גבול לאירוע בודד; מוצפן at-rest"
         smallint bi_waiting_period_hours "חדש: תקופת המתנה BI"
         nvarchar exclusions "חדש: החרגות"
     }
@@ -77,7 +77,7 @@ erDiagram
     Policy_Assets {
         bigint policy_id PK_FK
         bigint property_id PK_FK
-        decimal specific_deductible
+        nvarchar specific_deductible "מוצפן at-rest"
     }
 
     Incidents {
@@ -120,7 +120,7 @@ erDiagram
         decimal deductible_applied
         decimal approved_amount
         nvarchar claim_status
-        nvarchar adjuster_name
+        nvarchar adjuster_name "מוצפן at-rest"
         date expected_payment_date
         datetime created_at
     }
@@ -169,8 +169,8 @@ erDiagram
         nvarchar entity_type
         bigint entity_id
         nvarchar action "CREATE/UPDATE/DELETE"
-        nvarchar old_value
-        nvarchar new_value
+        nvarchar old_value "מוצפן at-rest"
+        nvarchar new_value "מוצפן at-rest"
         datetime timestamp
         nvarchar ip_address
     }

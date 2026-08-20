@@ -7,7 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.services.encryption import EncryptedString
+from app.services.encryption import EncryptedString, EncryptedText
 
 
 class User(Base):
@@ -84,7 +84,10 @@ class InsurancePolicy(Base):
     deductible_default: Mapped[float] = mapped_column(Numeric(18, 2))
     annual_premium: Mapped[float] = mapped_column(Numeric(18, 2))
     status: Mapped[str] = mapped_column(Unicode(20))
-    per_event_limit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    # Encrypted at rest (see services/encryption.py) — a per-event coverage term that's
+    # only ever read one policy at a time (never SUM'd/AVG'd across policies like
+    # annual_premium/total_limit/deductible_default are), so it's safe to encrypt.
+    per_event_limit: Mapped[str | None] = mapped_column(EncryptedString(64), nullable=True)
     bi_waiting_period_hours: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     exclusions: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
@@ -94,7 +97,10 @@ class PolicyAsset(Base):
 
     policy_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Insurance_Policies.policy_id"), primary_key=True)
     property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id"), primary_key=True)
-    specific_deductible: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    # Encrypted at rest (see services/encryption.py) — same rationale as
+    # Insurance_Policies.per_event_limit above: a single-property coverage term, never
+    # aggregated across rows.
+    specific_deductible: Mapped[str | None] = mapped_column(EncryptedString(64), nullable=True)
 
     policy: Mapped["InsurancePolicy"] = relationship()
     property_: Mapped["Property"] = relationship(back_populates="policy_assets")
@@ -152,7 +158,9 @@ class Claim(Base):
     deductible_applied: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
     approved_amount: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
     claim_status: Mapped[str] = mapped_column(Unicode(20))
-    adjuster_name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    # Encrypted at rest (see services/encryption.py) — personal data, read-and-displayed
+    # only, never searched/aggregated. Widened from 100 to fit ciphertext.
+    adjuster_name: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
     expected_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
@@ -213,8 +221,12 @@ class AuditLog(Base):
     entity_type: Mapped[str] = mapped_column(Unicode(50))
     entity_id: Mapped[int] = mapped_column(BigInteger)
     action: Mapped[str] = mapped_column(Unicode(20))
-    old_value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
-    new_value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    # Encrypted at rest (see services/encryption.py) — before/after snapshot of a
+    # mutating request, which can itself carry other sensitive fields (e.g. a
+    # user-creation payload). Never filtered/searched by value (routers/audit.py only
+    # filters on entity_type/entity_id/user_id/action/timestamp).
+    old_value: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime)
     ip_address: Mapped[str | None] = mapped_column(Unicode(45), nullable=True)
 
