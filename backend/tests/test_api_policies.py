@@ -76,6 +76,6 @@ def test_list_and_filter_policies_by_status(client, make_user):
     client.post("/api/policies", json=_policy_payload(policy_number="POL-A", status="ACTIVE"), headers=headers)
     client.post("/api/policies", json=_policy_payload(policy_number="POL-B", status="EXPIRED"), headers=headers)
 
-    resp = client.get("/api/policies", params={"status": "ACTIVE"})
+    resp = client.get("/api/policies", params={"status": "ACTIVE"}, headers=headers)
     assert resp.status_code == 200
     assert [p["policy_number"] for p in resp.json()] == ["POL-A"]

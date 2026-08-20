@@ -240,8 +240,17 @@ def update_incident_status(
     return incident
 
 
+_POLICIES_READ_ROLES = ("RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER", "ADMIN")
+
+
 @router.get("/{incident_id}/eligible-policies", response_model=list[schemas.PolicyOut])
-def list_eligible_policies(incident_id: int, db: Session = Depends(get_db)):
+def list_eligible_policies(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_READ_ROLES)),
+):
+    """Same read-role gate as routers/policies.py (TODO_SPEC.md §3) — this also
+    returns PolicyOut (premiums/limits), just scoped to one incident's property."""
     incident = db.get(models.Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")

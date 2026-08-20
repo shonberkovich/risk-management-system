@@ -11,9 +11,18 @@ router = APIRouter(prefix="/api/policies", tags=["policies"])
 
 _POLICIES_WRITE_ROLES = ("RISK_MANAGER", "CFO", "ADMIN")
 
+# TODO_SPEC.md §3, "אכיפת RBAC על בקשות ה-GET": policy data (premiums, limits,
+# deductibles) is financial disclosure, same category as analytics.py's KPI/cashflow
+# endpoints — everyone except FIELD_WORKER, who has no operational need to see it.
+_POLICIES_READ_ROLES = ("RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER", "ADMIN")
+
 
 @router.get("", response_model=list[schemas.PolicyOut])
-def list_policies(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+def list_policies(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_READ_ROLES)),
+):
     stmt = select(models.InsurancePolicy).order_by(models.InsurancePolicy.policy_id)
     if status:
         stmt = stmt.where(models.InsurancePolicy.status == status)
@@ -21,7 +30,11 @@ def list_policies(status: str | None = Query(default=None), db: Session = Depend
 
 
 @router.get("/{policy_id}", response_model=schemas.PolicyOut)
-def get_policy(policy_id: int, db: Session = Depends(get_db)):
+def get_policy(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_READ_ROLES)),
+):
     policy = db.get(models.InsurancePolicy, policy_id)
     if not policy:
         raise HTTPException(404, "Policy not found")
@@ -63,7 +76,11 @@ def update_policy(
 
 
 @router.get("/{policy_id}/assets", response_model=list[schemas.PolicyAssetOut])
-def list_policy_assets(policy_id: int, db: Session = Depends(get_db)):
+def list_policy_assets(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_POLICIES_READ_ROLES)),
+):
     policy = db.get(models.InsurancePolicy, policy_id)
     if not policy:
         raise HTTPException(404, "Policy not found")

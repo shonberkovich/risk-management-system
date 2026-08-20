@@ -4,15 +4,27 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services import cashflow, kpi
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 OPEN_INCIDENT_STATUSES = {"NEW", "UNDER_INVESTIGATION", "CLAIM_FILED"}
 
+# TODO_SPEC.md §3, "אכיפת RBAC על בקשות ה-GET": endpoints below whose payload leads
+# with financial figures (TIV/MFL, premiums, reserves, loss ratio) are gated to
+# everyone except FIELD_WORKER, same role set as routers/policies.py. Endpoints that
+# stay open (map, risk-matrix, alerts, hazard-distribution) are operational/field-
+# facing — a field worker plausibly needs the property map or an incident-severity
+# view, and they don't lead with a currency figure the way KPIs/cashflow/exposure do.
+_FINANCIAL_READ_ROLES = ("RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER", "ADMIN")
+
 
 @router.get("/kpis", response_model=schemas.KpiSummary)
-def get_kpis(db: Session = Depends(get_db)):
+def get_kpis(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
+):
     return kpi.get_kpi_summary(db)
 
 
@@ -92,7 +104,10 @@ def get_risk_matrix(db: Session = Depends(get_db)):
 
 
 @router.get("/loss-ratio-trend", response_model=list[schemas.LossRatioTrendPoint])
-def get_loss_ratio_trend(db: Session = Depends(get_db)):
+def get_loss_ratio_trend(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
+):
     """Loss ratio per year, so a multi-year view isn't silently limited to the
     current calendar year the way the headline KPI is."""
     return [
@@ -109,7 +124,11 @@ def get_alerts(db: Session = Depends(get_db)):
 
 
 @router.get("/cashflow", response_model=schemas.CashflowSummary)
-def get_cashflow(months_ahead: int = 12, db: Session = Depends(get_db)):
+def get_cashflow(
+    months_ahead: int = 12,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
+):
     """Reserve & receipts forecast for the dashboard: total open reserves (current
     adjuster estimate per claim), total expected receipts on open claims (approved
     amount minus payments made so far), and a merged monthly view covering the
@@ -119,7 +138,10 @@ def get_cashflow(months_ahead: int = 12, db: Session = Depends(get_db)):
 
 
 @router.get("/exposure-by-region", response_model=list[schemas.RegionExposure])
-def get_exposure_by_region(db: Session = Depends(get_db)):
+def get_exposure_by_region(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
+):
     """TIV/MFL/total-claimed per administrative Region, for the management report.
     See kpi.calculate_exposure_by_region for the full calculation (including how
     unassigned properties are grouped)."""
@@ -127,7 +149,10 @@ def get_exposure_by_region(db: Session = Depends(get_db)):
 
 
 @router.get("/geographic-exposure-clusters", response_model=list[schemas.GeographicExposureCluster])
-def get_geographic_exposure_clusters(db: Session = Depends(get_db)):
+def get_geographic_exposure_clusters(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
+):
     """Geographic exposure clusters for drawing exposure circles on the map: properties
     within CLUSTER_RADIUS_KM of one another, with centroid, actual radius, and cumulative
     MFL/TIV per cluster. See kpi.calculate_geographic_exposure_clusters for the full

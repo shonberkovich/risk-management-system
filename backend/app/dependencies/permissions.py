@@ -8,9 +8,14 @@ is one of `roles` (403 if not). Calling it with no roles (`require_roles()`) is
 "authenticated, any role" — used on endpoints that should be logged-in-gated but aren't
 role-restricted.
 
-Applied across `routers/*.py` on state-changing endpoints only (POST/PUT/PATCH/DELETE);
-GET/read endpoints are intentionally left open so dashboards keep working before a caller
-has signed in — see the "מודול אימות משתמשים" write-up in TODO_SPEC.md for the rationale.
+Applied across `routers/*.py` on all state-changing endpoints (POST/PUT/PATCH/DELETE),
+and most GET/read endpoints are intentionally left open so dashboards keep working
+before a caller has signed in — see the "מודול אימות משתמשים" write-up in
+TODO_SPEC.md for the rationale. **Exception:** GET endpoints whose payload is
+financial disclosure (KPIs, cashflow, exposure, policies — see `routers/analytics.py`'s
+`_FINANCIAL_READ_ROLES` and `routers/policies.py`'s `_POLICIES_READ_ROLES`) are gated
+too, closing off FIELD_WORKER and any unauthenticated caller from that data
+specifically (TODO_SPEC.md §3, "אכיפת RBAC על בקשות ה-GET").
 """
 from __future__ import annotations
 
