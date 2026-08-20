@@ -87,6 +87,42 @@ class PropertyOut(BaseModel):
     active_policy: PropertyActivePolicyOut | None = None
 
 
+class PropertyCreate(BaseModel):
+    """Payload for POST /api/properties. Mirrors Property's non-generated columns —
+    property_id/created_at/updated_at are server-assigned, is_active defaults to True
+    (a property is created active; use DELETE to deactivate)."""
+    property_code: str
+    name: str
+    address: str
+    region: str
+    region_id: int | None = None
+    latitude: float
+    longitude: float
+    asset_type: AssetType
+    replacement_value: float
+    book_value: float
+    primary_manager_id: int | None = None
+
+
+class PropertyUpdate(BaseModel):
+    """Payload for PUT /api/properties/{id}. All fields optional (partial update,
+    same convention as MitigationTaskUpdate/PolicyUpdate) despite PUT's usual
+    full-replace connotation — chosen to match how the other write routers in this
+    codebase already use PUT/PATCH interchangeably for partial updates."""
+    property_code: str | None = None
+    name: str | None = None
+    address: str | None = None
+    region: str | None = None
+    region_id: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    asset_type: AssetType | None = None
+    replacement_value: float | None = None
+    book_value: float | None = None
+    primary_manager_id: int | None = None
+    is_active: bool | None = None
+
+
 class PropertyMapPoint(BaseModel):
     property_id: int
     name: str
