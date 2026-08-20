@@ -482,3 +482,29 @@ class AlertOut(BaseModel):
     property_ids: list[int]
     value: float
     threshold: float
+
+
+class ErpBookValueOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    book_value: float
+    replacement_value: float
+    as_of: str
+    source_system: str
+    status: str
+
+
+class ErpClaimReceiptPostingOut(BaseModel):
+    payment_id: int
+    claim_id: int
+    claim_number: str
+    property_code: str
+    payment_date: str
+    amount: float
+    payment_type: str
+    debit_account: str
+    credit_account: str
+    memo: str
+    status: str
+    posted_at: str | None = None
