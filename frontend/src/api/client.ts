@@ -540,10 +540,17 @@ export interface MultiYearTrend {
   net_income: number;
   total_assets: number;
   insurance_expense: number;
+  total_liabilities: number | null;
+  total_equity: number | null;
+  gross_profit: number | null;
+  operating_profit: number | null;
   claim_losses_paid: number;
   premium_paid: number;
   insurance_expense_to_revenue: number | null;
   net_income_margin: number | null;
+  gross_margin: number | null;
+  operating_margin: number | null;
+  equity_ratio: number | null;
   losses_to_asset_value: number | null;
   loss_ratio: number | null;
   revenue_growth_pct: number | null;

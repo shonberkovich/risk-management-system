@@ -199,6 +199,10 @@ erDiagram
         decimal revenue
         decimal net_income
         decimal insurance_expense
+        decimal total_liabilities "nullable"
+        decimal total_equity "nullable"
+        decimal gross_profit "nullable"
+        decimal operating_profit "nullable"
     }
 ```
 

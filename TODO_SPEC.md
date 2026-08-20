@@ -1,5 +1,6 @@
 1. Database & Data Model (בסיס נתונים)
-[ ] הרחבת Financial_Statements למאזן מלא — כיום קיימים רק נכסים, הכנסות, רווח והוצאות ביטוח. יש להוסיף התחייבויות, הון עצמי ורווח תפעולי (backend/app/models.py + מיגרציית Alembic).
+[x] הרחבת Financial_Statements למאזן מלא — כיום קיימים רק נכסים, הכנסות, רווח והוצאות ביטוח. יש להוסיף התחייבויות, הון עצמי ורווח תפעולי (backend/app/models.py + מיגרציית Alembic).
+✅ בוצע ב-branch feature/financial-statements-full-balance-sheet: נוספו total_liabilities, total_equity, gross_profit, operating_profit (nullable) ל-FinancialStatement, schema.sql, מיגרציית Alembic 8f2a4c6e1d09, seed.py, schemas.py ו-frontend/src/api/client.ts. services/financials.py חושב כעת gross_margin/operating_margin/equity_ratio, ודוח הרגולציה משתמש ב-total_equity האמיתי (עם נפילה ל-total_assets לשורות ישנות).
 
 [ ] טבלת נמעני התראות (Notification_Recipients) — הוצאת נמעני ההתראות מהקוד (Hardcoded) לטבלה דינמית לצורך ניהול עתידי דרך ה-UI.
 

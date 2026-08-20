@@ -643,10 +643,17 @@ class MultiYearTrendOut(BaseModel):
     net_income: float
     total_assets: float
     insurance_expense: float
+    total_liabilities: float | None = None
+    total_equity: float | None = None
+    gross_profit: float | None = None
+    operating_profit: float | None = None
     claim_losses_paid: float
     premium_paid: float
     insurance_expense_to_revenue: float | None = None
     net_income_margin: float | None = None
+    gross_margin: float | None = None
+    operating_margin: float | None = None
+    equity_ratio: float | None = None
     losses_to_asset_value: float | None = None
     loss_ratio: float | None = None
     revenue_growth_pct: float | None = None

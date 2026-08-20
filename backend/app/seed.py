@@ -408,16 +408,23 @@ def run():
     )
 
     # --- Financial_Statements ---
+    # Columns: year, total_assets, revenue, net_income, insurance_expense,
+    #          total_liabilities, total_equity, gross_profit, operating_profit
+    # total_equity = total_assets - total_liabilities (kept consistent so the
+    # balance sheet actually balances); gross/operating profit sit between
+    # revenue and net_income (gross > operating > net, per the usual P&L waterfall).
     financial_statements = [
-        (2022, 620000000, 210000000, 18000000, 2400000),
-        (2023, 680000000, 235000000, 21000000, 2650000),
-        (2024, 730000000, 258000000, 19500000, 2900000),
-        (2025, 790000000, 279000000, 23800000, 3150000),
-        (2026, 845000000, 298000000, 26200000, 3560000),
+        (2022, 620000000, 210000000, 18000000, 2400000, 380000000, 240000000, 92000000, 28000000),
+        (2023, 680000000, 235000000, 21000000, 2650000, 410000000, 270000000, 103000000, 32000000),
+        (2024, 730000000, 258000000, 19500000, 2900000, 440000000, 290000000, 112000000, 30500000),
+        (2025, 790000000, 279000000, 23800000, 3150000, 465000000, 325000000, 122000000, 37000000),
+        (2026, 845000000, 298000000, 26200000, 3560000, 490000000, 355000000, 131000000, 41000000),
     ]
     cur.executemany(
-        """INSERT INTO Financial_Statements (year, total_assets, revenue, net_income, insurance_expense)
-           VALUES (?, ?, ?, ?, ?)""",
+        """INSERT INTO Financial_Statements
+           (year, total_assets, revenue, net_income, insurance_expense,
+            total_liabilities, total_equity, gross_profit, operating_profit)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         financial_statements,
     )
 
