@@ -30,6 +30,8 @@ import {
   fetchClaims,
   fetchExposureByRegion,
   fetchKpis,
+  fetchMitigationRoiSummary,
+  fetchPortfolioSimulation,
   fetchRegulatoryReport,
   streamExecutiveSummary,
 } from "../api/client";
@@ -69,6 +71,14 @@ export default function Reports() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
   const exposureByRegion = useQuery({ queryKey: ["exposure-by-region"], queryFn: fetchExposureByRegion });
+  // VaR + mitigation-ROI + multi-year trends for the "הרחבת דוח ההנהלה" sections of the
+  // printable PDF — a fixed seed keeps the exported PDF's VaR figures reproducible run to
+  // run instead of jittering every time someone re-opens the report.
+  const portfolioSimulation = useQuery({
+    queryKey: ["simulation", "portfolio", "executive-report"],
+    queryFn: () => fetchPortfolioSimulation({ iterations: 5000, seed: 42 }),
+  });
+  const mitigationRoiSummary = useQuery({ queryKey: ["mitigation-tasks", "roi-summary"], queryFn: fetchMitigationRoiSummary });
   const printableRef = useRef<HTMLDivElement>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
 
@@ -400,6 +410,10 @@ export default function Reports() {
               claims={claims.data}
               regions={exposureByRegion.data}
               summaryText={summaryText || undefined}
+              simulation={portfolioSimulation.data}
+              roiSummary={mitigationRoiSummary.data}
+              trends={regulatoryReport.data?.multi_year_trends}
+              trendSummary={regulatoryReport.data?.trend_summary}
             />
           </div>
         </Box>
