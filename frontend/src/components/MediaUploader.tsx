@@ -9,7 +9,11 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useEffect, useMemo } from "react";
+import PlaceIcon from "@mui/icons-material/Place";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import { useEffect, useMemo, useState } from "react";
+
+import { extractExifSummary, type ExifSummary } from "../utils/exif";
 
 const ACCEPTED_TYPES = "image/*,video/*,application/pdf";
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // mirrors backend/app/routers/media.py's _MAX_UPLOAD_BYTES
@@ -32,6 +36,32 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
   useEffect(() => {
     return () => previews.forEach((url) => url && URL.revokeObjectURL(url));
   }, [previews]);
+
+  // EXIF (GPS + capture time) read per photo, keyed by File reference — File objects are
+  // stable across re-renders as long as the caller doesn't rebuild the array unnecessarily
+  // (IncidentReport.tsx only ever appends/removes, never re-wraps existing entries). `null`
+  // means "checked, nothing usable"; a missing key means "not checked yet" (still loading or
+  // not an image at all).
+  const [exifByFile, setExifByFile] = useState<Map<File, ExifSummary | null>>(new Map());
+
+  useEffect(() => {
+    const pending = files.filter((f) => f.type.startsWith("image/") && !exifByFile.has(f));
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(pending.map(async (f) => [f, await extractExifSummary(f)] as const));
+      if (cancelled) return;
+      setExifByFile((prev) => {
+        const next = new Map(prev);
+        results.forEach(([f, summary]) => next.set(f, summary));
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files]);
 
   const addFiles = (fileList: FileList | null) => {
     if (!fileList) return;
@@ -103,31 +133,53 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
             קבצים מצורפים ({files.length})
           </Typography>
           <Grid container spacing={1}>
-            {files.map((file, idx) => (
-              <Grid item xs={6} sm={4} key={`${file.name}-${idx}`}>
-                <Paper
-                  variant="outlined"
-                  sx={{ p: 1, display: "flex", alignItems: "center", gap: 1, position: "relative" }}
-                >
-                  {previews[idx] ? (
-                    <Box
-                      component="img"
-                      src={previews[idx]!}
-                      alt={file.name}
-                      sx={{ width: 40, height: 40, objectFit: "cover", borderRadius: 1, flexShrink: 0 }}
-                    />
-                  ) : (
-                    <InsertDriveFileIcon color="action" sx={{ flexShrink: 0 }} />
-                  )}
-                  <Typography variant="caption" noWrap sx={{ flex: 1, minWidth: 0 }}>
-                    {file.name}
-                  </Typography>
-                  <IconButton size="small" onClick={() => removeAt(idx)} disabled={disabled} aria-label="מחק">
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Paper>
-              </Grid>
-            ))}
+            {files.map((file, idx) => {
+              const exif = exifByFile.get(file);
+              const hasLocation = exif?.latitude != null && exif?.longitude != null;
+              return (
+                <Grid item xs={6} sm={4} key={`${file.name}-${idx}`}>
+                  <Paper
+                    variant="outlined"
+                    sx={{ p: 1, display: "flex", alignItems: "flex-start", gap: 1, position: "relative" }}
+                  >
+                    {previews[idx] ? (
+                      <Box
+                        component="img"
+                        src={previews[idx]!}
+                        alt={file.name}
+                        sx={{ width: 40, height: 40, objectFit: "cover", borderRadius: 1, flexShrink: 0 }}
+                      />
+                    ) : (
+                      <InsertDriveFileIcon color="action" sx={{ flexShrink: 0, mt: 0.5 }} />
+                    )}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" noWrap sx={{ display: "block" }}>
+                        {file.name}
+                      </Typography>
+                      {exif?.capturedAt && (
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <ScheduleIcon sx={{ fontSize: 12 }} color="action" />
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {exif.capturedAt.toLocaleString("he-IL")}
+                          </Typography>
+                        </Stack>
+                      )}
+                      {hasLocation && (
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <PlaceIcon sx={{ fontSize: 12 }} color="action" />
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {exif!.latitude!.toFixed(5)}, {exif!.longitude!.toFixed(5)}
+                          </Typography>
+                        </Stack>
+                      )}
+                    </Box>
+                    <IconButton size="small" onClick={() => removeAt(idx)} disabled={disabled} aria-label="מחק">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Paper>
+                </Grid>
+              );
+            })}
           </Grid>
         </Stack>
       )}
