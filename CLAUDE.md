@@ -41,6 +41,4 @@ Both dev servers are also defined in `.claude/launch.json` for the `preview_star
 - **Reseeding IDs:** `DBCC CHECKIDENT (..., RESEED, 0)` behaves differently on a table that has *never* had a row inserted (next ID becomes `0`) vs. one that has (next ID becomes `1`). `schema.sql` always drops and recreates all tables (in FK-safe order) before `app/seed.py` runs, so don't reseed without also rerunning `schema.sql` first.
 - **`uvicorn --reload` can wedge** after rapid successive edits on Windows (symptom: `RuntimeWarning: coroutine 'Server.serve' was never awaited`, stale code still serving). If behavior doesn't match a recent edit, stop and restart the server process rather than trusting the reloader.
 
-## Deliberately out of scope
 
-RBAC/audit-log enforcement, at-rest encryption, ERP/Govmap integrations, offline mobile sync, Monte Carlo VaR, push/SMS alerts, real file upload persistence for incident media. Full list and rationale in [docs/README.md](docs/README.md) §8.
