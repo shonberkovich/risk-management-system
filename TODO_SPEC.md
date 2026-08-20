@@ -15,7 +15,8 @@
 ✅ בוצע ב-branch feature/verify-migration-chain: אומת (`alembic history`) ששרשרת המיגרציות תחת backend/alembic/versions/ שלמה ורציפה, ראש יחיד ללא ענפים — <base> → 5d5363142853 (baseline, תואם schema.sql נכון למועד היווצרותו, ר' c6d2ea1) → 8f2a4c6e1d09 (financial statements) → c3d9a17f4b62 (Notification_Recipients) → d4e1b298a715 (Notification_Log) → e5f7a2c9b3d1 (performance indexes, head). כל שינוי סכימה שבוצע מאז יצירת ה-baseline קיבל בפועל מיגרציה ייעודית משלו במקביל לעדכון schema.sql (התהליך שתואר ב-CLAUDE.md כבר נשמר בפועל ב-4 השינויים האחרונים) — לא נמצא פער. לא בוצע שינוי קוד; זו משימת אימות/תיעוד בלבד, ללא נספח קוד.
 
 2. Backend — APIs חסרים (ליבת הלוגיקה)
-[ ] CRUD מלא לנכסים — הוספת POST, PUT, DELETE ל-properties.py (קריטי לניהול Asset Inventory).
+[x] CRUD מלא לנכסים — הוספת POST, PUT, DELETE ל-properties.py (קריטי לניהול Asset Inventory).
+✅ בוצע ב-branch feature/properties-crud: נוספו POST /api/properties (יצירה, בדיקת ייחודיות property_code, ולידציית קיום primary_manager_id/region_id), PUT /api/properties/{id} (עדכון חלקי, אותן ולידציות) ו-DELETE /api/properties/{id} (soft delete — is_active=False, ולא מחיקה פיזית, כדי לשמר את שרשרת הנתונים התלויה: Asset_Risk_Profiles/Incidents/Claims/Mitigation_Tasks/Policy_Assets — GET /api/properties הקיים כבר מסנן לפי is_active כך שההיסטוריה נשארת נגישה דרך GET /{id}). תפקידי כתיבה: RISK_MANAGER/PROPERTY_MANAGER/ADMIN (כמו mitigation.py). נוספו PropertyCreate/PropertyUpdate ב-schemas.py, עודכן docs/README.md (טבלת ה-routers), וטסטים ב-test_api_properties_crud.py. 68/68 טסטים עוברים (10 חדשים).
 
 [ ] API לסקרי סיכונים (Asset_Risk_Profiles) — יצירת Endpoint ליצירה ועדכון של סקר סיכונים, MFL ואמצעי מיגון (risk_profiles.py).
 

@@ -92,7 +92,7 @@
 | Router (prefix) | תחום | RBAC בכתיבה |
 |---|---|---|
 | `auth.py` (`/api/auth`) | login/refresh/me/logout, שלד SSO (501 כברירת מחדל) | — (public) |
-| `properties.py` (`/api/properties`) | CRUD נכסים + פרופיל סיכון | RISK_MANAGER/ADMIN |
+| `properties.py` (`/api/properties`) | CRUD נכסים (מחיקה = soft delete, `is_active=False`) + פרופיל סיכון | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד | תלוי endpoint — ראו הקוד |
 | `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
 | `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
