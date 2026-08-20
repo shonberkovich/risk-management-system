@@ -6,42 +6,49 @@
 
 המערכת מחברת בין העולם הפיזי (נכסים, מפגעים, אירועי נזק) לעולם הפיננסי (פוליסות ביטוח, תביעות, תזרים), ומספקת שכבת בינה מלאכותית (LLM) המסייעת למנהל הסיכונים בסיווג אירועים, הפקת דוחות וקבלת תשובות על נתוני המערכת בשפה טבעית.
 
-הפרויקט הוא **דמו עובד end-to-end**, לא מוצר production. סעיף 8 מפרט מה נותר מחוץ להיקף.
+הפרויקט הוא **דמו עובד end-to-end**, לא מוצר production. סעיף 9 מפרט מה נותר מחוץ להיקף.
 
 ## 2. ארכיטקטורה טכנולוגית
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Frontend — React 18 + TypeScript + Vite                │
-│  MUI v6 (RTL) · React Query · React Router · Leaflet ·   │
-│  Recharts                                                 │
-└───────────────────────┬───────────────────────────────────┘
-                         │ REST (JSON) — proxy /api → :8000
-┌───────────────────────▼───────────────────────────────────┐
-│  Backend — Python 3.12 · FastAPI · SQLAlchemy 2.0 ORM     │
-│  Routers: properties / incidents / policies / claims /   │
-│  mitigation / analytics / ai                              │
-│  Services: kpi.py (חישובי סיכון) · llm.py (Anthropic)     │
-└───────────────────────┬───────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│  Frontend — React 18 + TypeScript + Vite · PWA                │
+│  MUI v6 (RTL) · React Query · React Router · Leaflet ·         │
+│  Recharts · IndexedDB (offline sync)                            │
+└───────────────────────┬─────────────────────────────────────────┘
+                         │ REST (JSON) — proxy /api → :8000, JWT bearer
+┌───────────────────────▼─────────────────────────────────────────┐
+│  Backend — Python 3.12 · FastAPI · SQLAlchemy 2.0 ORM           │
+│  17 routers (auth/RBAC, properties, incidents, policies,        │
+│  claims, mitigation, media, documents, analytics, simulation,   │
+│  retention, financials, compliance, integrations, notifications,│
+│  audit-log, users, ai) — see §5 for the full list               │
+│  ~15 services: kpi / cashflow / retention / simulation /        │
+│  financials / compliance / notifications / storage / auth /     │
+│  encryption / llm (Anthropic) + integrations/ (erp, gis,        │
+│  weather, economics)                                             │
+└───────────────────────┬─────────────────────────────────────────┘
                          │ pyodbc (ODBC Driver 17)
-┌───────────────────────▼───────────────────────────────────┐
-│  SQL Server (LocalDB) — RiskDB                            │
-│  9 טבלאות, NVARCHAR ל-Unicode, FK מלא, אינדקסים            │
-└───────────────────────┬───────────────────────────────────┘
+┌───────────────────────▼─────────────────────────────────────────┐
+│  SQL Server (LocalDB) — RiskDB                                  │
+│  18 טבלאות, NVARCHAR ל-Unicode, FK מלא, אינדקסים, שדה מוצפן      │
+│  אחד (Claim_Payments.reference_number) · Alembic למיגרציות       │
+│  הדרגתיות מעל schema.sql (ראו §3, §7)                            │
+└───────────────────────┬─────────────────────────────────────────┘
                          │
-┌───────────────────────▼───────────────────────────────────┐
-│  Anthropic Claude API (claude-opus-5)                     │
-│  1. סיווג אירוע (Structured Outputs)                       │
-│  2. דוח הנהלה (Streaming)                                  │
-│  3. שאלות על הנתונים (Tool Use מאובטח)                     │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────▼─────────────────────────────────────────┐
+│  Anthropic Claude API (claude-opus-5)                            │
+│  1. סיווג אירוע (Structured Outputs)                              │
+│  2. דוח הנהלה (Streaming)                                         │
+│  3. שאלות על הנתונים (Tool Use מאובטח)                            │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 **למה הסטאק הזה:** React+Python+SQL Server נבחר על פי דרישת המשתמש. FastAPI נבחר על פני Flask/Django בשל תמיכה מובנית ב-async, תיעוד Swagger אוטומטי (`/docs`), ואינטגרציה טבעית עם Pydantic (משמש גם ל-structured outputs של Claude). SQL Server LocalDB נבחר על פני Docker כדי לצמצם תלויות סביבה.
 
 ## 3. מודל הנתונים
 
-9 טבלאות לפי המפרט המקורי, עם התאמות ל-SQL Server:
+18 טבלאות (9 מהמפרט המקורי + 9 שנוספו לאורך [TODO_SPEC.md](../TODO_SPEC.md): `Regions`, `Claim_Reserves`, `Audit_Log`, `Role_Permissions`, `Documents`, `Financial_Statements`, ומספר עמודות מורחבות על טבלאות קיימות — ראו ERD המלא), עם התאמות ל-SQL Server:
 
 | החלטה | נימוק |
 |---|---|
@@ -49,10 +56,11 @@
 | `NVARCHAR(30) + CHECK` במקום `ENUM` | אין טיפוס ENUM מובנה ב-SQL Server |
 | `latitude/longitude DECIMAL(9,6)` במקום PostGIS `Point` | פשוט, מספיק לכ-50 נכסים, עובד ישירות עם Leaflet |
 | Composite index על `(latitude, longitude)` במקום GIST spatial index | ללא הרחבת PostGIS ב-SQL Server; מספיק בהיקף הדמו |
+| `entity_type`+`entity_id` פוליארפי (`Documents`, `Audit_Log`) במקום FK נפרד per-entity | נמנע מארבעה עמודות FK nullable לכל ישות אפשרית |
 
-ראו ERD מלא ב-[erd.md](./erd.md) וסכימת DDL מלאה ב-[`backend/sql/schema.sql`](../backend/sql/schema.sql).
+ראו ERD מלא ב-[erd.md](./erd.md) וסכימת DDL מלאה ב-[`backend/sql/schema.sql`](../backend/sql/schema.sql). `backend/alembic/` עוקב אחרי שינויי סכימה **הדרגתיים** מעבר לנקודת הבסיס הנוכחית (ראו §7) — `schema.sql` נשאר מקור האמת ליצירת DB חדש מאפס.
 
-**שרשרת הערך:** `Properties → Asset_Risk_Profiles → Incidents → Claims → Claim_Payments`, עם `Insurance_Policies` ↔ `Properties` דרך טבלת קישור `Policy_Assets`, ו-`Mitigation_Tasks` כמסלול נפרד לניהול תחזוקה מונעת.
+**שרשרת הערך:** `Properties → Asset_Risk_Profiles → Incidents → Claims → Claim_Payments` (+ `Claim_Reserves` לתזרים צפוי), עם `Insurance_Policies` ↔ `Properties` דרך טבלת קישור `Policy_Assets`, ו-`Mitigation_Tasks` כמסלול נפרד לניהול תחזוקה מונעת. `Regions`, `Documents`, `Audit_Log`, `Role_Permissions` ו-`Financial_Statements` הן טבלאות תומכות שנוספו לצורך דוחות חשיפה אזוריים, ניהול מסמכים, ביקורת (audit) ותאימות רגולטורית.
 
 ## 4. חישובי סיכון (`backend/app/services/kpi.py`)
 
@@ -77,27 +85,64 @@
 ### 5.3 שאלות בשפה טבעית על הנתונים
 `POST /api/ai/ask` — **מאובטח בעיצוב**: המודל *לא* מייצר SQL חופשי. הוגדרו 5 כלים (`get_kpis`, `query_properties`, `query_claims`, `query_incidents`, `query_mitigation_tasks`) שכל אחד מריץ שאילתה קבועה ופרמטרית בלבד. Claude בוחר כלי ופרמטרים; אין נתיב שבו טקסט מהמשתמש הופך לביטוי SQL. מומש עם `client.beta.messages.tool_runner()`.
 
-## 6. מבנה תיקיות
+## 6. שטח ה-API (Endpoints)
+
+התיעוד האינטראקטיבי המלא (כל endpoint, סכימת בקשה/תשובה, ניסוי חי) זמין תמיד ב-**Swagger UI: `http://localhost:8000/docs`** — זהו מקור האמת בפועל, ולא מטרת הטבלה כאן. הטבלה שלהלן היא מפת-דרכים ברמת ה-router, כדי לדעת איפה לחפש:
+
+| Router (prefix) | תחום | RBAC בכתיבה |
+|---|---|---|
+| `auth.py` (`/api/auth`) | login/refresh/me/logout, שלד SSO (501 כברירת מחדל) | — (public) |
+| `properties.py` (`/api/properties`) | CRUD נכסים + פרופיל סיכון | RISK_MANAGER/ADMIN |
+| `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד | תלוי endpoint — ראו הקוד |
+| `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
+| `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
+| `claims.py` (`/api/claims`) | פתיחת/עדכון תביעות, תשלומים | RISK_MANAGER/CFO/ADJUSTER/ADMIN |
+| `mitigation.py` (`/api/mitigation-tasks`) | CRUD משימות מיטיגציה, `OVERDUE` אוטומטי, `/roi-summary` | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
+| `documents.py` (`/api/documents`) | DMS: העלאה/שליפה/מחיקה, Signed URL, לפי ישות | תלוי endpoint |
+| `analytics.py` (`/api/analytics`) | KPIs, risk-matrix, alerts, חשיפה לפי אזור/אשכול גיאוגרפי | קריאה פתוחה |
+| `simulation.py` (`/api/simulation`) | Monte Carlo VaR — תיק/נכס בודד, פרמטרי `iterations`/`horizon_years`/`seed` | קריאה פתוחה |
+| `retention.py` (`/api/retention`) | מחשבון "לספוג או לתבוע" (השתתפות עצמית) | קריאה פתוחה |
+| `financials.py` (`/api/financials`) | מגמות רב-שנתי + דוח רגולטורי (Solvency-style) | RISK_MANAGER/CFO/ADMIN |
+| `compliance.py` (`/api/compliance`) | דוח תאימות ISO 31000 | RISK_MANAGER/RISK_OFFICER/CFO/ADMIN |
+| `integrations.py` (`/api/integrations`) | ERP/GIS/מזג-אוויר/מדדים כלכליים (כולם מסומלים — ראו §8) | תלוי endpoint |
+| `notifications.py` (`/api/notifications`) | ניתוב התראות Email/SMS/Push (מסומל) | RISK_MANAGER/CFO/ADMIN |
+| `audit.py` (`/api/audit-log`) | קריאה מיומן הביקורת, ADMIN-בלבד גם לקריאה | ADMIN (גם קריאה) |
+| `users.py` (`/api/users`) | רשימת משתמשים (לצורך UI pickers בלבד — לא ניהול הרשאות) | קריאה פתוחה |
+| `ai.py` (`/api/ai`) | סיווג אירוע, דוח הנהלה (streaming), Q&A — כולם עם rate-limit | authenticated |
+
+מוסכמת RBAC: `Depends(require_roles())` ללא ארגומנטים = "מחייב התחברות, כל תפקיד"; עם ארגומנטים = תפקיד ברשימה בלבד (403 אחרת); ללא `Depends` כלל = פתוח (ראו `backend/app/dependencies/permissions.py`). רוב ה-`GET` נשארו פתוחים בכוונה כדי שדשבורדים ימשיכו לעבוד לפני התחברות; `/api/audit-log` הוא היוצא-מן-הכלל המכוון (גם קריאה חסומה ל-ADMIN, ראו [AuditLog.tsx](../frontend/src/pages/AuditLog.tsx)).
+
+## 7. מבנה תיקיות
 
 ```
 risk-management-system/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py, config.py, database.py, models.py, schemas.py
-│   │   ├── routers/        # properties, incidents, policies, claims, mitigation, analytics, ai
-│   │   ├── services/       # kpi.py, llm.py
-│   │   └── seed.py         # נתוני דמו (Python/pyodbc — לא sqlcmd, ר' סעיף 9)
-│   ├── sql/schema.sql       # DDL מלא
+│   │   ├── routers/         # 17 routers — ראו §6 לרשימה המלאה
+│   │   ├── services/        # kpi, cashflow, retention, simulation, financials,
+│   │   │                    # compliance, notifications, storage, auth, encryption, llm
+│   │   ├── integrations/    # erp.py, gis.py, weather.py, economics.py (מסומלים, §9)
+│   │   ├── middleware/      # audit.py — AuditLogMiddleware
+│   │   ├── dependencies/    # permissions.py — get_current_user / require_roles
+│   │   └── seed.py          # נתוני דמו (Python/pyodbc — לא sqlcmd, ר' §10)
+│   ├── sql/schema.sql        # DDL מלא (מקור אמת ל-DB חדש)
+│   ├── alembic/               # מיגרציות הדרגתיות (ר' §8) — versions/, env.py
+│   ├── tests/                 # pytest — יחידה + אינטגרציה, SQLite בזיכרון
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
-│       ├── pages/           # Dashboard, Properties, IncidentReport, Claims, Reports
-│       ├── components/      # KpiCard, RiskMap, RiskMatrix, HazardChart, ClaimsTable
-│       └── api/client.ts    # טיפוסי TS + קריאות API
-└── docs/                    # מסמך זה + ERD + צילומי מסך
+│       ├── pages/            # Dashboard, Properties, Incidents, IncidentReport,
+│       │                     # Claims, Policies, Mitigation, Simulation, Retention,
+│       │                     # Documents, Reports, Compliance, AuditLog, Login, ...
+│       ├── components/       # KpiCard, RiskMap, RiskMatrix, HazardChart, ClaimsTable, ...
+│       ├── auth/              # AuthContext (JWT, role)
+│       ├── offline/           # syncQueue.ts — IndexedDB offline sync
+│       └── api/client.ts      # טיפוסי TS + קריאות API (מראה את schemas.py)
+└── docs/                      # מסמך זה + erd.md + צילומי מסך
 ```
 
-## 7. הרצה מקומית
+## 8. הרצה מקומית
 
 ```bash
 # Backend
@@ -106,9 +151,12 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env   # ולמלא ANTHROPIC_API_KEY
-sqlcmd -S "(localdb)\MSSQLLocalDB" -C -i sql\schema.sql
+sqlcmd -S "(localdb)\MSSQLLocalDB" -C -i sql\schema.sql   # DB חדש בלבד — ר' הערה מתחת
 python -m app.seed
 uvicorn app.main:app --reload
+
+# Backend — בדיקות (לא דורש DB אמיתי, SQLite בזיכרון)
+python -m pytest -q
 
 # Frontend (טרמינל נפרד)
 cd frontend
@@ -116,23 +164,22 @@ npm install
 npm run dev
 ```
 
-גישה: Frontend ב-`http://localhost:5173`, Swagger UI ב-`http://localhost:8000/docs`.
+גישה: Frontend ב-`http://localhost:5173`, Swagger UI ב-`http://localhost:8000/docs`. משתמשי seed לדוגמה (סיסמה משותפת `Demo1234!` לכולם — ראו `backend/app/seed.py`): `admin@company.co.il` (ADMIN), `avi.levi@company.co.il` (CFO), ועוד — כל הכתובות מפורטות ב-`seed.py`.
 
-## 8. מה מחוץ להיקף (עבודה עתידית)
+**מיגרציות (Alembic), על DB קיים בלבד:** `schema.sql` הוא עדיין הדרך להקים DB חדש מאפס (הפקודה למעלה). לשינוי סכימה על DB קיים — בעקבות שינוי ב-`models.py` — הזרימה היא `alembic revision --autogenerate -m "..."` ואז סקירה ידנית של המיגרציה שנוצרה (היא תמיד תדגל מחדש רעש קוסמטי קבוע — הבדלי רינדור `DATETIME2`/`DateTime` וכמה אינדקסים שקיימים ב-`schema.sql` אך לא מוצהרים כ-`Index(...)` ב-`models.py`) ואז `alembic upgrade head`. עדכנו את `schema.sql` בהתאם, כדי שהקמת DB חדש מאפס תמשיך לשקף את אותה סכימה.
 
-לפי המפרט המקורי, הפריטים הבאים תועדפו החוצה בכוונה כדי למקד את הדמו בשרשרת הערך המרכזית:
+## 9. מה מחוץ להיקף (עבודה עתידית)
 
-- אינטגרציית ERP (SAP/Priority) לסנכרון שווי נכסים ותשלומים
-- אינטגרציית Govmap למפות סיכון רשמיות (הוחלף ב-OpenStreetMap חינמי)
-- סנכרון offline למובייל בשטח
-- RBAC מלא ו-Audit Log (יש טבלת `Users` עם `role`, אך אין אכיפת הרשאות בפועל)
-- הצפנת נתונים at-rest
-- סימולציות Monte Carlo לחישוב VaR מלא (הוחלף בחישובי MFL/Risk Score דטרמיניסטיים)
-- התראות Push/SMS אוטומטיות על אירועים קריטיים
-- ייצוא PDF מעוצב לדירקטוריון (יש ייצוא נתונים גולמי בלבד)
-- העלאת מדיה אמיתית לאירועים (יש טבלת `Incident_Media` בסכימה, אך העלאת קבצים בטופס היא הדגמה בלבד ללא שמירה בשרת)
+רוב הפריטים שתועדו כאן בגרסאות קודמות של המסמך מומשו בפועל לאורך [TODO_SPEC.md](../TODO_SPEC.md) (RBAC, Audit Log, הצפנה, VaR, ERP/GIS, offline sync, PDF export, העלאת מדיה אמיתית — כולם קיימים כעת). מה שנשאר מחוץ להיקף בכוונה, כי הוא מעבר להיקף דמו לקורס:
 
-## 9. הערות פיתוח ומלכודות שנתקלנו בהן
+- **כל אינטגרציית `backend/app/integrations/*` (ERP, GIS/Govmap, מזג-אוויר, מדדים כלכליים) מסומלת (`simulate=True`)** — אין credentials/API keys אמיתיים לספקים חיצוניים אלה בסביבה זו; כל מודול כתוב כך שקל להחליף בקריאת HTTP אמיתית ביום שיהיו פרטי חיבור.
+- **שליחה בפועל של Email/SMS/Push** (`services/notifications.py::dispatch_notifications`) — מדמה שליחה (רושמת ל-log, `status="simulated"`), אין ספק חיצוני מוגדר.
+- **אחסון קבצים אמיתי בענן** (`services/storage.py`) — שומר לתיקייה מקומית `backend/media_storage/` ומחתים URL-ים בעצמו, במקום S3/Blob אמיתי (אין credentials בסביבה).
+- **SSO/OAuth2/SAML אמיתי** (`routers/auth.py` sso endpoints) — שלד בלבד, מחזיר `501` כברירת מחדל (`SSO_ENABLED=false`), אין IdP זמין לבדיקה.
+- **מנוע אקטוארי/תמחור אמיתי** — VaR (`services/simulation.py`), אופטימיזציית השתתפות עצמית (`services/retention.py`) ופיצול ROI/פרמיה (`services/kpi.py`) כולם מבוססי הנחות פשוטות ומתועדות (קבועים כמו `PREMIUM_SURCHARGE_RATE`), לא מודלים אקטואריים מכוילים על נתוני שוק אמיתיים — מכוון: זהו כלי הדגמה לקורס.
+- **ניהול משתמשים/הרשאות מלא (יצירה/מחיקה של משתמשים, UI לעריכת `Role_Permissions`)** — קיימות טבלאות `Users`/`Role_Permissions` ואכיפת RBAC בפועל בכל endpoint, אך אין מסך "ניהול משתמשים" ליצירה/מחיקה — משתמשים נזרעים דרך `seed.py` בלבד.
+
+## 10. הערות פיתוח ומלכודות שנתקלנו בהן
 
 תיעוד לצורכי שקיפות (רלוונטי גם לדוח ההגשה):
 
@@ -141,11 +188,13 @@ npm run dev
 3. **SQLAlchemy `String`/`Text` גנרי במקום `Unicode`/`UnicodeText`** יכול לגרום ל-pyodbc לקשור פרמטרים כ-ANSI צר במקום Unicode רחב, מה שהופך טקסט עברי ל-`?????` בזמן INSERT — למרות שהעמודה בפועל היא `NVARCHAR`. כל השדות הטקסטואליים ב-`models.py` משתמשים כעת ב-`Unicode`/`UnicodeText` באופן מפורש.
 4. **`--reload` של uvicorn** תקוע לעיתים אחרי כמה מחזורי rewrite מהירים על אותם קבצים (במיוחד ב-Windows) — נצפה `RuntimeWarning: coroutine 'Server.serve' was never awaited`. הפתרון: הפעלה מחדש מלאה של תהליך השרת אחרי שינויים משמעותיים, ולא הסתמכות בלבד על ה-reloader.
 
-## 10. סטטוס נוכחי ומשימות להמשך
+## 11. סטטוס נוכחי ומשימות להמשך
 
-עדכון אחרון: 2026-08-16 (המשך).
+עדכון אחרון: 2026-08-20.
 
-### מה בוצע עד כה
+**המשך ההיסטוריה מתחת (שלב "PR #1" ואילך) הוא היומן המקורי של הפרויקט, לפני שנכתב [TODO_SPEC.md](../TODO_SPEC.md) — נשמר כמות שהוא לצורכי שקיפות. מ-TODO_SPEC.md ואילך (9 שלבי פיתוח: Database & Data Model → Backend Services → API → אבטחה → UI → PWA/Offline → אינטגרציות → מודלים מתקדמים → Compliance & Reporting), כל משימה תועדה עם ה-✅ שלה *בתוך* `TODO_SPEC.md` עצמו (branch, מה נבנה, מה נבדק בפועל) במקום כאן — זהו כעת מקור האמת ל"מה בוצע ומתי", ולא סעיף זה. שלב 10 (Quality & Ops: בדיקות יחידה/אינטגרציה, Alembic, ותיעוד זה) הושלם ב-2026-08-20; שאר תשעת השלבים הושלמו קודם לכן. לתמונת מצב עדכנית — לפתוח את `TODO_SPEC.md` ולראות אילו תיבות עדיין `[ ]` (ריקות).**
+
+### מה בוצע עד כה (יומן היסטורי, לפני TODO_SPEC.md)
 
 **גרסה ראשונית (build מלא, first commit → `8f1398e`):** המערכת המלאה כפי שמתוארת בסעיפים 1-9 — 9 טבלאות, כל ה-routers (properties/incidents/policies/claims/mitigation/analytics/ai), שלוש יכולות ה-AI, וחמשת מסכי ה-Frontend המקוריים (Dashboard, Properties, IncidentReport, Claims, Reports).
 
@@ -221,10 +270,12 @@ npm run dev
 
 אומת ידנית בדפדפן מול ה-DB האמיתי: הכרטיסים והטבלה (9 תביעות אמיתיות, כולל שמות נכסים עם גרשיים כמו `מרלו"ג מודיעין`) נטענים נכון במיכל הנסתר; לחיצה על "ייצוא ל-PDF" רצה עד סוף (הכפתור חוזר למצב הרגיל, ללא שגיאת קונסולה חדשה — שתי שגיאות ה-HMR הקיימות בקונסול שייכות לעריכה של סשן אחר על `AlertsBanner.tsx` ולא קשורות). בדיקת פתיחת קובץ ה-PDF שהופק בפועל מוגבלת לסביבת ה-preview הסגורה (כמו בייצוא ה-Excel). `tsc -b` נקי (מלבד שגיאת `stylis` הקיימת מראש). פותח בענף `feature/pdf-export`.
 
-### מה עוד נשאר לעשות
+### מה עוד נשאר לעשות (מצב נכון ל-2026-08-16, לפני TODO_SPEC.md)
 
 נבדק מיפוי פערים מול המפרט (routers, מסכים, מודל נתונים, seed data). כל הפערים המשמעותיים שזוהו במחזורי הפיתוח הקודמים נסגרו.
 
-**מוצהר כמחוץ להיקף (ראו סעיף 8) ולא צפוי להשתנות בפרויקט הקורס:** RBAC/Audit Log, הצפנת at-rest, אינטגרציית ERP/Govmap, סנכרון offline, סימולציות Monte Carlo/VaR מלאות, התראות Push/SMS (יש כעת התראות UI ב-`GET /api/analytics/alerts`, אך ללא ערוץ push/SMS אמיתי), שמירת מדיה אמיתית לאירועים (`Incident_Media` קיימת במודל ומעולם לא נזרעה).
+**מוצהר כמחוץ להיקף בזמנו (ראו סעיף 8 הישן):** RBAC/Audit Log, הצפנת at-rest, אינטגרציית ERP/Govmap, סנכרון offline, סימולציות Monte Carlo/VaR מלאות, התראות Push/SMS, שמירת מדיה אמיתית לאירועים — **כל אלה מומשו בפועל לאחר מכן דרך TODO_SPEC.md** (ראו §9 המעודכן למה שעדיין מסומל/מחוץ להיקף בפועל היום).
 
-**המלצה לצעד הבא:** אין פער תפקודי משמעותי נוסף שזוהה. מומלץ לעבור על סעיף 8 עם המרצה/דרישות ההגשה כדי לבחור אם להשקיע בהרחבת אחד הפריטים שם (למשל RBAC בסיסי לפי `Users.role` הקיים), או להתמקד בליטוש/בדיקות ידניות מקיפות של כל המסכים הקיימים לקראת ההגשה.
+### שלב 10 (Quality & Ops) — סגירת TODO_SPEC.md
+
+שלב 10, שהושלם ב-2026-08-20, סגר את הפערים התפעוליים האחרונים שנותרו פתוחים אחרי תשעת שלבי הבנייה: `backend/tests/` (50 בדיקות pytest — יחידה על שירותי החישוב, אינטגרציה על ה-API כולל RBAC, נגד SQLite בזיכרון כדי לא לדרוש SQL Server אמיתי בסביבת CI), `backend/alembic/` (מיגרציות הדרגתיות מעל `schema.sql`, ראו §8), ותיעוד זה (ERD מעודכן ל-18 טבלאות, קטלוג endpoints חדש ב-§6, הוראות הרצה מעודכנות). פירוט מלא, כולל מה נבדק בפועל בכל אחד, ב-TODO_SPEC.md עצמו.

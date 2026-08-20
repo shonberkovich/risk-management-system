@@ -29,6 +29,9 @@ uvicorn app.main:app --reload
 # Frontend — http://localhost:5173
 cd frontend
 npm install && npm run dev
+
+# Backend tests (לא דורש DB אמיתי)
+cd backend && python -m pytest -q
 ```
 
 יש להוסיף `ANTHROPIC_API_KEY` לקובץ `backend/.env` (ראו `.env.example`) כדי להפעיל את יכולות ה-AI.
