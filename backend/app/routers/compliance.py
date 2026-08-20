@@ -20,7 +20,10 @@ def get_iso31000_report(
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles(*_COMPLIANCE_ROLES)),
 ):
-    """Read-only ISO 31000 risk-mapping / ownership / control-status report — see
-    app/services/compliance.py for how each framework clause's status is derived
-    from existing Properties/Asset_Risk_Profiles/Mitigation_Tasks data."""
+    """Read-only, multi-framework compliance report (ISO 31000, Solvency II Pillar II,
+    and the Israeli Capital Market Authority's risk-management circular) — risk mapping /
+    ownership / control-status, plus each framework's own governance clauses. See
+    app/services/compliance.py for how each framework_sections entry's status is derived
+    from existing Properties/Asset_Risk_Profiles/Mitigation_Tasks/Users/Role_Permissions/
+    Financial_Statements data."""
     return compliance.build_iso31000_report(db)

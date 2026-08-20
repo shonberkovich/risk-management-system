@@ -75,7 +75,10 @@ export default function Compliance() {
           <VerifiedUserIcon color="primary" fontSize="large" />
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              דוח תאימות {standard}
+              דוח תאימות רגולטורית
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {standard}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               הופק ב-{formatDate(generated_at)} · מיפוי סיכונים, בעלי אחריות וסטטוס בקרות
@@ -126,14 +129,14 @@ export default function Compliance() {
       <Card variant="outlined">
         <CardContent>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>
-            מיפוי לתהליך ניהול הסיכונים (ISO 31000 סעיף 6)
+            מיפוי לתהליכי ניהול סיכונים ותאימות רגולטורית (ISO 31000 / Solvency II / רשות שוק ההון)
           </Typography>
           <Stack spacing={1.5}>
             {framework_sections.map((section) => {
               const Icon = SECTION_STATUS_ICON[section.status];
               return (
                 <Stack
-                  key={section.clause}
+                  key={`${section.standard}-${section.clause}`}
                   direction={{ xs: "column", sm: "row" }}
                   spacing={1.5}
                   alignItems={{ sm: "center" }}
@@ -141,12 +144,15 @@ export default function Compliance() {
                 >
                   <Icon color={SECTION_STATUS_COLORS[section.status]} />
                   <Box sx={{ flexGrow: 1 }}>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {section.clause} — {section.title}
                       </Typography>
                       <Chip label={section.status} size="small" color={SECTION_STATUS_COLORS[section.status]} />
                     </Stack>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {section.standard}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {section.description}
                     </Typography>

@@ -798,6 +798,7 @@ class ComplianceRiskEntryOut(BaseModel):
 
 
 class ComplianceFrameworkSectionOut(BaseModel):
+    standard: str
     clause: str
     title: str
     description: str
