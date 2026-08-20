@@ -82,7 +82,7 @@ def _load_recipients(db: Session) -> list[Recipient]:
     Falls back to DEFAULT_RECIPIENTS if the table has no active rows, so an unseeded
     DB (or a test using an in-memory one) still routes alerts somewhere sensible."""
     rows = db.scalars(
-        select(models.NotificationRecipient).where(models.NotificationRecipient.is_active.is_(True))
+        select(models.NotificationRecipient).where(models.NotificationRecipient.is_active == True)  # noqa: E712
     ).all()
     if not rows:
         return DEFAULT_RECIPIENTS
