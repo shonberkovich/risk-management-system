@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 HazardType = Literal["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"]
 SeverityLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -57,6 +57,32 @@ class RiskProfileOut(BaseModel):
     earthquake_risk_score: int
     mfl_amount: float
     has_sprinklers: bool
+    notes: str | None = None
+
+
+class RiskProfileCreate(BaseModel):
+    """Payload for POST /api/properties/{property_id}/risk-profile — creating the
+    first (and only, see AssetRiskProfile's 1:1 relationship to Property) survey for
+    a property. Score bounds (1-5) mirror schema.sql's CHECK constraints, surfaced
+    here as a 422 instead of a raw DB error."""
+    survey_date: date
+    flood_risk_score: int = Field(ge=1, le=5)
+    fire_risk_score: int = Field(ge=1, le=5)
+    earthquake_risk_score: int = Field(ge=1, le=5)
+    mfl_amount: float
+    has_sprinklers: bool
+    notes: str | None = None
+
+
+class RiskProfileUpdate(BaseModel):
+    """Payload for PUT /api/properties/{property_id}/risk-profile — partial update
+    (re-survey) of the existing profile."""
+    survey_date: date | None = None
+    flood_risk_score: int | None = Field(default=None, ge=1, le=5)
+    fire_risk_score: int | None = Field(default=None, ge=1, le=5)
+    earthquake_risk_score: int | None = Field(default=None, ge=1, le=5)
+    mfl_amount: float | None = None
+    has_sprinklers: bool | None = None
     notes: str | None = None
 
 

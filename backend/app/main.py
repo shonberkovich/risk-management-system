@@ -21,6 +21,7 @@ from app.routers import (
     policies,
     properties,
     retention,
+    risk_profiles,
     simulation,
     users,
 )
@@ -54,6 +55,7 @@ async def https_redirect(request: Request, call_next):
 
 app.include_router(auth.router)
 app.include_router(properties.router)
+app.include_router(risk_profiles.router)
 app.include_router(incidents.router)
 app.include_router(policies.router)
 app.include_router(claims.router)

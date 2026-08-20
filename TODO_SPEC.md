@@ -18,7 +18,8 @@
 [x] CRUD מלא לנכסים — הוספת POST, PUT, DELETE ל-properties.py (קריטי לניהול Asset Inventory).
 ✅ בוצע ב-branch feature/properties-crud: נוספו POST /api/properties (יצירה, בדיקת ייחודיות property_code, ולידציית קיום primary_manager_id/region_id), PUT /api/properties/{id} (עדכון חלקי, אותן ולידציות) ו-DELETE /api/properties/{id} (soft delete — is_active=False, ולא מחיקה פיזית, כדי לשמר את שרשרת הנתונים התלויה: Asset_Risk_Profiles/Incidents/Claims/Mitigation_Tasks/Policy_Assets — GET /api/properties הקיים כבר מסנן לפי is_active כך שההיסטוריה נשארת נגישה דרך GET /{id}). תפקידי כתיבה: RISK_MANAGER/PROPERTY_MANAGER/ADMIN (כמו mitigation.py). נוספו PropertyCreate/PropertyUpdate ב-schemas.py, עודכן docs/README.md (טבלת ה-routers), וטסטים ב-test_api_properties_crud.py. 68/68 טסטים עוברים (10 חדשים).
 
-[ ] API לסקרי סיכונים (Asset_Risk_Profiles) — יצירת Endpoint ליצירה ועדכון של סקר סיכונים, MFL ואמצעי מיגון (risk_profiles.py).
+[x] API לסקרי סיכונים (Asset_Risk_Profiles) — יצירת Endpoint ליצירה ועדכון של סקר סיכונים, MFL ואמצעי מיגון (risk_profiles.py).
+✅ בוצע ב-branch feature/risk-profiles-api: נוסף ראוטר חדש backend/app/routers/risk_profiles.py, רשום ב-main.py. מאחר ול-Property יש לכל היותר פרופיל סיכון אחד (יחס 1:1, models.Property.risk_profile), ה-endpoints מקוננים תחת /api/properties/{property_id}/risk-profile ולא כאוסף שטוח: GET (שליפה), POST (יצירה ראשונה — 409 אם כבר קיים פרופיל, מכוון להשתמש ב-PUT), PUT (עדכון חלקי/סקר חוזר — 404 אם עוד אין פרופיל). ולידציית טווח 1-5 לציוני הסיכון (flood/fire/earthquake) ב-Pydantic (Field(ge=1, le=5)) כדי להחזיר 422 ברור במקום שגיאת CHECK גולמית מה-DB. נוספו RiskProfileCreate/RiskProfileUpdate ב-schemas.py, עודכן docs/README.md (טבלת ה-routers וספירת ה-routers ל-19), וטסטים ב-test_api_risk_profiles.py. 77/77 טסטים עוברים (9 חדשים).
 
 [ ] API לעדכון רזרבות (Claim_Reserves) — הוספת דרך להזין ולעדכן רזרבה על תביעה פתוחה ב-claims.py.
 
