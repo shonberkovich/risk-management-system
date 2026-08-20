@@ -770,6 +770,42 @@ export const fetchMultiYearTrends = () =>
 export const fetchRegulatoryReport = () =>
   api.get<RegulatoryReport>("/financials/regulatory-report").then((r) => r.data);
 
+export interface AuditLogEntry {
+  log_id: number;
+  user_id: number | null;
+  user_name: string | null;
+  entity_type: string;
+  entity_id: number;
+  action: string;
+  old_value: string | null;
+  new_value: string | null;
+  timestamp: string;
+  ip_address: string | null;
+}
+
+export interface AuditLogPage {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: AuditLogEntry[];
+}
+
+export interface AuditLogFilters {
+  entity_type?: string;
+  entity_id?: number;
+  user_id?: number;
+  action?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const fetchAuditLog = (params: AuditLogFilters = {}) =>
+  api.get<AuditLogPage>("/audit-log", { params }).then((r) => r.data);
+export const fetchAuditLogEntityTypes = () =>
+  api.get<string[]>("/audit-log/entity-types").then((r) => r.data);
+
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);
 

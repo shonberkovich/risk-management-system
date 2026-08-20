@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router-dom";
 
 import Layout from "./components/Layout";
 import { useAuth } from "./auth/AuthContext";
+import AuditLog from "./pages/AuditLog";
 import Claims from "./pages/Claims";
 import Compliance from "./pages/Compliance";
 import Dashboard from "./pages/Dashboard";
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/retention" element={<Retention />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/compliance" element={<Compliance />} />
+        <Route path="/audit-log" element={<AuditLog />} />
       </Routes>
     </Layout>
   );

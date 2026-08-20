@@ -5,6 +5,7 @@ import CasinoIcon from "@mui/icons-material/Casino";
 import FolderIcon from "@mui/icons-material/Folder";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HandymanIcon from "@mui/icons-material/Handyman";
+import HistoryIcon from "@mui/icons-material/History";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ShieldIcon from "@mui/icons-material/Shield";
@@ -94,6 +95,15 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] 
     label: "תאימות ISO 31000",
     icon: <VerifiedUserIcon fontSize="small" />,
     roles: ["RISK_MANAGER", "RISK_OFFICER", "CFO"],
+  },
+  {
+    to: "/audit-log",
+    label: "יומן ביקורת",
+    icon: <HistoryIcon fontSize="small" />,
+    // ADMIN-only (see backend/app/routers/audit.py) — listed explicitly rather than
+    // relying only on the `|| user?.role === "ADMIN"` fallback below, so the intent
+    // ("admins only, no one else") reads directly off this table.
+    roles: ["ADMIN"],
   },
 ];
 
