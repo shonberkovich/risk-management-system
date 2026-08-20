@@ -504,6 +504,7 @@ export interface ComplianceRiskEntry {
 }
 
 export interface ComplianceFrameworkSection {
+  standard: string;
   clause: string;
   title: string;
   description: string;
