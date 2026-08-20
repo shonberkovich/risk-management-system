@@ -7,8 +7,10 @@ import FolderIcon from "@mui/icons-material/Folder";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HandymanIcon from "@mui/icons-material/Handyman";
 import HistoryIcon from "@mui/icons-material/History";
+import CloudSyncIcon from "@mui/icons-material/CloudSync";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import LogoutIcon from "@mui/icons-material/Logout";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
@@ -87,6 +89,21 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] 
     roles: ["RISK_MANAGER", "CFO"],
   },
   { to: "/documents", label: "מסמכים", icon: <FolderIcon fontSize="small" /> },
+  {
+    to: "/notifications",
+    label: "התראות",
+    icon: <NotificationsActiveIcon fontSize="small" />,
+    // Same read-role set as routers/notifications.py's _NOTIFICATIONS_ROLES.
+    roles: ["RISK_MANAGER", "CFO"],
+  },
+  {
+    // No `roles` restriction: the page itself gates each section per role (ERP/GIS/economics
+    // vs. the weather feed, which routers/integrations.py leaves open to every authenticated
+    // role) — a field worker still needs to see at least the weather-alerts section.
+    to: "/integrations",
+    label: "אינטגרציות",
+    icon: <CloudSyncIcon fontSize="small" />,
+  },
   {
     to: "/reports",
     label: "דוחות",

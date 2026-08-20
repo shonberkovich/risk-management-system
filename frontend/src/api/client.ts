@@ -952,3 +952,178 @@ export const streamExecutiveSummary = async () => {
   }
   return res.body;
 };
+
+// --- Notifications (TODO_SPEC.md §5, "מסכי אינטגרציה והתראות") ---
+
+export type NotificationChannel = "EMAIL" | "SMS" | "PUSH";
+export type NotificationSeverity = "warning" | "critical";
+
+export interface NotificationPreview {
+  recipient_role: string;
+  recipient_name: string;
+  channel: NotificationChannel;
+  contact: string;
+  alert_type: "geographic_exposure" | "incident_concentration" | "critical_incident";
+  severity: NotificationSeverity;
+  title: string;
+  message: string;
+  property_ids: number[];
+  value: number;
+  threshold: number;
+  status: string | null;
+}
+
+export interface NotificationLogEntry {
+  log_id: number;
+  alert_type: "geographic_exposure" | "incident_concentration" | "critical_incident";
+  severity: NotificationSeverity;
+  recipient_role: string;
+  recipient_name: string;
+  channel: NotificationChannel;
+  contact: string;
+  title: string;
+  message: string;
+  property_ids: number[];
+  value: number;
+  threshold: number;
+  status: string;
+  sent_at: string;
+}
+
+export interface NotificationRecipient {
+  recipient_id: number;
+  role: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  channels: NotificationChannel[];
+  min_severity: NotificationSeverity;
+  is_active: boolean;
+}
+
+export interface NotificationRecipientCreate {
+  role: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  channels: NotificationChannel[];
+  min_severity?: NotificationSeverity;
+  is_active?: boolean;
+}
+
+export interface NotificationRecipientUpdate {
+  role?: string;
+  display_name?: string;
+  email?: string;
+  phone?: string;
+  channels?: NotificationChannel[];
+  min_severity?: NotificationSeverity;
+  is_active?: boolean;
+}
+
+export const previewNotifications = () =>
+  api.get<NotificationPreview[]>("/notifications/preview").then((r) => r.data);
+export const dispatchNotifications = () =>
+  api.post<NotificationPreview[]>("/notifications/dispatch").then((r) => r.data);
+export const fetchNotificationLog = (limit = 200) =>
+  api.get<NotificationLogEntry[]>("/notifications/log", { params: { limit } }).then((r) => r.data);
+export const fetchNotificationRecipients = () =>
+  api.get<NotificationRecipient[]>("/notifications/recipients").then((r) => r.data);
+export const createNotificationRecipient = (payload: NotificationRecipientCreate) =>
+  api.post<NotificationRecipient>("/notifications/recipients", payload).then((r) => r.data);
+export const updateNotificationRecipient = (id: number, payload: NotificationRecipientUpdate) =>
+  api.patch<NotificationRecipient>(`/notifications/recipients/${id}`, payload).then((r) => r.data);
+export const deleteNotificationRecipient = (id: number) =>
+  api.delete(`/notifications/recipients/${id}`).then(() => undefined);
+
+// --- Integrations (simulated ERP/GIS/weather/economics feeds — see app/integrations/*.py) ---
+
+export interface ErpBookValue {
+  property_id: number;
+  property_code: string;
+  name: string;
+  book_value: number;
+  replacement_value: number;
+  as_of: string;
+  source_system: string;
+  status: string;
+}
+
+export interface ErpClaimReceiptPosting {
+  payment_id: number;
+  claim_id: number;
+  claim_number: string;
+  property_code: string;
+  payment_date: string;
+  amount: number;
+  payment_type: string;
+  debit_account: string;
+  credit_account: string;
+  memo: string;
+  status: string;
+  posted_at: string | null;
+}
+
+export interface GisRiskLayer {
+  property_id: number;
+  property_code: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  flood_zone: string;
+  flood_zone_description: string;
+  climate_risk_index: number;
+  internal_flood_risk_score: number | null;
+  mismatch_with_internal_survey: boolean;
+  source_system: string;
+  as_of: string;
+  status: string;
+}
+
+export interface WeatherAlert {
+  property_id: number;
+  property_code: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  alert_type: string;
+  severity: string;
+  as_of: string;
+  issued_at: string;
+  source_system: string;
+  status: string;
+}
+
+export interface EconomicIndexSeries {
+  as_of: string;
+  base_date: string;
+  construction_cost_index: number;
+  cpi_index: number;
+  source_system: string;
+}
+
+export interface ReplacementValueUpdate {
+  property_id: number;
+  property_code: string;
+  name: string;
+  current_replacement_value: number;
+  suggested_replacement_value: number;
+  drift_percent: number;
+  baseline_date: string;
+  as_of: string;
+  recommended_for_revaluation: boolean;
+  source_system: string;
+}
+
+export const fetchErpBookValues = () =>
+  api.get<ErpBookValue[]>("/integrations/erp/book-values").then((r) => r.data);
+export const postErpClaimReceipts = () =>
+  api.post<ErpClaimReceiptPosting[]>("/integrations/erp/post-claim-receipts").then((r) => r.data);
+export const fetchGisRiskLayers = () =>
+  api.get<GisRiskLayer[]>("/integrations/gis/risk-layers").then((r) => r.data);
+export const fetchWeatherAlerts = () =>
+  api.get<WeatherAlert[]>("/integrations/weather/alerts").then((r) => r.data);
+export const fetchEconomicIndexSeries = () =>
+  api.get<EconomicIndexSeries>("/integrations/economics/index-series").then((r) => r.data);
+export const fetchReplacementValueUpdates = () =>
+  api.get<ReplacementValueUpdate[]>("/integrations/economics/replacement-value-updates").then((r) => r.data);

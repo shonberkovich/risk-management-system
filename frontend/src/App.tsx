@@ -12,8 +12,10 @@ import Documents from "./pages/Documents";
 import IncidentDetail from "./pages/IncidentDetail";
 import IncidentReport from "./pages/IncidentReport";
 import Incidents from "./pages/Incidents";
+import Integrations from "./pages/Integrations";
 import Login from "./pages/Login";
 import Mitigation from "./pages/Mitigation";
+import Notifications from "./pages/Notifications";
 import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
 import PropertyDetail from "./pages/PropertyDetail";
@@ -58,6 +60,8 @@ export default function App() {
         <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/users" element={<Users />} />
         <Route path="/roles" element={<Roles />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/integrations" element={<Integrations />} />
       </Routes>
     </Layout>
   );
