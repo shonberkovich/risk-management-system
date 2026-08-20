@@ -311,6 +311,49 @@ export interface User {
   role: string;
 }
 
+/** Fuller shape returned only by the ADMIN-only endpoints (GET /users/admin, POST/PATCH
+ * /users) — the open GET /users lookup above stays minimal (see backend module docstring). */
+export interface UserAdmin {
+  user_id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface UserCreate {
+  full_name: string;
+  email: string;
+  role: string;
+  password?: string | null;
+}
+
+export interface UserUpdate {
+  full_name?: string;
+  email?: string;
+  role?: string;
+  password?: string | null;
+  is_active?: boolean;
+}
+
+export interface RolePermission {
+  role_permission_id: number;
+  role: string;
+  permission_key: string;
+  description: string | null;
+}
+
+export interface RolePermissionCreate {
+  role: string;
+  permission_key: string;
+  description?: string | null;
+}
+
+export interface RolePermissionUpdate {
+  description?: string | null;
+}
+
 export interface Policy {
   policy_id: number;
   policy_number: string;
@@ -727,6 +770,20 @@ export const fetchMitigationRoiSummary = () =>
   api.get<MitigationRoiBreakdown[]>("/mitigation-tasks/roi-summary").then((r) => r.data);
 
 export const fetchUsers = () => api.get<User[]>("/users").then((r) => r.data);
+export const fetchUsersAdmin = () => api.get<UserAdmin[]>("/users/admin").then((r) => r.data);
+export const createUser = (payload: UserCreate) =>
+  api.post<UserAdmin>("/users", payload).then((r) => r.data);
+export const updateUser = (id: number, payload: UserUpdate) =>
+  api.patch<UserAdmin>(`/users/${id}`, payload).then((r) => r.data);
+
+export const fetchRolePermissions = (role?: string) =>
+  api.get<RolePermission[]>("/role-permissions", { params: role ? { role } : undefined }).then((r) => r.data);
+export const createRolePermission = (payload: RolePermissionCreate) =>
+  api.post<RolePermission>("/role-permissions", payload).then((r) => r.data);
+export const updateRolePermission = (id: number, payload: RolePermissionUpdate) =>
+  api.patch<RolePermission>(`/role-permissions/${id}`, payload).then((r) => r.data);
+export const deleteRolePermission = (id: number) =>
+  api.delete(`/role-permissions/${id}`).then(() => undefined);
 
 export const login = (payload: LoginRequest) => api.post<TokenPair>("/auth/login", payload).then((r) => r.data);
 export const logout = () => api.post("/auth/logout").then(() => undefined);

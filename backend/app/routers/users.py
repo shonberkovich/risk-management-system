@@ -31,6 +31,18 @@ def list_users(db: Session = Depends(get_db)):
     return db.scalars(select(models.User).order_by(models.User.full_name)).all()
 
 
+@router.get("/admin", response_model=list[schemas.UserAdminOut])
+def list_users_admin(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_USERS_WRITE_ROLES)),
+):
+    """ADMIN-only fuller listing (email, is_active, created_at) for the user-management
+    screen (TODO_SPEC.md §5, "ניהול משתמשים והרשאות") — kept as a separate endpoint
+    rather than widening GET /api/users itself, since that one is deliberately open and
+    minimal for use as a name/role picker elsewhere in the UI (see module docstring)."""
+    return db.scalars(select(models.User).order_by(models.User.full_name)).all()
+
+
 @router.post("", response_model=schemas.UserAdminOut, status_code=201)
 def create_user(
     payload: schemas.UserCreate,

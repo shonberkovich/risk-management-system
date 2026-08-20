@@ -113,3 +113,29 @@ def test_admin_cannot_disable_self(client, make_user):
     admin = make_user(role="ADMIN")
     resp = client.patch(f"/api/users/{admin.user_id}", json={"is_active": False}, headers=auth_headers(admin))
     assert resp.status_code == 400
+
+
+def test_list_users_admin_requires_auth(client):
+    resp = client.get("/api/users/admin")
+    assert resp.status_code == 401
+
+
+def test_list_users_admin_forbidden_for_non_admin(client, make_user):
+    risk_manager = make_user(role="RISK_MANAGER")
+    resp = client.get("/api/users/admin", headers=auth_headers(risk_manager))
+    assert resp.status_code == 403
+
+
+def test_list_users_admin_returns_full_shape(client, make_user):
+    admin = make_user(role="ADMIN")
+    target = make_user(role="FIELD_WORKER", email="fieldworker@example.com")
+
+    resp = client.get("/api/users/admin", headers=auth_headers(admin))
+    assert resp.status_code == 200
+    body = resp.json()
+    row = next(u for u in body if u["user_id"] == target.user_id)
+    # Full admin shape (unlike GET /api/users, which only returns user_id/full_name/role).
+    assert row["email"] == "fieldworker@example.com"
+    assert row["role"] == "FIELD_WORKER"
+    assert row["is_active"] is True
+    assert "created_at" in row

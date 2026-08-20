@@ -1,3 +1,4 @@
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DomainIcon from "@mui/icons-material/Domain";
 import BalanceIcon from "@mui/icons-material/Balance";
@@ -8,6 +9,7 @@ import HandymanIcon from "@mui/icons-material/Handyman";
 import HistoryIcon from "@mui/icons-material/History";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import LogoutIcon from "@mui/icons-material/Logout";
+import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import SummarizeIcon from "@mui/icons-material/Summarize";
@@ -104,6 +106,20 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] 
     // ADMIN-only (see backend/app/routers/audit.py) — listed explicitly rather than
     // relying only on the `|| user?.role === "ADMIN"` fallback below, so the intent
     // ("admins only, no one else") reads directly off this table.
+    roles: ["ADMIN"],
+  },
+  {
+    to: "/users",
+    label: "ניהול משתמשים",
+    icon: <PeopleAltIcon fontSize="small" />,
+    // ADMIN-only (see backend/app/routers/users.py's GET /admin + write endpoints).
+    roles: ["ADMIN"],
+  },
+  {
+    to: "/roles",
+    label: "ניהול הרשאות",
+    icon: <AdminPanelSettingsIcon fontSize="small" />,
+    // ADMIN-only (see backend/app/routers/role_permissions.py).
     roles: ["ADMIN"],
   },
 ];
