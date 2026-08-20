@@ -1,8 +1,10 @@
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentLateIcon from "@mui/icons-material/AssignmentLate";
 import PaidIcon from "@mui/icons-material/Paid";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SavingsIcon from "@mui/icons-material/Savings";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -13,13 +15,23 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
-import { fetchMitigationTasks, fetchProperties, fetchUsers, updateMitigationTask, type MitigationStatus, type MitigationTask } from "../api/client";
+import {
+  fetchMitigationRoiSummary,
+  fetchMitigationTasks,
+  fetchProperties,
+  fetchUsers,
+  updateMitigationTask,
+  type MitigationStatus,
+  type MitigationTask,
+} from "../api/client";
 import KpiCard from "../components/KpiCard";
+import MitigationReportPrintable from "../components/MitigationReportPrintable";
 import MitigationRoiDialog from "../components/MitigationRoiDialog";
 import MitigationTable, { type MitigationRow } from "../components/MitigationTable";
 import MitigationTaskDialog from "../components/MitigationTaskDialog";
+import { exportElementToPdf } from "../exportPdf";
 import { MITIGATION_STATUS_LABELS, formatIlsCompact } from "../format";
 
 const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
@@ -41,6 +53,21 @@ export default function Mitigation() {
   const tasks = useQuery({ queryKey: ["mitigation-tasks"], queryFn: fetchMitigationTasks });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers });
+  const roiSummary = useQuery({ queryKey: ["mitigation-tasks", "roi-summary"], queryFn: fetchMitigationRoiSummary });
+
+  const printableRef = useRef<HTMLDivElement>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  async function exportPdf() {
+    if (!printableRef.current) return;
+    setPdfExporting(true);
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await exportElementToPdf(printableRef.current, `mitigation-report-${dateStr}.pdf`);
+    } finally {
+      setPdfExporting(false);
+    }
+  }
 
   const markComplete = useMutation({
     mutationFn: (taskId: number) => updateMitigationTask(taskId, { status: "COMPLETED" }),
@@ -76,6 +103,11 @@ export default function Mitigation() {
     return { openOrOverdueCount: openOrOverdue.length, overdueCount, activeCost, totalSavings, avgRoi };
   }, [tasks.data]);
 
+  const roiByTaskId = useMemo(
+    () => new Map((roiSummary.data ?? []).map((r) => [r.task_id, r])),
+    [roiSummary.data],
+  );
+
   const openCreate = () => {
     setDialogTask(null);
     setDialogOpen(true);
@@ -101,9 +133,19 @@ export default function Mitigation() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           משימות הפחתת סיכון
         </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          משימה חדשה
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={pdfExporting ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
+            onClick={exportPdf}
+            disabled={pdfExporting || rows.length === 0}
+          >
+            ייצוא ל-PDF
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            משימה חדשה
+          </Button>
+        </Stack>
       </Stack>
 
       <Grid container spacing={2}>
@@ -176,6 +218,18 @@ export default function Mitigation() {
 
       <MitigationTaskDialog open={dialogOpen} task={dialogTask} onClose={() => setDialogOpen(false)} />
       <MitigationRoiDialog open={roiTaskId !== null} taskId={roiTaskId} onClose={() => setRoiTaskId(null)} />
+
+      {/* Off-screen (not display:none — html2canvas needs a laid-out element to capture)
+          printable layout for the PDF export button above. Reuses `rows` — the same
+          status-filtered, property/assignee-enriched list the on-screen table shows —
+          so the exported PDF always matches what's currently visible on screen. */}
+      {rows.length > 0 && (
+        <Box sx={{ position: "fixed", top: 0, left: "-9999px" }}>
+          <div ref={printableRef}>
+            <MitigationReportPrintable rows={rows} roiByTaskId={roiByTaskId} summary={summary} />
+          </div>
+        </Box>
+      )}
     </Stack>
   );
 }
