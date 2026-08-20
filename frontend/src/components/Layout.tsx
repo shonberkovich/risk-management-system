@@ -6,34 +6,90 @@ import FolderIcon from "@mui/icons-material/Folder";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HandymanIcon from "@mui/icons-material/Handyman";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import LogoutIcon from "@mui/icons-material/Logout";
 import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-const NAV_ITEMS = [
+import { useAuth } from "../auth/AuthContext";
+import { ROLE_LABELS } from "../format";
+
+// `roles: undefined` = visible to every authenticated role. Mirrors the write-role sets
+// enforced server-side in backend/app/routers/*.py (require_roles(...)) — a role that
+// can't write to a section has little reason to see it in the nav, but ADMIN always
+// sees everything regardless of this list (see filter below).
+const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] }[] = [
   { to: "/", label: "דשבורד", icon: <DashboardIcon fontSize="small" /> },
-  { to: "/properties", label: "נכסים", icon: <DomainIcon fontSize="small" /> },
+  {
+    to: "/properties",
+    label: "נכסים",
+    icon: <DomainIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "CFO"],
+  },
   { to: "/report-incident", label: "דיווח אירוע", icon: <ReportProblemIcon fontSize="small" /> },
-  { to: "/incidents", label: "ניהול אירועים", icon: <ListAltIcon fontSize="small" /> },
-  { to: "/claims", label: "תביעות", icon: <GavelIcon fontSize="small" /> },
-  { to: "/policies", label: "פוליסות", icon: <ShieldIcon fontSize="small" /> },
-  { to: "/mitigation", label: "הפחתת סיכון", icon: <HandymanIcon fontSize="small" /> },
-  { to: "/simulation", label: "סימולציה ו-VaR", icon: <CasinoIcon fontSize="small" /> },
-  { to: "/retention", label: "השתתפות עצמית", icon: <BalanceIcon fontSize="small" /> },
+  {
+    to: "/incidents",
+    label: "ניהול אירועים",
+    icon: <ListAltIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "FIELD_WORKER"],
+  },
+  {
+    to: "/claims",
+    label: "תביעות",
+    icon: <GavelIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "CFO", "ADJUSTER"],
+  },
+  {
+    to: "/policies",
+    label: "פוליסות",
+    icon: <ShieldIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "CFO"],
+  },
+  {
+    to: "/mitigation",
+    label: "הפחתת סיכון",
+    icon: <HandymanIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "PROPERTY_MANAGER"],
+  },
+  {
+    to: "/simulation",
+    label: "סימולציה ו-VaR",
+    icon: <CasinoIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "CFO"],
+  },
+  {
+    to: "/retention",
+    label: "השתתפות עצמית",
+    icon: <BalanceIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "CFO"],
+  },
   { to: "/documents", label: "מסמכים", icon: <FolderIcon fontSize="small" /> },
-  { to: "/reports", label: "דוחות", icon: <SummarizeIcon fontSize="small" /> },
+  {
+    to: "/reports",
+    label: "דוחות",
+    icon: <SummarizeIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "CFO"],
+  },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { user, logout } = useAuth();
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.roles || item.roles.includes(user?.role ?? "") || user?.role === "ADMIN",
+  );
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
@@ -42,8 +98,8 @@ export default function Layout({ children }: { children: ReactNode }) {
           <Typography variant="h6" sx={{ fontWeight: 700, flexShrink: 0 }}>
             🏢 RMIS — מערכת ניהול סיכונים
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexGrow: 1 }}>
-            {NAV_ITEMS.map((item) => (
+          <Stack direction="row" spacing={1} sx={{ flexGrow: 1, overflowX: "auto" }}>
+            {visibleItems.map((item) => (
               <Button
                 key={item.to}
                 component={Link}
@@ -55,12 +111,32 @@ export default function Layout({ children }: { children: ReactNode }) {
                   fontWeight: location.pathname === item.to ? 700 : 400,
                   borderBottom: location.pathname === item.to ? "2px solid white" : "2px solid transparent",
                   borderRadius: 0,
+                  flexShrink: 0,
                 }}
               >
                 {item.label}
               </Button>
             ))}
           </Stack>
+          {user && (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+              <Stack alignItems="flex-end" spacing={0}>
+                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+                  {user.full_name}
+                </Typography>
+                <Chip
+                  label={ROLE_LABELS[user.role] ?? user.role}
+                  size="small"
+                  sx={{ height: 18, fontSize: 11, bgcolor: "rgba(255,255,255,0.2)", color: "white" }}
+                />
+              </Stack>
+              <Tooltip title="התנתקות">
+                <IconButton color="inherit" onClick={logout} size="small">
+                  <LogoutIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          )}
         </Toolbar>
       </AppBar>
       <Box component="main" sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>

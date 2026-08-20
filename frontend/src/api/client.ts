@@ -2,7 +2,97 @@ import axios from "axios";
 
 export const api = axios.create({ baseURL: "/api" });
 
+// --- Auth: token storage + attach/refresh interceptors ---
+// Tokens live in localStorage (not just memory) so a page refresh doesn't force
+// re-login; see AuthContext for the React-facing session state built on top of this.
+const ACCESS_TOKEN_KEY = "rmis_access_token";
+const REFRESH_TOKEN_KEY = "rmis_refresh_token";
+
+export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
+export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
+export const setTokens = (accessToken: string, refreshToken: string) => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+};
+const setAccessToken = (accessToken: string) => localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+export const clearTokens = () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+};
+
+// Fired when the session ends (explicit logout, or a failed silent refresh) so
+// AuthContext can reset its user state without every call site checking for 401s.
+export const AUTH_LOGOUT_EVENT = "rmis:auth:logout";
+const emitLogout = () => window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
+
+api.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On a 401 from an expired access token, try one silent refresh + retry before
+// giving up and logging the user out — avoids bouncing to /login on every access-token expiry.
+let refreshInFlight: Promise<string> | null = null;
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status !== 401 || original?._retried || !getRefreshToken()) {
+      if (error.response?.status === 401) emitLogout();
+      return Promise.reject(error);
+    }
+    original._retried = true;
+    try {
+      refreshInFlight ??= api
+        .post<AccessToken>("/auth/refresh", { refresh_token: getRefreshToken() })
+        .then((r) => {
+          setAccessToken(r.data.access_token);
+          return r.data.access_token;
+        })
+        .finally(() => {
+          refreshInFlight = null;
+        });
+      const newAccessToken = await refreshInFlight;
+      original.headers = original.headers ?? {};
+      original.headers.Authorization = `Bearer ${newAccessToken}`;
+      return api(original);
+    } catch {
+      clearTokens();
+      emitLogout();
+      return Promise.reject(error);
+    }
+  },
+);
+
 // --- Types (mirror backend/app/schemas.py) ---
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface CurrentUser {
+  user_id: number;
+  full_name: string;
+  role: string;
+}
+
+export interface TokenPair {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: CurrentUser;
+}
+
+export interface AccessToken {
+  access_token: string;
+  token_type: string;
+}
 
 export type HazardType = "FLOOD" | "FIRE" | "STRUCTURAL_FAILURE" | "THEFT" | "ELECTRICAL" | "OTHER";
 export type SeverityLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -512,6 +602,10 @@ export const fetchMitigationTaskRoi = (id: number) =>
   api.get<MitigationRoiBreakdown>(`/mitigation-tasks/${id}/roi`).then((r) => r.data);
 
 export const fetchUsers = () => api.get<User[]>("/users").then((r) => r.data);
+
+export const login = (payload: LoginRequest) => api.post<TokenPair>("/auth/login", payload).then((r) => r.data);
+export const logout = () => api.post("/auth/logout").then(() => undefined);
+export const fetchCurrentUser = () => api.get<CurrentUser>("/auth/me").then((r) => r.data);
 
 export const fetchPolicies = (status?: string) =>
   api.get<Policy[]>("/policies", { params: status ? { status } : undefined }).then((r) => r.data);
