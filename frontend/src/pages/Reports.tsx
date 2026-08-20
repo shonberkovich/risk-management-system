@@ -37,6 +37,7 @@ import {
   streamExecutiveSummary,
 } from "../api/client";
 import ExecutiveReportPrintable from "../components/ExecutiveReportPrintable";
+import ExposureByRegionChart from "../components/ExposureByRegionChart";
 import KpiCard from "../components/KpiCard";
 import { exportExposureReportToExcel } from "../exportExposureReport";
 import { exportElementToPdf } from "../exportPdf";
@@ -284,6 +285,12 @@ export default function Reports() {
               ייצוא דוח חשיפה ל-Excel
             </Button>
           </Stack>
+
+          {exposureByRegion.data && exposureByRegion.data.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <ExposureByRegionChart data={exposureByRegion.data} />
+            </Box>
+          )}
 
           {regulatoryReport.isLoading && (
             <Stack alignItems="center" sx={{ py: 4 }}>
