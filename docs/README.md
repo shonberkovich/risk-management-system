@@ -104,7 +104,7 @@
 | `analytics.py` (`/api/analytics`) | KPIs, risk-matrix, alerts, חשיפה לפי אזור/אשכול גיאוגרפי | קריאה פתוחה |
 | `simulation.py` (`/api/simulation`) | Monte Carlo VaR — תיק/נכס בודד, פרמטרי `iterations`/`horizon_years`/`seed` | קריאה פתוחה |
 | `retention.py` (`/api/retention`) | מחשבון "לספוג או לתבוע" (השתתפות עצמית) | קריאה פתוחה |
-| `financials.py` (`/api/financials`) | מגמות רב-שנתי + דוח רגולטורי (Solvency-style) | RISK_MANAGER/CFO/ADMIN |
+| `financials.py` (`/api/financials`) | מגמות רב-שנתי + דוח רגולטורי (Solvency-style) + הזנת דוחות כספיים (`Financial_Statements`) | RISK_MANAGER/CFO/ADMIN |
 | `compliance.py` (`/api/compliance`) | דוח תאימות ISO 31000 | RISK_MANAGER/RISK_OFFICER/CFO/ADMIN |
 | `integrations.py` (`/api/integrations`) | ERP/GIS/מזג-אוויר/מדדים כלכליים (כולם מסומלים — ראו §8) | תלוי endpoint |
 | `notifications.py` (`/api/notifications`) | ניתוב התראות Email/SMS/Push (מסומל) | RISK_MANAGER/CFO/ADMIN |
