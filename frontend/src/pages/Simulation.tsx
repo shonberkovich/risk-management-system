@@ -1,11 +1,13 @@
 import CasinoIcon from "@mui/icons-material/Casino";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
 import MenuItem from "@mui/material/MenuItem";
+import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -21,7 +23,18 @@ import KpiCard from "../components/KpiCard";
 import SimulationDistributionChart from "../components/SimulationDistributionChart";
 import { formatIlsCompact } from "../format";
 
-const ITERATION_OPTIONS = [1000, 5000, 10000, 25000];
+// Mirrors routers/simulation.py's MAX_ITERATIONS/MAX_HORIZON_YEARS (server-side bounds,
+// gt=0/le=max on both query params) — the sliders can't ask for something the API would
+// reject with a 422.
+const ITERATIONS_MIN = 1_000;
+const ITERATIONS_MAX = 100_000;
+const ITERATIONS_MARKS = [1_000, 10_000, 25_000, 50_000, 100_000].map((v) => ({
+  value: v,
+  label: v.toLocaleString("he-IL"),
+}));
+const HORIZON_MIN = 1;
+const HORIZON_MAX = 50;
+const HORIZON_MARKS = [1, 5, 10, 25, 50].map((v) => ({ value: v, label: String(v) }));
 
 export default function Simulation() {
   const [scope, setScope] = useState<"portfolio" | number>("portfolio");
@@ -88,30 +101,38 @@ export default function Simulation() {
               ))}
             </TextField>
 
-            <TextField
-              select
-              size="small"
-              label="מספר הרצות"
-              value={iterations}
-              onChange={(e) => setIterations(Number(e.target.value))}
-              sx={{ minWidth: 150 }}
-            >
-              {ITERATION_OPTIONS.map((n) => (
-                <MenuItem key={n} value={n}>
-                  {n.toLocaleString("he-IL")}
-                </MenuItem>
-              ))}
-            </TextField>
+            <Box sx={{ minWidth: 260, px: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                מספר הרצות: {iterations.toLocaleString("he-IL")}
+              </Typography>
+              <Slider
+                size="small"
+                value={iterations}
+                onChange={(_, v) => setIterations(v as number)}
+                min={ITERATIONS_MIN}
+                max={ITERATIONS_MAX}
+                step={1000}
+                marks={ITERATIONS_MARKS}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(v) => v.toLocaleString("he-IL")}
+              />
+            </Box>
 
-            <TextField
-              size="small"
-              type="number"
-              label="אופק (שנים)"
-              value={horizonYears}
-              onChange={(e) => setHorizonYears(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-              inputProps={{ min: 1, max: 50 }}
-              sx={{ width: 130 }}
-            />
+            <Box sx={{ minWidth: 220, px: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                אופק: {horizonYears} {horizonYears === 1 ? "שנה" : "שנים"}
+              </Typography>
+              <Slider
+                size="small"
+                value={horizonYears}
+                onChange={(_, v) => setHorizonYears(v as number)}
+                min={HORIZON_MIN}
+                max={HORIZON_MAX}
+                step={1}
+                marks={HORIZON_MARKS}
+                valueLabelDisplay="auto"
+              />
+            </Box>
 
             <Button
               variant="contained"
