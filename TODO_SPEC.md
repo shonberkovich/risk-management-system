@@ -2,7 +2,8 @@
 [x] הרחבת Financial_Statements למאזן מלא — כיום קיימים רק נכסים, הכנסות, רווח והוצאות ביטוח. יש להוסיף התחייבויות, הון עצמי ורווח תפעולי (backend/app/models.py + מיגרציית Alembic).
 ✅ בוצע ב-branch feature/financial-statements-full-balance-sheet: נוספו total_liabilities, total_equity, gross_profit, operating_profit (nullable) ל-FinancialStatement, schema.sql, מיגרציית Alembic 8f2a4c6e1d09, seed.py, schemas.py ו-frontend/src/api/client.ts. services/financials.py חושב כעת gross_margin/operating_margin/equity_ratio, ודוח הרגולציה משתמש ב-total_equity האמיתי (עם נפילה ל-total_assets לשורות ישנות).
 
-[ ] טבלת נמעני התראות (Notification_Recipients) — הוצאת נמעני ההתראות מהקוד (Hardcoded) לטבלה דינמית לצורך ניהול עתידי דרך ה-UI.
+[x] טבלת נמעני התראות (Notification_Recipients) — הוצאת נמעני ההתראות מהקוד (Hardcoded) לטבלה דינמית לצורך ניהול עתידי דרך ה-UI.
+✅ בוצע ב-branch feature/notification-recipients-table: נוספה טבלת Notification_Recipients (models.py, schema.sql, מיגרציית Alembic c3d9a17f4b62, seed.py — מיגרציה של שני נמעני ברירת המחדל הקודמים). services/notifications.py קורא כעת מה-DB דרך _load_recipients (עם נפילה חזרה ל-DEFAULT_RECIPIENTS אם הטבלה ריקה). נוספו endpoints לניהול: GET/POST/PATCH/DELETE /api/notifications/recipients (כתיבה מוגבלת ל-ADMIN), schemas.py, docs/erd.md, וטסטים ב-test_api_notification_recipients.py.
 
 [ ] טבלת Notification_Log — תיעוד התראות שנשלחו בפועל (ערוץ, נמען, סטטוס, חותמת זמן) לצורך Audit Trail.
 

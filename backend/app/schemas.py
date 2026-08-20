@@ -499,6 +499,42 @@ class NotificationOut(BaseModel):
     status: str | None = None  # None for a routing preview (not yet "sent"); "simulated" after dispatch
 
 
+NotificationChannel = Literal["EMAIL", "SMS", "PUSH"]
+NotificationSeverity = Literal["warning", "critical"]
+
+
+class NotificationRecipientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    recipient_id: int
+    role: str
+    display_name: str
+    email: str
+    phone: str
+    channels: list[NotificationChannel]
+    min_severity: NotificationSeverity
+    is_active: bool
+
+
+class NotificationRecipientCreate(BaseModel):
+    role: str
+    display_name: str
+    email: str
+    phone: str
+    channels: list[NotificationChannel]
+    min_severity: NotificationSeverity = "warning"
+    is_active: bool = True
+
+
+class NotificationRecipientUpdate(BaseModel):
+    role: str | None = None
+    display_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    channels: list[NotificationChannel] | None = None
+    min_severity: NotificationSeverity | None = None
+    is_active: bool | None = None
+
+
 class ErpBookValueOut(BaseModel):
     property_id: int
     property_code: str

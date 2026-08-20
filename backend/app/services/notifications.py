@@ -18,8 +18,10 @@ feature is fully exercised end-to-end, just without an external side effect at t
 import logging
 from dataclasses import dataclass, field
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import models
 from app.services.kpi import calculate_alerts
 
 logger = logging.getLogger("rmis.notifications")
@@ -30,10 +32,11 @@ CHANNELS = ("EMAIL", "SMS", "PUSH")
 
 @dataclass
 class Recipient:
-    """A notification target. The schema has no Users/contacts table for this yet
-    (see docs/README.md §8, RBAC/user directory scoped out), so recipients are a
-    fixed, documented configuration here rather than a DB-backed lookup — same
-    "simplifying, fixed assumption" pattern as retention.PREMIUM_SURCHARGE_RATE."""
+    """A notification target. Backed by the Notification_Recipients table
+    (models.NotificationRecipient) since TODO_SPEC.md §1 — this dataclass is the
+    in-memory shape build_notifications routes against, kept separate from the ORM
+    model so the routing logic below doesn't care whether a Recipient came from the
+    DB or (as a fallback, see _load_recipients) DEFAULT_RECIPIENTS."""
     role: str
     display_name: str
     email: str
@@ -42,10 +45,13 @@ class Recipient:
     min_severity: str = "warning"  # lowest alert severity this recipient wants to hear about
 
 
-# Default routing: the risk manager is operationally closest to the data and wants
-# every alert on the widest set of channels; the CFO only cares about the alerts with
-# real balance-sheet consequences, so is only paged on "critical" and only by the
-# faster/more interruptive channels (EMAIL + SMS, no push app assumed for a CFO).
+# Fallback routing, used only if Notification_Recipients has no active rows (e.g. a
+# fresh DB before seeding, or a unit test that doesn't seed one). Mirrors what used to
+# be the only routing config before it moved to the DB: the risk manager is
+# operationally closest to the data and wants every alert on the widest set of
+# channels; the CFO only cares about alerts with real balance-sheet consequences, so
+# is only paged on "critical" and only by the faster/more interruptive channels
+# (EMAIL + SMS, no push app assumed for a CFO).
 DEFAULT_RECIPIENTS: list[Recipient] = [
     Recipient(
         role="risk_manager",
@@ -66,6 +72,29 @@ DEFAULT_RECIPIENTS: list[Recipient] = [
 ]
 
 
+def _load_recipients(db: Session) -> list[Recipient]:
+    """Active rows from Notification_Recipients, converted to Recipient dataclasses
+    (channels parsed from the stored "EMAIL,PUSH"-style comma-separated string).
+    Falls back to DEFAULT_RECIPIENTS if the table has no active rows, so an unseeded
+    DB (or a test using an in-memory one) still routes alerts somewhere sensible."""
+    rows = db.scalars(
+        select(models.NotificationRecipient).where(models.NotificationRecipient.is_active.is_(True))
+    ).all()
+    if not rows:
+        return DEFAULT_RECIPIENTS
+    return [
+        Recipient(
+            role=row.role,
+            display_name=row.display_name,
+            email=row.email,
+            phone=row.phone,
+            channels=tuple(c.strip() for c in row.channels.split(",") if c.strip()),
+            min_severity=row.min_severity,
+        )
+        for row in rows
+    ]
+
+
 def build_notifications(
     db: Session,
     recipients: list[Recipient] | None = None,
@@ -78,9 +107,10 @@ def build_notifications(
     notification record per (alert, recipient, channel) combination — not yet "sent",
     just routed; see dispatch_notifications for the simulated-send step.
 
-    recipients defaults to DEFAULT_RECIPIENTS; pass a custom list to test different
-    routing configurations without touching the module constant."""
-    recipients = DEFAULT_RECIPIENTS if recipients is None else recipients
+    recipients defaults to the active Notification_Recipients rows (via
+    _load_recipients); pass a custom list to test different routing configurations
+    without touching the DB."""
+    recipients = _load_recipients(db) if recipients is None else recipients
     alerts = calculate_alerts(db, geo_exposure_threshold_ratio, incident_concentration_threshold)
 
     notifications: list[dict] = []

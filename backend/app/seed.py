@@ -25,13 +25,14 @@ def run():
         "Claim_Reserves", "Claim_Payments", "Claims", "Incident_Media", "Incidents",
         "Documents", "Audit_Log", "Policy_Assets", "Mitigation_Tasks", "Asset_Risk_Profiles",
         "Insurance_Policies", "Properties", "Regions", "Role_Permissions",
-        "Financial_Statements", "Users",
+        "Financial_Statements", "Notification_Recipients", "Users",
     ]:
         cur.execute(f"DELETE FROM {table}")
     for table in [
         "Regions", "Properties", "Asset_Risk_Profiles", "Insurance_Policies",
         "Incidents", "Claims", "Claim_Payments", "Claim_Reserves", "Mitigation_Tasks",
-        "Audit_Log", "Role_Permissions", "Documents", "Financial_Statements", "Users",
+        "Audit_Log", "Role_Permissions", "Documents", "Financial_Statements",
+        "Notification_Recipients", "Users",
     ]:
         cur.execute(f"DBCC CHECKIDENT ('{table}', RESEED, 1)")
 
@@ -426,6 +427,21 @@ def run():
             total_liabilities, total_equity, gross_profit, operating_profit)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         financial_statements,
+    )
+
+    # --- Notification_Recipients ---
+    # Migrates the previous hardcoded services/notifications.DEFAULT_RECIPIENTS list
+    # into the DB (same routing behavior: risk manager sees every alert on EMAIL+PUSH,
+    # CFO only critical ones on EMAIL+SMS).
+    notification_recipients = [
+        ("risk_manager", "מנהל הסיכונים", "risk.manager@example-rmis.local", "+972-50-000-0001", "EMAIL,PUSH", "warning", 1),
+        ("cfo", "סמנכ\"ל הכספים (CFO)", "cfo@example-rmis.local", "+972-50-000-0002", "EMAIL,SMS", "critical", 1),
+    ]
+    cur.executemany(
+        """INSERT INTO Notification_Recipients
+           (role, display_name, email, phone, channels, min_severity, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        notification_recipients,
     )
 
     conn.commit()
