@@ -43,7 +43,10 @@ def get_current_user(
     except TokenError:
         raise _UNAUTHORIZED
     user = db.scalar(select(models.User).where(models.User.user_id == int(payload["sub"])))
-    if user is None:
+    if user is None or not user.is_active:
+        # A disabled user's already-issued access token is rejected here too — not
+        # just future logins — so disabling (routers/users.py) takes effect
+        # immediately instead of waiting for the token to expire on its own.
         raise _UNAUTHORIZED
     return user
 

@@ -24,7 +24,8 @@
 [x] API לעדכון רזרבות (Claim_Reserves) — הוספת דרך להזין ולעדכן רזרבה על תביעה פתוחה ב-claims.py.
 ✅ בוצע ב-branch feature/claim-reserves-api: נוספו ל-claims.py שלושה endpoints תחת /api/claims/{claim_id}/reserves — GET (רשימה, מהחדש לישן), POST (הזנת רזרבה חדשה) ו-PATCH /{reserve_id} (עדכון). שניהם (POST/PATCH) חסומים לתביעה "פתוחה" בלבד — נבדק מול claim_status לא ב-_TERMINAL_CLAIM_STATUSES (SETTLED/REJECTED), אותו guard הקיים כבר ב-update_claim. נוספו ClaimReserveOut/Create/Update ב-schemas.py, עודכן docs/README.md, וטסטים ב-test_api_claim_reserves.py. 83/83 טסטים עוברים (6 חדשים).
 
-[ ] ניהול משתמשים (users.py) — הוספת יכולות כתיבה: יצירת משתמש, עריכת פרטים, שינוי תפקיד והשבתה.
+[x] ניהול משתמשים (users.py) — הוספת יכולות כתיבה: יצירת משתמש, עריכת פרטים, שינוי תפקיד והשבתה.
+✅ בוצע ב-branch feature/users-write-api: נוספו POST /api/users (יצירה, בדיקת ייחודיות email) ו-PATCH /api/users/{id} (עדכון חלקי — משמש גם לעריכת פרטים, גם לשינוי role, וגם להשבתה דרך is_active=False), שניהם ADMIN בלבד. Users.is_active הוא שדה חדש (models.py, schema.sql, מיגרציית Alembic a1c4d8e2f6b0, ברירת מחדל True) — נאכף לא רק בהתחברות הבאה (routers/auth.py login/refresh) אלא גם על כל טוקן שכבר הונפק (dependencies/permissions.get_current_user בודק is_active בכל בקשה), כך שהשבתה נכנסת לתוקף מיידית. הגנה נוספת: אדמין לא יכול להשבית את עצמו (400). נוספו UserAdminOut/UserCreate/UserUpdate ו-UserRole (Literal) ב-schemas.py; GET /api/users הקיים נשאר פתוח ומינימלי (ל-UI pickers). עודכן docs/README.md (טבלת routers + §9, ההערה הישנה ש"אין ניהול משתמשים" תוקנה לשקף את המצב בפועל). טסטים ב-test_api_users_admin.py. 93/93 טסטים עוברים (10 חדשים).
 
 [ ] ניהול Role_Permissions — יצירת API לצפייה ולעריכה של הרשאות לפי תפקיד (החלפת ה-Seed הקבוע).
 
