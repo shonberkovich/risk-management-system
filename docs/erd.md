@@ -1,6 +1,6 @@
 # ERD — תרשים ישויות וקשרים
 
-מעודכן נכון להוספת `Notification_Recipients` ב-TODO_SPEC.md §1 (19 טבלאות). מקור האמת ל-DDL בפועל: [backend/sql/schema.sql](../backend/sql/schema.sql); מקור האמת למודל ה-ORM: [backend/app/models.py](../backend/app/models.py) — שני הקבצים מתוחזקים יד-ביד (ראו [CLAUDE.md](../CLAUDE.md)); Alembic (`backend/alembic/`) עוקב אחרי שינויים הדרגתיים קדימה מנקודת הבסיס, לא מחליף את `schema.sql` ליצירת סכימה על DB חדש.
+מעודכן נכון להוספת `Notification_Log` ב-TODO_SPEC.md §1 (20 טבלאות). מקור האמת ל-DDL בפועל: [backend/sql/schema.sql](../backend/sql/schema.sql); מקור האמת למודל ה-ORM: [backend/app/models.py](../backend/app/models.py) — שני הקבצים מתוחזקים יד-ביד (ראו [CLAUDE.md](../CLAUDE.md)); Alembic (`backend/alembic/`) עוקב אחרי שינויים הדרגתיים קדימה מנקודת הבסיס, לא מחליף את `schema.sql` ליצירת סכימה על DB חדש.
 
 ```mermaid
 erDiagram
@@ -215,6 +215,23 @@ erDiagram
         nvarchar min_severity "warning/critical"
         bit is_active
     }
+
+    Notification_Log {
+        bigint log_id PK
+        nvarchar alert_type "geographic_exposure/incident_concentration"
+        nvarchar severity "warning/critical"
+        nvarchar recipient_role
+        nvarchar recipient_name
+        nvarchar channel "EMAIL/SMS/PUSH"
+        nvarchar contact
+        nvarchar title
+        nvarchar message
+        nvarchar property_ids "CSV bigint list"
+        decimal value
+        decimal threshold
+        nvarchar status "simulated"
+        datetime sent_at
+    }
 ```
 
 ## שרשרת הערך המרכזית
@@ -237,6 +254,7 @@ erDiagram
 - **`Documents`** מקשרת קבצים (פוליסות, דוחות שמאי, תכתובות) לכל אחת מארבע ישויות (`policy`/`claim`/`property`/`incident`) בדפוס פוליארפי — `entity_type` + `entity_id` בלבד, לא ארבעה FK-ים נפרדים nullable (אותו דפוס גם ב-`Audit_Log`).
 - **`Financial_Statements`** היא טבלה עצמאית (ללא FK), שורה אחת לשנה, המשמשת את `services/financials.py` לניתוח מגמות רב-שנתי ואת הדוח הרגולטורי (`GET /api/financials/regulatory-report`).
 - **`Notification_Recipients`** היא טבלה עצמאית (ללא FK) שמחליפה את רשימת ה-`DEFAULT_RECIPIENTS` הקבועה-בקוד הקודמת ב-`services/notifications.py`: מי מקבל התראות סף ובאילו ערוצים (`channels` — מחרוזת CSV מתוך EMAIL/SMS/PUSH, ללא סוג עמודת מערך ב-SQL Server). `services/notifications._load_recipients` קורא ממנה שורות פעילות (`is_active=1`), עם נפילה חזרה ל-`DEFAULT_RECIPIENTS` אם הטבלה ריקה. ניהול (CRUD) דרך `POST/PATCH/DELETE /api/notifications/recipients`, מוגבל ל-`ADMIN`.
+- **`Notification_Log`** היא טבלה עצמאית (ללא FK) המשמשת כ-Audit Trail להתראות שנשלחו בפועל: `services/notifications.dispatch_notifications` כותב אליה שורה אחת לכל צירוף (התראה, נמען, ערוץ) שנשלח (מדומה, `status='simulated'`), בנוסף ללוגינג הזמני שכבר היה קיים (`logger.log`) שאינו נשמר לאחר סיום התהליך. נקראת דרך `GET /api/notifications/log` (אותה קבוצת תפקידים כמו `/preview`/`/dispatch`), ללא endpoint לכתיבה ידנית — האפליקציה עצמה היא הכותבת היחידה.
 
 ## התראות סף (Threshold Alerts)
 

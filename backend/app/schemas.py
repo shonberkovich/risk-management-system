@@ -535,6 +535,26 @@ class NotificationRecipientUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class NotificationLogOut(BaseModel):
+    """One row of the Notification_Log audit trail — a notification that was
+    actually dispatched (status="simulated"), as opposed to NotificationOut which
+    also covers not-yet-sent preview routing. See TODO_SPEC.md §1."""
+    log_id: int
+    alert_type: Literal["geographic_exposure", "incident_concentration"]
+    severity: NotificationSeverity
+    recipient_role: str
+    recipient_name: str
+    channel: NotificationChannel
+    contact: str
+    title: str
+    message: str
+    property_ids: list[int]
+    value: float
+    threshold: float
+    status: str
+    sent_at: datetime
+
+
 class ErpBookValueOut(BaseModel):
     property_id: int
     property_code: str

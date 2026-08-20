@@ -5,7 +5,8 @@
 [x] טבלת נמעני התראות (Notification_Recipients) — הוצאת נמעני ההתראות מהקוד (Hardcoded) לטבלה דינמית לצורך ניהול עתידי דרך ה-UI.
 ✅ בוצע ב-branch feature/notification-recipients-table: נוספה טבלת Notification_Recipients (models.py, schema.sql, מיגרציית Alembic c3d9a17f4b62, seed.py — מיגרציה של שני נמעני ברירת המחדל הקודמים). services/notifications.py קורא כעת מה-DB דרך _load_recipients (עם נפילה חזרה ל-DEFAULT_RECIPIENTS אם הטבלה ריקה). נוספו endpoints לניהול: GET/POST/PATCH/DELETE /api/notifications/recipients (כתיבה מוגבלת ל-ADMIN), schemas.py, docs/erd.md, וטסטים ב-test_api_notification_recipients.py.
 
-[ ] טבלת Notification_Log — תיעוד התראות שנשלחו בפועל (ערוץ, נמען, סטטוס, חותמת זמן) לצורך Audit Trail.
+[x] טבלת Notification_Log — תיעוד התראות שנשלחו בפועל (ערוץ, נמען, סטטוס, חותמת זמן) לצורך Audit Trail.
+✅ בוצע ב-branch feature/notification-log-table: נוספה טבלת Notification_Log (models.py, schema.sql עם אינדקס על sent_at, מיגרציית Alembic d4e1b298a715). services/notifications.dispatch_notifications כותבת כעת שורת Audit לכל התראה שנשלחה (בנוסף ל-logger.log הזמני שהיה קיים). נוסף endpoint לקריאה בלבד: GET /api/notifications/log (אותה קבוצת תפקידים כמו preview/dispatch, ללא endpoint כתיבה — האפליקציה היא הכותבת היחידה), schemas.py, docs/erd.md, וטסטים ב-test_api_notification_log.py.
 
 [ ] אינדקסים לביצועים — הוספת אינדקס מרחבי (GIST) על קואורדינטות נכסים, FK indexes ואינדקסים מורכבים בטבלאות התביעות והאירועים.
 

@@ -22,7 +22,7 @@ def run():
 
     # --- clean slate (children first) ---
     for table in [
-        "Claim_Reserves", "Claim_Payments", "Claims", "Incident_Media", "Incidents",
+        "Notification_Log", "Claim_Reserves", "Claim_Payments", "Claims", "Incident_Media", "Incidents",
         "Documents", "Audit_Log", "Policy_Assets", "Mitigation_Tasks", "Asset_Risk_Profiles",
         "Insurance_Policies", "Properties", "Regions", "Role_Permissions",
         "Financial_Statements", "Notification_Recipients", "Users",
@@ -32,7 +32,7 @@ def run():
         "Regions", "Properties", "Asset_Risk_Profiles", "Insurance_Policies",
         "Incidents", "Claims", "Claim_Payments", "Claim_Reserves", "Mitigation_Tasks",
         "Audit_Log", "Role_Permissions", "Documents", "Financial_Statements",
-        "Notification_Recipients", "Users",
+        "Notification_Recipients", "Notification_Log", "Users",
     ]:
         cur.execute(f"DBCC CHECKIDENT ('{table}', RESEED, 1)")
 
