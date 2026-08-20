@@ -140,6 +140,35 @@ export interface Property {
   active_policy: PropertyActivePolicy | null;
 }
 
+export interface PropertyCreate {
+  property_code: string;
+  name: string;
+  address: string;
+  region: string;
+  region_id?: number | null;
+  latitude: number;
+  longitude: number;
+  asset_type: AssetType;
+  replacement_value: number;
+  book_value: number;
+  primary_manager_id?: number | null;
+}
+
+export interface PropertyUpdate {
+  property_code?: string;
+  name?: string;
+  address?: string;
+  region?: string;
+  region_id?: number | null;
+  latitude?: number;
+  longitude?: number;
+  asset_type?: AssetType;
+  replacement_value?: number;
+  book_value?: number;
+  primary_manager_id?: number | null;
+  is_active?: boolean;
+}
+
 export interface PropertyMapPoint {
   property_id: number;
   name: string;
@@ -688,6 +717,11 @@ export interface IncidentClassification {
 
 export const fetchProperties = () => api.get<Property[]>("/properties").then((r) => r.data);
 export const fetchProperty = (id: number) => api.get<Property>(`/properties/${id}`).then((r) => r.data);
+export const createProperty = (payload: PropertyCreate) =>
+  api.post<Property>("/properties", payload).then((r) => r.data);
+export const updateProperty = (id: number, payload: PropertyUpdate) =>
+  api.put<Property>(`/properties/${id}`, payload).then((r) => r.data);
+export const deactivateProperty = (id: number) => api.delete(`/properties/${id}`).then(() => undefined);
 
 export const fetchIncidents = (params?: { status?: string; property_id?: number }) =>
   api.get<Incident[]>("/incidents", { params }).then((r) => r.data);
