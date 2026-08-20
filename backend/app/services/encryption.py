@@ -1,8 +1,9 @@
 """Field-level encryption at rest for sensitive financial/PII columns.
 
-Uses Fernet (AES-128-CBC + HMAC, from the `cryptography` package) with a single
-symmetric key from `settings.field_encryption_key`. This is deliberately narrow in
-scope: it is NOT applied to columns that get summed/averaged across many rows —
+Uses Fernet (AES-128-CBC + HMAC, from the `cryptography` package), keyed from
+`settings.field_encryption_key` (plus optional previous keys for rotation — see the
+"Key rotation" section below). This is deliberately narrow in scope: it is NOT applied
+to columns that get summed/averaged across many rows —
 `Claim_Payments.amount`, `Claim_Reserves.reserve_amount`, TIV/MFL inputs,
 `Insurance_Policies.annual_premium`/`total_limit`/`deductible_default`, etc. —
 because `services/kpi.py` and `services/financials.py` aggregate those (loss ratio,
@@ -29,6 +30,14 @@ Applied so far:
 All of the above are the same shape: sensitive, read-and-displayed-as-is, never summed
 or filtered by value in SQL — exactly what "encrypt at rest" is meant for.
 
+Key rotation: `_fernet()` returns a `cryptography.fernet.MultiFernet` built from
+`[settings.field_encryption_key, *settings.field_encryption_key_previous_list]`. New writes
+always encrypt under the first (current) key — that's `MultiFernet`'s documented contract —
+while reads try every key in the list in order, so ciphertext written under a since-rotated-out
+key keeps decrypting. To rotate: move the current `FIELD_ENCRYPTION_KEY` into the front of
+`FIELD_ENCRYPTION_KEY_PREVIOUS`, generate a new `FIELD_ENCRYPTION_KEY`, deploy — see config.py
+for the full procedure, including how to re-encrypt existing rows under the new key over time.
+
 `EncryptedString` (bounded, like the underlying NVARCHAR(n) it replaces) and
 `EncryptedText` (unbounded, NVARCHAR(MAX)) are SQLAlchemy `TypeDecorator`s: application
 code reads/writes plain strings (or numbers — `policy.per_event_limit = 50000` works,
@@ -40,15 +49,19 @@ first rather than relying on it still being a native `Decimal`/`float`.
 """
 from __future__ import annotations
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import Unicode, UnicodeText
 from sqlalchemy.types import TypeDecorator
 
 from app.config import settings
 
 
-def _fernet() -> Fernet:
-    return Fernet(settings.field_encryption_key.encode())
+def _fernet() -> MultiFernet:
+    """A `MultiFernet` over [current key, *previous keys] — see the key-rotation section of
+    this module's docstring. Encrypts with the current (first) key; decrypts with whichever
+    key in the list actually works."""
+    keys = [settings.field_encryption_key, *settings.field_encryption_key_previous_list]
+    return MultiFernet([Fernet(k.encode()) for k in keys])
 
 
 def encrypt_value(plaintext: str) -> str:
