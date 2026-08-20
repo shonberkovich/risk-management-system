@@ -7,6 +7,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
+import { AuthProvider } from "./auth/AuthContext";
 import { rtlCache } from "./rtlCache";
 import { theme } from "./theme";
 
@@ -21,7 +22,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <CssBaseline />
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
-            <App />
+            <AuthProvider>
+              <App />
+            </AuthProvider>
           </BrowserRouter>
         </QueryClientProvider>
       </ThemeProvider>

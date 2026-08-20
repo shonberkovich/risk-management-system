@@ -89,6 +89,16 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   SURVEY_REPORT: "דוח סקר",
 };
 
+export const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "מנהל מערכת",
+  RISK_MANAGER: "מנהל סיכונים",
+  RISK_OFFICER: "קצין סיכונים",
+  PROPERTY_MANAGER: "מנהל נכסים",
+  FIELD_WORKER: "עובד שטח",
+  CFO: "סמנכ\"ל כספים",
+  ADJUSTER: "שמאי",
+};
+
 export const SEVERITY_COLORS: Record<string, "success" | "warning" | "error" | "default"> = {
   LOW: "success",
   MEDIUM: "warning",

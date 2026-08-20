@@ -1,12 +1,16 @@
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import { Route, Routes } from "react-router-dom";
 
 import Layout from "./components/Layout";
+import { useAuth } from "./auth/AuthContext";
 import Claims from "./pages/Claims";
 import Dashboard from "./pages/Dashboard";
 import Documents from "./pages/Documents";
 import IncidentDetail from "./pages/IncidentDetail";
 import IncidentReport from "./pages/IncidentReport";
 import Incidents from "./pages/Incidents";
+import Login from "./pages/Login";
 import Mitigation from "./pages/Mitigation";
 import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
@@ -15,6 +19,20 @@ import Retention from "./pages/Retention";
 import Simulation from "./pages/Simulation";
 
 export default function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <Layout>
       <Routes>
