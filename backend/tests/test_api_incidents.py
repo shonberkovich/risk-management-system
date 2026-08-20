@@ -69,6 +69,67 @@ def test_critical_incident_auto_creates_mitigation_task(client, make_property, m
     assert any(t["property_id"] == prop.property_id for t in tasks)
 
 
+def test_critical_incident_dispatches_alert_to_recipients(client, make_property, make_user, db):
+    """CRITICAL-severity incidents also fire a simulated Push/SMS/Email alert to the
+    active Notification_Recipients (TODO_SPEC.md §2, "אוטומציית שטח (ERP & Alerts)"),
+    logged as an audit row in Notification_Log — see
+    incidents.py::_trigger_critical_incident_ticket ->
+    services/notifications.dispatch_critical_incident_alert."""
+    from app import models
+
+    db.add(models.NotificationRecipient(
+        role="risk_officer", display_name="קצין סיכונים", email="ro@example.com",
+        phone="+972-50-111", channels="EMAIL,SMS", min_severity="warning", is_active=True,
+    ))
+    db.commit()
+
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+    resp = client.post(
+        "/api/incidents",
+        json=_incident_payload(
+            prop.property_id,
+            hazard_type="FIRE",
+            severity_level="CRITICAL",
+            operational_impact="FULL_SHUTDOWN",
+            initial_estimated_loss=900000,
+            description="שריפה גדולה",
+        ),
+        headers=auth_headers(reporter),
+    )
+    assert resp.status_code == 201
+    incident_code = resp.json()["incident_code"]
+
+    admin = make_user(role="ADMIN")
+    log_rows = client.get("/api/notifications/log", headers=auth_headers(admin)).json()
+    critical_rows = [r for r in log_rows if r["alert_type"] == "critical_incident"]
+    assert len(critical_rows) == 2  # one recipient x two channels (EMAIL, SMS)
+    assert all(r["status"] == "simulated" for r in critical_rows)
+    assert all(incident_code in r["title"] or incident_code in r["message"] for r in critical_rows)
+
+
+def test_non_critical_incident_does_not_dispatch_alert(client, make_property, make_user, db):
+    from app import models
+
+    db.add(models.NotificationRecipient(
+        role="risk_officer", display_name="קצין סיכונים", email="ro@example.com",
+        phone="+972-50-111", channels="EMAIL", min_severity="warning", is_active=True,
+    ))
+    db.commit()
+
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+    client.post(
+        "/api/incidents",
+        json=_incident_payload(prop.property_id, severity_level="MEDIUM"),
+        headers=auth_headers(reporter),
+    )
+
+    admin = make_user(role="ADMIN")
+    log_rows = client.get("/api/notifications/log", headers=auth_headers(admin)).json()
+    assert [r for r in log_rows if r["alert_type"] == "critical_incident"] == []
+
+
 def test_draft_incident_can_be_edited_then_submitted(client, make_property, make_user):
     prop = make_property()
     reporter = make_user(role="FIELD_WORKER")

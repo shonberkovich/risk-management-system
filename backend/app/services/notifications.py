@@ -2,15 +2,18 @@
 calls here (mirrors kpi.py / cashflow.py / retention.py) — and, importantly, no real
 Email/SMS/Push delivery either.
 
-The core question this answers: given the threshold-crossing alerts from
-kpi.calculate_alerts, who should be told, and over which channel(s)? Real outbound
-delivery (an actual SendGrid/Twilio/FCM integration) is explicitly out of scope for
-this course demo (see docs/README.md §8, "התראות Push/SMS אוטומטיות על אירועים
-קריטיים") — there's no provider account, no credentials in backend/.env, and no
-delivery-status webhook handling. Instead, dispatch_notifications() builds the same
-routed notification records a real integration would hand off to a provider, and
-"sends" them by logging (status "simulated") — demonstrating a working routing/
-fan-out mechanism without pretending to be a production paging system.
+The core question this answers: given an alert — either a threshold-crossing one from
+kpi.calculate_alerts, or a single CRITICAL-incident alert (build_critical_incident_alert,
+TODO_SPEC.md §2 "אוטומציית שטח") — who should be told, and over which channel(s)? Real
+outbound delivery (an actual SendGrid/Twilio/FCM integration) is explicitly out of
+scope for this course demo — there's no provider account, no credentials in
+backend/.env, and no delivery-status webhook handling. Instead, dispatch_notifications()
+/dispatch_critical_incident_alert() build the same routed notification records a real
+integration would hand off to a provider, and "send" them by logging (status
+"simulated") — demonstrating a working routing/fan-out mechanism without pretending to
+be a production paging system. The *triggering* (when a dispatch happens — on a manual
+POST /api/notifications/dispatch call, or automatically on a CRITICAL incident) is real;
+only the last-mile delivery is simulated.
 
 This mirrors how routers/ai.py degrades gracefully without an ANTHROPIC_API_KEY: the
 feature is fully exercised end-to-end, just without an external side effect at the end.
@@ -96,24 +99,13 @@ def _load_recipients(db: Session) -> list[Recipient]:
     ]
 
 
-def build_notifications(
-    db: Session,
-    recipients: list[Recipient] | None = None,
-    geo_exposure_threshold_ratio: float | None = None,
-    incident_concentration_threshold: int | None = None,
-) -> list[dict]:
-    """Runs kpi.calculate_alerts (optionally with overridden, configurable thresholds
-    — see kpi.calculate_alerts docstring) and fans each alert out to every recipient
-    subscribed at that severity, on every channel that recipient supports. Returns one
-    notification record per (alert, recipient, channel) combination — not yet "sent",
-    just routed; see dispatch_notifications for the simulated-send step.
-
-    recipients defaults to the active Notification_Recipients rows (via
-    _load_recipients); pass a custom list to test different routing configurations
-    without touching the DB."""
-    recipients = _load_recipients(db) if recipients is None else recipients
-    alerts = calculate_alerts(db, geo_exposure_threshold_ratio, incident_concentration_threshold)
-
+def _route_alerts(alerts: list[dict], recipients: list[Recipient]) -> list[dict]:
+    """Fans a list of already-computed alerts out to every recipient subscribed at
+    that severity, on every channel that recipient supports. Returns one notification
+    record per (alert, recipient, channel) combination — not yet "sent", just routed.
+    Shared by build_notifications (aggregate threshold alerts from kpi.calculate_alerts)
+    and dispatch_critical_incident_alert (a single per-incident alert) so both go
+    through the same routing rules."""
     notifications: list[dict] = []
     for alert in alerts:
         for recipient in recipients:
@@ -139,26 +131,36 @@ def build_notifications(
     return notifications
 
 
-def dispatch_notifications(
+def build_notifications(
     db: Session,
     recipients: list[Recipient] | None = None,
     geo_exposure_threshold_ratio: float | None = None,
     incident_concentration_threshold: int | None = None,
 ) -> list[dict]:
-    """build_notifications, then "sends" each record. Real delivery is out of scope
+    """Runs kpi.calculate_alerts (optionally with overridden, configurable thresholds
+    — see kpi.calculate_alerts docstring) and routes each alert via _route_alerts.
+    Not yet "sent", just routed; see dispatch_notifications for the simulated-send
+    step.
+
+    recipients defaults to the active Notification_Recipients rows (via
+    _load_recipients); pass a custom list to test different routing configurations
+    without touching the DB."""
+    recipients = _load_recipients(db) if recipients is None else recipients
+    alerts = calculate_alerts(db, geo_exposure_threshold_ratio, incident_concentration_threshold)
+    return _route_alerts(alerts, recipients)
+
+
+def _send_and_log(db: Session, notifications: list[dict]) -> list[dict]:
+    """"Sends" each already-routed notification record. Real delivery is out of scope
     (see module docstring), so sending is simulated: each notification is logged at
     WARNING (critical) or INFO (warning) level and returned with status="simulated".
     A real integration would swap the logger.log call below for an actual
-    SendGrid/Twilio/FCM API call, keeping build_notifications unchanged.
+    SendGrid/Twilio/FCM API call, keeping the routing step unchanged.
 
     Every "sent" record is also persisted to Notification_Log (models.NotificationLog)
     as an audit trail — see TODO_SPEC.md §1, "טבלת Notification_Log" — independent of
     the in-process `logger.log` call above, which is not queryable after the process
-    exits."""
-    notifications = build_notifications(
-        db, recipients, geo_exposure_threshold_ratio, incident_concentration_threshold
-    )
-
+    exits. Shared by dispatch_notifications and dispatch_critical_incident_alert."""
     sent_at = datetime.utcnow()
     for n in notifications:
         level = logging.WARNING if n["severity"] == "critical" else logging.INFO
@@ -187,3 +189,51 @@ def dispatch_notifications(
         db.commit()
 
     return notifications
+
+
+def dispatch_notifications(
+    db: Session,
+    recipients: list[Recipient] | None = None,
+    geo_exposure_threshold_ratio: float | None = None,
+    incident_concentration_threshold: int | None = None,
+) -> list[dict]:
+    """build_notifications, then _send_and_log."""
+    notifications = build_notifications(
+        db, recipients, geo_exposure_threshold_ratio, incident_concentration_threshold
+    )
+    return _send_and_log(db, notifications)
+
+
+def build_critical_incident_alert(incident: models.Incident) -> dict:
+    """A single alert dict (same shape as kpi.calculate_alerts' entries) for one
+    newly-submitted CRITICAL-severity incident — TODO_SPEC.md §2, "אוטומציית שטח
+    (ERP & Alerts)": alongside the auto-opened ERP maintenance ticket/mitigation task
+    (routers/incidents.py::_trigger_critical_incident_ticket), a CRITICAL incident
+    should also page the on-call recipients immediately, not wait for the next
+    aggregate-threshold dispatch (geographic_exposure/incident_concentration)."""
+    return {
+        "alert_type": "critical_incident",
+        "severity": "critical",
+        "title": f'אירוע קריטי דווח: {incident.incident_code}',
+        "message": f'אירוע {incident.hazard_type} בחומרה CRITICAL דווח בנכס #{incident.property_id} '
+                   f'(קוד אירוע {incident.incident_code}). נדרש טיפול מיידי.',
+        "property_ids": [incident.property_id],
+        "value": 1.0,
+        "threshold": 1.0,
+    }
+
+
+def dispatch_critical_incident_alert(
+    db: Session,
+    incident: models.Incident,
+    recipients: list[Recipient] | None = None,
+) -> list[dict]:
+    """Routes+"sends" (see module docstring) a single critical_incident alert for
+    `incident` to the active Notification_Recipients — the Push/SMS side of
+    TODO_SPEC.md §2 "אוטומציית שטח (ERP & Alerts)". Caller
+    (routers/incidents.py::_trigger_critical_incident_ticket) is responsible for
+    checking settings.notifications_enabled first and for the incident already being
+    committed (has a property_id/incident_code)."""
+    recipients = _load_recipients(db) if recipients is None else recipients
+    notifications = _route_alerts([build_critical_incident_alert(incident)], recipients)
+    return _send_and_log(db, notifications)

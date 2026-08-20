@@ -5,9 +5,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
+from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import require_roles
 from app.integrations import erp
+from app.services import notifications
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -22,11 +24,16 @@ _CRITICAL_TICKET_TASK_DUE_DAYS = 3
 
 
 def _trigger_critical_incident_ticket(db: Session, incident: models.Incident) -> None:
-    """Fires the "auto-ticket on critical incident" side effect: a real
-    Mitigation_Tasks row (so it shows up on the mitigation board like any other
-    task) plus a simulated ERP/maintenance ticket (see
-    app/integrations/erp.py:open_maintenance_ticket). No-op below CRITICAL
-    severity. Caller is responsible for the incident already being committed/
+    """Fires the "auto-ticket + auto-alert on critical incident" side effects
+    (TODO_SPEC.md §2, "אוטומציית שטח (ERP & Alerts)"): a real Mitigation_Tasks row
+    (so it shows up on the mitigation board like any other task), a simulated
+    ERP/maintenance ticket (app/integrations/erp.py:open_maintenance_ticket), and a
+    simulated Push/SMS/Email alert to the active Notification_Recipients
+    (services/notifications.dispatch_critical_incident_alert). No-op below CRITICAL
+    severity, or if notifications are disabled (settings.notifications_enabled) —
+    same graceful-degradation convention as routers/notifications.py, but this is a
+    background trigger, not a caller-facing endpoint, so it's a silent skip rather
+    than a 503. Caller is responsible for the incident already being committed/
     flushed (has an incident_id) before calling this."""
     if incident.severity_level != "CRITICAL":
         return
@@ -45,6 +52,9 @@ def _trigger_critical_incident_ticket(db: Session, incident: models.Incident) ->
     db.commit()
 
     erp.open_maintenance_ticket(incident)
+
+    if settings.notifications_enabled:
+        notifications.dispatch_critical_incident_alert(db, incident)
 
 
 def _next_incident_code(db: Session) -> str:
