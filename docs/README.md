@@ -97,7 +97,7 @@
 | `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד | תלוי endpoint — ראו הקוד |
 | `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
 | `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
-| `claims.py` (`/api/claims`) | פתיחת/עדכון תביעות, תשלומים | RISK_MANAGER/CFO/ADJUSTER/ADMIN |
+| `claims.py` (`/api/claims`) | פתיחת/עדכון תביעות, תשלומים, רזרבות (`Claim_Reserves`) | RISK_MANAGER/CFO/ADJUSTER/ADMIN |
 | `mitigation.py` (`/api/mitigation-tasks`) | CRUD משימות מיטיגציה, `OVERDUE` אוטומטי, `/roi-summary` | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `documents.py` (`/api/documents`) | DMS: העלאה/שליפה/מחיקה, Signed URL, לפי ישות | תלוי endpoint |
 | `analytics.py` (`/api/analytics`) | KPIs, risk-matrix, alerts, חשיפה לפי אזור/אשכול גיאוגרפי | קריאה פתוחה |

@@ -21,7 +21,8 @@
 [x] API לסקרי סיכונים (Asset_Risk_Profiles) — יצירת Endpoint ליצירה ועדכון של סקר סיכונים, MFL ואמצעי מיגון (risk_profiles.py).
 ✅ בוצע ב-branch feature/risk-profiles-api: נוסף ראוטר חדש backend/app/routers/risk_profiles.py, רשום ב-main.py. מאחר ול-Property יש לכל היותר פרופיל סיכון אחד (יחס 1:1, models.Property.risk_profile), ה-endpoints מקוננים תחת /api/properties/{property_id}/risk-profile ולא כאוסף שטוח: GET (שליפה), POST (יצירה ראשונה — 409 אם כבר קיים פרופיל, מכוון להשתמש ב-PUT), PUT (עדכון חלקי/סקר חוזר — 404 אם עוד אין פרופיל). ולידציית טווח 1-5 לציוני הסיכון (flood/fire/earthquake) ב-Pydantic (Field(ge=1, le=5)) כדי להחזיר 422 ברור במקום שגיאת CHECK גולמית מה-DB. נוספו RiskProfileCreate/RiskProfileUpdate ב-schemas.py, עודכן docs/README.md (טבלת ה-routers וספירת ה-routers ל-19), וטסטים ב-test_api_risk_profiles.py. 77/77 טסטים עוברים (9 חדשים).
 
-[ ] API לעדכון רזרבות (Claim_Reserves) — הוספת דרך להזין ולעדכן רזרבה על תביעה פתוחה ב-claims.py.
+[x] API לעדכון רזרבות (Claim_Reserves) — הוספת דרך להזין ולעדכן רזרבה על תביעה פתוחה ב-claims.py.
+✅ בוצע ב-branch feature/claim-reserves-api: נוספו ל-claims.py שלושה endpoints תחת /api/claims/{claim_id}/reserves — GET (רשימה, מהחדש לישן), POST (הזנת רזרבה חדשה) ו-PATCH /{reserve_id} (עדכון). שניהם (POST/PATCH) חסומים לתביעה "פתוחה" בלבד — נבדק מול claim_status לא ב-_TERMINAL_CLAIM_STATUSES (SETTLED/REJECTED), אותו guard הקיים כבר ב-update_claim. נוספו ClaimReserveOut/Create/Update ב-schemas.py, עודכן docs/README.md, וטסטים ב-test_api_claim_reserves.py. 83/83 טסטים עוברים (6 חדשים).
 
 [ ] ניהול משתמשים (users.py) — הוספת יכולות כתיבה: יצירת משתמש, עריכת פרטים, שינוי תפקיד והשבתה.
 

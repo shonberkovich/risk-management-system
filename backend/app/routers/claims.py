@@ -181,3 +181,70 @@ def create_claim_payment(
     db.commit()
     db.refresh(payment)
     return payment
+
+
+@router.get("/{claim_id}/reserves", response_model=list[schemas.ClaimReserveOut])
+def list_claim_reserves(claim_id: int, db: Session = Depends(get_db)):
+    claim = db.get(models.Claim, claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    return db.scalars(
+        select(models.ClaimReserve)
+        .where(models.ClaimReserve.claim_id == claim_id)
+        .order_by(models.ClaimReserve.updated_at.desc())
+    ).all()
+
+
+@router.post("/{claim_id}/reserves", response_model=schemas.ClaimReserveOut, status_code=201)
+def create_claim_reserve(
+    claim_id: int,
+    payload: schemas.ClaimReserveCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+):
+    """Records the expected outstanding liability (reserve) for an open claim — see
+    services/cashflow.get_current_reserves, which reads the most recent Claim_Reserves
+    row per claim for cash-flow projections. Only meaningful while the claim is still
+    open (not yet SETTLED/REJECTED), same terminal-status guard as update_claim."""
+    claim = db.get(models.Claim, claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    if claim.claim_status in _TERMINAL_CLAIM_STATUSES:
+        raise HTTPException(400, "לא ניתן להזין רזרבה לתביעה שכבר נסגרה או נדחתה")
+
+    reserve = models.ClaimReserve(
+        claim_id=claim_id,
+        reserve_amount=payload.reserve_amount,
+        expected_payment_date=payload.expected_payment_date,
+        updated_at=datetime.now(),
+    )
+    db.add(reserve)
+    db.commit()
+    db.refresh(reserve)
+    return reserve
+
+
+@router.patch("/{claim_id}/reserves/{reserve_id}", response_model=schemas.ClaimReserveOut)
+def update_claim_reserve(
+    claim_id: int,
+    reserve_id: int,
+    payload: schemas.ClaimReserveUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+):
+    claim = db.get(models.Claim, claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    reserve = db.get(models.ClaimReserve, reserve_id)
+    if not reserve or reserve.claim_id != claim_id:
+        raise HTTPException(404, "Claim reserve not found")
+    if claim.claim_status in _TERMINAL_CLAIM_STATUSES:
+        raise HTTPException(400, "לא ניתן לעדכן רזרבה לתביעה שכבר נסגרה או נדחתה")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(reserve, field, value)
+    reserve.updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(reserve)
+    return reserve

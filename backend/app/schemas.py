@@ -265,6 +265,25 @@ class ClaimPaymentCreate(BaseModel):
     payment_type: PaymentType
 
 
+class ClaimReserveOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    reserve_id: int
+    claim_id: int
+    reserve_amount: float
+    expected_payment_date: date | None = None
+    updated_at: datetime
+
+
+class ClaimReserveCreate(BaseModel):
+    reserve_amount: float
+    expected_payment_date: date | None = None
+
+
+class ClaimReserveUpdate(BaseModel):
+    reserve_amount: float | None = None
+    expected_payment_date: date | None = None
+
+
 class ClaimTrackingRow(BaseModel):
     claim_id: int
     claim_number: str
