@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { registerAutoSync } from "./offline/syncQueue";
 import { registerServiceWorker } from "./registerServiceWorker";
 import { rtlCache } from "./rtlCache";
 import { theme } from "./theme";
@@ -34,3 +35,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 registerServiceWorker();
+registerAutoSync();
