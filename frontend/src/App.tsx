@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import Mitigation from "./pages/Mitigation";
 import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
+import PropertyDetail from "./pages/PropertyDetail";
 import Reports from "./pages/Reports";
 import Retention from "./pages/Retention";
 import Roles from "./pages/Roles";
@@ -42,6 +43,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/properties" element={<Properties />} />
+        <Route path="/properties/:id" element={<PropertyDetail />} />
         <Route path="/report-incident" element={<IncidentReport />} />
         <Route path="/incidents" element={<Incidents />} />
         <Route path="/incidents/:id" element={<IncidentDetail />} />
