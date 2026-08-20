@@ -11,6 +11,7 @@ import ShieldIcon from "@mui/icons-material/Shield";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import SyncIcon from "@mui/icons-material/Sync";
+import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import WifiIcon from "@mui/icons-material/Wifi";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import AppBar from "@mui/material/AppBar";
@@ -87,6 +88,12 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode; roles?: string[] 
     label: "דוחות",
     icon: <SummarizeIcon fontSize="small" />,
     roles: ["RISK_MANAGER", "CFO"],
+  },
+  {
+    to: "/compliance",
+    label: "תאימות ISO 31000",
+    icon: <VerifiedUserIcon fontSize="small" />,
+    roles: ["RISK_MANAGER", "RISK_OFFICER", "CFO"],
   },
 ];
 

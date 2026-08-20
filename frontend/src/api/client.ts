@@ -471,6 +471,69 @@ export interface GeographicExposureCluster {
   cluster_tiv_total: number;
 }
 
+export type ComplianceRiskLevel = "לא הוערך" | "נמוך" | "בינוני" | "גבוה" | "קריטי";
+
+export interface ComplianceControl {
+  task_id: number;
+  title: string;
+  status: string;
+  due_date: string;
+  owner_name: string | null;
+  cost_estimate: number;
+  roi_percent: number | null;
+}
+
+export interface ComplianceRiskEntry {
+  property_id: number;
+  property_code: string;
+  name: string;
+  region: string;
+  risk_owner_name: string | null;
+  has_risk_assessment: boolean;
+  last_reviewed: string | null;
+  flood_risk_score: number | null;
+  fire_risk_score: number | null;
+  earthquake_risk_score: number | null;
+  risk_score: number | null;
+  risk_level: ComplianceRiskLevel;
+  mfl_amount: number | null;
+  controls: ComplianceControl[];
+  open_controls_count: number;
+  overdue_controls_count: number;
+  completed_controls_count: number;
+}
+
+export interface ComplianceFrameworkSection {
+  clause: string;
+  title: string;
+  description: string;
+  status: "מיושם" | "מיושם חלקית" | "לא מיושם";
+  metric_label: string;
+  metric_value: string;
+}
+
+export interface ComplianceReportSummary {
+  total_properties: number;
+  properties_with_risk_assessment: number;
+  risk_assessment_coverage_percent: number;
+  avg_risk_score: number | null;
+  high_or_critical_risk_count: number;
+  properties_without_owner_count: number;
+  total_controls: number;
+  open_controls_count: number;
+  overdue_controls_count: number;
+  completed_controls_count: number;
+  control_completion_percent: number;
+}
+
+export interface ComplianceReport {
+  generated_at: string;
+  standard: string;
+  summary: ComplianceReportSummary;
+  framework_sections: ComplianceFrameworkSection[];
+  entries: ComplianceRiskEntry[];
+}
+
 export interface IncidentMedia {
   media_id: number;
   incident_id: number;
@@ -649,6 +712,9 @@ export const fetchRetentionRecommendationForIncident = (incidentId: number) =>
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
+
+export const fetchIso31000Report = () =>
+  api.get<ComplianceReport>("/compliance/iso31000-report").then((r) => r.data);
 
 export const classifyIncident = (description: string) =>
   api.post<IncidentClassification>("/ai/classify-incident", { description }).then((r) => r.data);

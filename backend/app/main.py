@@ -9,6 +9,7 @@ from app.routers import (
     analytics,
     auth,
     claims,
+    compliance,
     documents,
     incidents,
     integrations,
@@ -64,6 +65,7 @@ app.include_router(users.router)
 app.include_router(ai.router)
 app.include_router(integrations.router)
 app.include_router(notifications.router)
+app.include_router(compliance.router)
 
 
 @app.get("/api/health")
