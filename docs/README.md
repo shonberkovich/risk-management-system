@@ -108,7 +108,7 @@
 | `integrations.py` (`/api/integrations`) | ERP/GIS/מזג-אוויר/מדדים כלכליים (כולם מסומלים — ראו §8) | תלוי endpoint |
 | `notifications.py` (`/api/notifications`) | ניתוב התראות Email/SMS/Push (מסומל) | RISK_MANAGER/CFO/ADMIN |
 | `audit.py` (`/api/audit-log`) | קריאה מיומן הביקורת, ADMIN-בלבד גם לקריאה | ADMIN (גם קריאה) |
-| `users.py` (`/api/users`) | רשימת משתמשים (לצורך UI pickers בלבד — לא ניהול הרשאות) | קריאה פתוחה |
+| `users.py` (`/api/users`) | רשימה פתוחה (UI pickers) + יצירה/עריכה/שינוי תפקיד/השבתה (`is_active`, נאכף מיידית גם על טוקן קיים) | ADMIN לכתיבה |
 | `ai.py` (`/api/ai`) | סיווג אירוע, דוח הנהלה (streaming), Q&A — כולם עם rate-limit | authenticated |
 
 מוסכמת RBAC: `Depends(require_roles())` ללא ארגומנטים = "מחייב התחברות, כל תפקיד"; עם ארגומנטים = תפקיד ברשימה בלבד (403 אחרת); ללא `Depends` כלל = פתוח (ראו `backend/app/dependencies/permissions.py`). רוב ה-`GET` נשארו פתוחים בכוונה כדי שדשבורדים ימשיכו לעבוד לפני התחברות; `/api/audit-log` הוא היוצא-מן-הכלל המכוון (גם קריאה חסומה ל-ADMIN, ראו [AuditLog.tsx](../frontend/src/pages/AuditLog.tsx)).
@@ -178,7 +178,7 @@ npm run dev
 - **אחסון קבצים אמיתי בענן** (`services/storage.py`) — שומר לתיקייה מקומית `backend/media_storage/` ומחתים URL-ים בעצמו, במקום S3/Blob אמיתי (אין credentials בסביבה).
 - **SSO/OAuth2/SAML אמיתי** (`routers/auth.py` sso endpoints) — שלד בלבד, מחזיר `501` כברירת מחדל (`SSO_ENABLED=false`), אין IdP זמין לבדיקה.
 - **מנוע אקטוארי/תמחור אמיתי** — VaR (`services/simulation.py`), אופטימיזציית השתתפות עצמית (`services/retention.py`) ופיצול ROI/פרמיה (`services/kpi.py`) כולם מבוססי הנחות פשוטות ומתועדות (קבועים כמו `PREMIUM_SURCHARGE_RATE`), לא מודלים אקטואריים מכוילים על נתוני שוק אמיתיים — מכוון: זהו כלי הדגמה לקורס.
-- **ניהול משתמשים/הרשאות מלא (יצירה/מחיקה של משתמשים, UI לעריכת `Role_Permissions`)** — קיימות טבלאות `Users`/`Role_Permissions` ואכיפת RBAC בפועל בכל endpoint, אך אין מסך "ניהול משתמשים" ליצירה/מחיקה — משתמשים נזרעים דרך `seed.py` בלבד.
+- **UI לעריכת `Role_Permissions`** — הטבלה קיימת ואכיפת RBAC בפועל מתבססת עליה בכל endpoint, אך אין עדיין מסך/API לעריכת ההרשאות עצמן (מי מורשה למה) — ראו TODO_SPEC.md §2 "ניהול Role_Permissions". **עדכון:** יצירה/עריכה/שינוי תפקיד/השבתה של *משתמשים* (בניגוד להרשאות) **כן** מומשו — `POST`/`PATCH /api/users` (ADMIN בלבד), כולל `is_active` שנאכף גם על טוקן שכבר הונפק (לא רק בהתחברות הבאה). אין עדיין מחיקה פיזית של משתמש (soft-disable בלבד) ואין מסך Frontend ייעודי (`Users.tsx`, ראו §5 ב-TODO_SPEC.md) — רק ה-API.
 
 ## 10. הערות פיתוח ומלכודות שנתקלנו בהן
 

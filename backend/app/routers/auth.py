@@ -38,6 +38,8 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(models.User).where(models.User.email == payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="אימייל או סיסמה שגויים")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="המשתמש הושבת")
     return schemas.TokenPair(
         access_token=create_access_token(user.user_id, user.role),
         refresh_token=create_refresh_token(user.user_id, user.role),
@@ -54,6 +56,8 @@ def refresh(payload: schemas.RefreshRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(models.User).where(models.User.user_id == int(claims["sub"])))
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="משתמש לא נמצא")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="המשתמש הושבת")
     return schemas.AccessToken(access_token=create_access_token(user.user_id, user.role))
 
 

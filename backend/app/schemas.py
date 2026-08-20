@@ -12,17 +12,50 @@ AssetType = Literal["LOGISTICS_CENTER", "OFFICE_BUILDING", "RETAIL", "INFRASTRUC
 MitigationStatus = Literal["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"]
 PolicyStatus = Literal["ACTIVE", "EXPIRED", "PENDING_RENEWAL"]
 PaymentType = Literal["ADVANCE", "FINAL_SETTLEMENT"]
+UserRole = Literal["RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "FIELD_WORKER", "ADMIN", "RISK_OFFICER", "ADJUSTER"]
 
 
 # --- Users ---
-# Read-only lookup (name + role) for UI pickers such as mitigation-task executor
-# assignment. Deliberately excludes email/created_at and any auth concern — full
-# user administration (login, RBAC, SSO) is out of scope, see CLAUDE.md.
+# UserOut: read-only lookup (name + role) for UI pickers such as mitigation-task
+# executor assignment. Deliberately excludes email/created_at/is_active — GET
+# /api/users is open to any caller, so it stays minimal. Full user administration
+# (create/edit/disable, see UserAdminOut + UserCreate/UserUpdate below) is ADMIN-only,
+# TODO_SPEC.md §2 "ניהול משתמשים (users.py)".
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     user_id: int
     full_name: str
     role: str
+
+
+class UserAdminOut(BaseModel):
+    """Fuller shape returned by the ADMIN-only write endpoints — includes the fields
+    UserOut deliberately omits from the open GET /api/users lookup."""
+    model_config = ConfigDict(from_attributes=True)
+    user_id: int
+    full_name: str
+    email: str
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+
+
+class UserCreate(BaseModel):
+    full_name: str
+    email: str
+    role: UserRole
+    password: str | None = None  # None = no local password (SSO-only), same as seed.py's convention
+
+
+class UserUpdate(BaseModel):
+    """Partial update — also how role changes and disabling happen (is_active=False),
+    rather than separate dedicated endpoints, same convention as ClaimUpdate covering
+    claim_status changes."""
+    full_name: str | None = None
+    email: str | None = None
+    role: UserRole | None = None
+    password: str | None = None
+    is_active: bool | None = None
 
 
 # --- Auth ---

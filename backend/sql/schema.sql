@@ -59,6 +59,7 @@ CREATE TABLE dbo.Users (
     role            NVARCHAR(30) NOT NULL
         CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER')),
     password_hash   NVARCHAR(255) NULL,   -- pbkdf2_hmac "salt$hash" hex; NULL = no local password (SSO-only / not provisioned)
+    is_active       BIT NOT NULL DEFAULT 1,   -- disabled users are rejected at login and on every existing token, see dependencies/permissions.get_current_user
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME()
 );
 GO

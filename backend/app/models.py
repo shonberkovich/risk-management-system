@@ -17,6 +17,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(Unicode(200), unique=True)
     role: Mapped[str] = mapped_column(Unicode(30))
     password_hash: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
