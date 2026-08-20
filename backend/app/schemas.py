@@ -508,3 +508,19 @@ class ErpClaimReceiptPostingOut(BaseModel):
     memo: str
     status: str
     posted_at: str | None = None
+
+
+class GisRiskLayerOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    latitude: float
+    longitude: float
+    flood_zone: str
+    flood_zone_description: str
+    climate_risk_index: int
+    internal_flood_risk_score: int | None = None
+    mismatch_with_internal_survey: bool
+    source_system: str
+    as_of: str
+    status: str
