@@ -23,6 +23,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -34,7 +35,9 @@ import {
   updateDraftIncident,
   uploadIncidentMedia,
   type HazardType,
+  type Incident,
   type IncidentClassification,
+  type IncidentCreate,
   type OperationalImpact,
   type Property,
   type SeverityLevel,
@@ -42,6 +45,7 @@ import {
 import MediaUploader from "../components/MediaUploader";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
+import { enqueueIncidentReport, subscribeToSyncQueue, trySync } from "../offline/syncQueue";
 
 const STEPS = ["מיקום וזיהוי הנכס", "פרטי הנזק והחומרה", "אומדן כספי ותיאור", "תיעוד ושליחה"];
 
@@ -93,13 +97,25 @@ export default function IncidentReport() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [submittedOffline, setSubmittedOffline] = useState(false);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftCode, setDraftCode] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
   const draftResumeAttempted = useRef(false);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const geo = useGeolocation();
+
+  // Reflects the on-device offline queue (see src/offline/syncQueue.ts) so a field user
+  // who reported several incidents without connectivity can see they're still pending.
+  useEffect(() => {
+    return subscribeToSyncQueue((state) => {
+      setPendingSyncCount(state.pendingCount);
+      setSyncing(state.syncing);
+    });
+  }, []);
 
   // Resume a previously saved draft (if any) once the property list is loaded,
   // so the Autocomplete can be matched to a real Property object.
@@ -189,11 +205,28 @@ export default function IncidentReport() {
     },
   });
 
+  type SubmitResult = { offline: false; incident: Incident } | { offline: true };
+
   const submitMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<SubmitResult> => {
       const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
-      if (draftId != null) {
-        await updateDraftIncident(draftId, {
+      try {
+        if (draftId != null) {
+          await updateDraftIncident(draftId, {
+            property_id: property!.property_id,
+            incident_timestamp: new Date(timestamp).toISOString(),
+            hazard_type: hazardType as HazardType,
+            severity_level: severity as SeverityLevel,
+            operational_impact: impact as OperationalImpact,
+            initial_estimated_loss: Number(loss) || 0,
+            description,
+            business_interruption_requested: businessInterruption,
+            reported_coordinates: reportedCoordinates,
+          });
+          const incident = await submitDraftIncident(draftId);
+          return { offline: false, incident };
+        }
+        const incident = await createIncident({
           property_id: property!.property_id,
           incident_timestamp: new Date(timestamp).toISOString(),
           hazard_type: hazardType as HazardType,
@@ -201,26 +234,48 @@ export default function IncidentReport() {
           operational_impact: impact as OperationalImpact,
           initial_estimated_loss: Number(loss) || 0,
           description,
+          ai_classified: aiResult !== null,
+          ai_confidence: aiResult?.confidence ?? null,
           business_interruption_requested: businessInterruption,
           reported_coordinates: reportedCoordinates,
         });
-        return submitDraftIncident(draftId);
+        return { offline: false, incident };
+      } catch (err) {
+        // A missing response (vs. a 4xx/5xx with one) means the request never reached the
+        // server — treat that, and an explicit navigator.onLine === false, as "offline" and
+        // fall back to the local queue instead of surfacing a hard failure to the field user.
+        const isNetworkFailure = !navigator.onLine || (isAxiosError(err) && !err.response);
+        if (!isNetworkFailure) throw err;
+
+        // Offline fallback only ever queues a full new-incident submission — draft PATCH/submit
+        // itself isn't queued (see src/offline/syncQueue.ts for the rationale).
+        const payload: IncidentCreate = {
+          property_id: property!.property_id,
+          incident_timestamp: new Date(timestamp).toISOString(),
+          hazard_type: hazardType as HazardType,
+          severity_level: severity as SeverityLevel,
+          operational_impact: impact as OperationalImpact,
+          initial_estimated_loss: Number(loss) || 0,
+          description,
+          ai_classified: aiResult !== null,
+          ai_confidence: aiResult?.confidence ?? null,
+          business_interruption_requested: businessInterruption,
+          reported_coordinates: reportedCoordinates,
+        };
+        await enqueueIncidentReport(payload, mediaFiles);
+        return { offline: true };
       }
-      return createIncident({
-        property_id: property!.property_id,
-        incident_timestamp: new Date(timestamp).toISOString(),
-        hazard_type: hazardType as HazardType,
-        severity_level: severity as SeverityLevel,
-        operational_impact: impact as OperationalImpact,
-        initial_estimated_loss: Number(loss) || 0,
-        description,
-        ai_classified: aiResult !== null,
-        ai_confidence: aiResult?.confidence ?? null,
-        business_interruption_requested: businessInterruption,
-        reported_coordinates: reportedCoordinates,
-      });
     },
-    onSuccess: async (incident) => {
+    onSuccess: async (result) => {
+      if (result.offline) {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        setDraftId(null);
+        setDraftCode(null);
+        setSubmittedOffline(true);
+        setSubmitted("—");
+        return;
+      }
+      const { incident } = result;
       setMediaUploadError(null);
       if (mediaFiles.length > 0) {
         const failed: string[] = [];
@@ -238,6 +293,7 @@ export default function IncidentReport() {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       setDraftId(null);
       setDraftCode(null);
+      setSubmittedOffline(false);
       setSubmitted(incident.incident_code);
     },
   });
@@ -252,13 +308,19 @@ export default function IncidentReport() {
   if (submitted) {
     return (
       <Card sx={{ maxWidth: 520, mx: "auto", mt: 6, textAlign: "center", p: 3 }}>
-        <CheckCircleIcon color="success" sx={{ fontSize: 64 }} />
+        <CheckCircleIcon color={submittedOffline ? "warning" : "success"} sx={{ fontSize: 64 }} />
         <Typography variant="h5" sx={{ fontWeight: 700, mt: 1 }}>
-          הדיווח נשלח בהצלחה
+          {submittedOffline ? "הדיווח נשמר במכשיר" : "הדיווח נשלח בהצלחה"}
         </Typography>
-        <Typography color="text.secondary" sx={{ my: 1 }}>
-          מספר אירוע: <strong>{submitted}</strong>
-        </Typography>
+        {submittedOffline ? (
+          <Typography color="text.secondary" sx={{ my: 1 }}>
+            אין חיבור לרשת כרגע — הדיווח (כולל הקבצים המצורפים) נשמר על המכשיר וישלח אוטומטית ברגע שהחיבור יחזור.
+          </Typography>
+        ) : (
+          <Typography color="text.secondary" sx={{ my: 1 }}>
+            מספר אירוע: <strong>{submitted}</strong>
+          </Typography>
+        )}
         {mediaUploadError && (
           <Alert severity="warning" sx={{ textAlign: "right", mt: 1 }}>
             {mediaUploadError}
@@ -269,6 +331,7 @@ export default function IncidentReport() {
           sx={{ mt: 2 }}
           onClick={() => {
             setSubmitted(null);
+            setSubmittedOffline(false);
             setActiveStep(0);
             setProperty(null);
             setHazardType("");
@@ -300,6 +363,26 @@ export default function IncidentReport() {
       >
         במקרה של סכנת חיים חייג 102/100 מיד
       </Alert>
+
+      {pendingSyncCount > 0 && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              disabled={syncing}
+              startIcon={syncing ? <CircularProgress size={14} color="inherit" /> : undefined}
+              onClick={() => trySync()}
+            >
+              {syncing ? "מסנכרן..." : "נסה לסנכרן עכשיו"}
+            </Button>
+          }
+        >
+          {pendingSyncCount} דיווחים ממתינים לסנכרון מהמכשיר הזה (נשמרו כשלא הייתה רשת).
+        </Alert>
+      )}
 
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
         דיווח על אירוע נזק חדש
