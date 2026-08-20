@@ -574,4 +574,64 @@ class ReplacementValueUpdateOut(BaseModel):
     as_of: str
     recommended_for_revaluation: bool
     source_system: str
+
+
+class ComplianceControlOut(BaseModel):
+    task_id: int
+    title: str
     status: str
+    due_date: str
+    owner_name: str | None = None
+    cost_estimate: float
+    roi_percent: float | None = None
+
+
+class ComplianceRiskEntryOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    region: str
+    risk_owner_name: str | None = None
+    has_risk_assessment: bool
+    last_reviewed: str | None = None
+    flood_risk_score: int | None = None
+    fire_risk_score: int | None = None
+    earthquake_risk_score: int | None = None
+    risk_score: float | None = None
+    risk_level: Literal["לא הוערך", "נמוך", "בינוני", "גבוה", "קריטי"]
+    mfl_amount: float | None = None
+    controls: list[ComplianceControlOut]
+    open_controls_count: int
+    overdue_controls_count: int
+    completed_controls_count: int
+
+
+class ComplianceFrameworkSectionOut(BaseModel):
+    clause: str
+    title: str
+    description: str
+    status: Literal["מיושם", "מיושם חלקית", "לא מיושם"]
+    metric_label: str
+    metric_value: str
+
+
+class ComplianceReportSummaryOut(BaseModel):
+    total_properties: int
+    properties_with_risk_assessment: int
+    risk_assessment_coverage_percent: float
+    avg_risk_score: float | None = None
+    high_or_critical_risk_count: int
+    properties_without_owner_count: int
+    total_controls: int
+    open_controls_count: int
+    overdue_controls_count: int
+    completed_controls_count: int
+    control_completion_percent: float
+
+
+class ComplianceReportOut(BaseModel):
+    generated_at: str
+    standard: str
+    summary: ComplianceReportSummaryOut
+    framework_sections: list[ComplianceFrameworkSectionOut]
+    entries: list[ComplianceRiskEntryOut]

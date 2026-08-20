@@ -5,6 +5,7 @@ import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useAuth } from "./auth/AuthContext";
 import Claims from "./pages/Claims";
+import Compliance from "./pages/Compliance";
 import Dashboard from "./pages/Dashboard";
 import Documents from "./pages/Documents";
 import IncidentDetail from "./pages/IncidentDetail";
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/simulation" element={<Simulation />} />
         <Route path="/retention" element={<Retention />} />
         <Route path="/documents" element={<Documents />} />
+        <Route path="/compliance" element={<Compliance />} />
       </Routes>
     </Layout>
   );

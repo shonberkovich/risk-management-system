@@ -402,8 +402,24 @@
 
 ## שלב 9 — Compliance & Reporting
 
-- [ ] **דוח תאימות ISO 31000**: מיפוי סיכונים, בעלי אחריות וסטטוס בקרות.
+- [x] **דוח תאימות ISO 31000**: מיפוי סיכונים, בעלי אחריות וסטטוס בקרות.
   📁 קובץ חדש: `backend/app/routers/compliance.py` + `frontend/src/pages/Compliance.tsx`
+
+  ISO 31000:2018 מתאר *תהליך* ניהול סיכונים (סעיף 6), לא רשימת מסמכים לצילום מסך — לכן "תאימות" כאן לא נמדדת כמבחן עובר/נכשל מול שאלון קבוע, אלא כמיפוי של חמישה משלבי התהליך למדד ממשי המחושב מנתונים שכבר קיימים בסכימה (`Properties`, `Asset_Risk_Profiles`, `Mitigation_Tasks`) — בלי טבלה חדשה:
+
+  - **6.4.2 זיהוי סיכונים** — אחוז הנכסים הפעילים עם שורת `Asset_Risk_Profiles`.
+  - **6.4.3 ניתוח סיכונים** — ציון סיכון מרוכב (`kpi.calculate_property_risk_score`, קיים) מחושב לכל נכס שנסקר; המדד המוצג הוא הציון הממוצע בתיק.
+  - **6.4.4 הערכת סיכונים** — אחוז הנכסים בדירוג סיכון גבוה/קריטי (ציון ≥50) עם בעל אחריות מוקצה (`Properties.primary_manager_id`) — הערכה בלי מישהו שמקבל עליה החלטה היא לא הערכה שלמה.
+  - **6.5 טיפול בסיכונים** — שיעור בקרות (`Mitigation_Tasks`) שהושלמו בפועל מתוך סך הבקרות שנפתחו — תוכנית טיפול שאף פעם לא מסתיימת היא לא טיפול.
+  - **6.6 ניטור וסקירה** — אחוז סקרי הסיכונים שעודכנו ב-12 החודשים האחרונים (`survey_date`) — סקר "נכון" אך ישן הוא עדיין פער תהליכי.
+
+  לכל סעיף סף: ≥90% "מיושם", ≥50% "מיושם חלקית", מתחת "לא מיושם" — קירוב פשוט של מה שמבקר פנימי היה מעריך ידנית, באותה רוח כמו האינדקס המדומה של `economics.py` או שכבת ה-GIS המדומה של `gis.py`: מדגים את הצורה של הניתוח בלי להתיימר להחליף שיפוט של מבקר מוסמך. הדוח **read-only** לחלוטין — לא כותב חזרה לשום טבלה, כמו `economics.fetch_replacement_value_updates` ו-`gis.fetch_risk_layers`.
+
+  **Backend:** נוסף `backend/app/services/compliance.py` עם `build_iso31000_report(db)` — בונה מיפוי per-property (ציוני סיכון, בעל אחריות, רשימת בקרות עם סטטוס/יעד/ROI, ספירות open/overdue/completed), חמש חתיכות framework_sections כמתואר למעלה, וסיכום כולל. הרשומות ממוינות "הכי דחוף קודם" (קריטי → גבוה → בינוני → נמוך → לא הוערך), אותה קונבנציית מיון כמו `kpi.calculate_alerts`. נוסף `backend/app/routers/compliance.py` עם `GET /api/compliance/iso31000-report` — מוגן ב-RBAC רחב יותר מה-endpoints הפיננסיים (ERP/economics): `RISK_MANAGER, RISK_OFFICER, CFO, ADMIN` — דוח ממשל-סיכונים נקרא גם ע"י מי שאחראי על איכות התהליך (מנהל/קצין סיכונים) וגם ע"י מי שחותם עליו כלפי הדירקטוריון/מבקרים (CFO/ADMIN), לא מוגבל לכספים בלבד. נוספו סכמות `ComplianceControlOut`, `ComplianceRiskEntryOut`, `ComplianceFrameworkSectionOut`, `ComplianceReportSummaryOut`, `ComplianceReportOut` ב-`schemas.py`, ונרשם ה-router ב-`main.py`.
+
+  **Frontend:** נוסף `frontend/src/pages/Compliance.tsx` — 4 כרטיסי KPI (כיסוי סקרים, נכסי סיכון גבוה/קריטי, שיעור השלמת בקרות, בקרות באיחור), כרטיס מיפוי לתהליך (5 סעיפי ISO עם צ'יפ סטטוס צבעוני ומדד לכל סעיף), ורשימת Accordion לפי נכס (ציון/רמת סיכון/בעל אחריות בכותרת, טבלת בקרות מלאה בפתיחה — כותרת, סטטוס, יעד, אחראי, ROI). נוספו `fetchIso31000Report` וטיפוסי `Compliance*` ל-`api/client.ts`, נרשם route `/compliance` ב-`App.tsx`, ונוסף פריט ניווט "תאימות ISO 31000" ב-`Layout.tsx` (מוצג ל-`RISK_MANAGER, RISK_OFFICER, CFO`, ותמיד ל-`ADMIN` לפי הלוגיקה הקיימת בקומפוננטה).
+
+  נבדק קצה-לקצה: לאחר תיקון שני באגים שנתפסו רק בהרצה בפועל (1: SQL Server לא תומך ב-`IS 1` שש-SQLAlchemy מייצר מ-`.is_(True)` — תוקן ל-`== True` כמו ב-`routers/properties.py`; 2: שדה `status: str` עודף שהשתרבב ל-`ComplianceReportOut` וגרם ל-`ResponseValidationError` — הוסר), עם restart מלא של השרת אחרי כל תיקון (לא הסתמכות על ה-reloader, בהתאם לפער המתועד ב-`CLAUDE.md`): `GET /api/compliance/iso31000-report` עם `dana.cohen@company.co.il` (RISK_MANAGER) החזיר `200` עם 15 נכסים, כיסוי סקרים 100%, ציון סיכון ממוצע 46.2, 3 נכסים בסיכון גבוה/קריטי (כולם עם בעל אחריות → סעיף 6.4.4 "מיושם"), שיעור השלמת בקרות 13.3% (2/15 → סעיף 6.5 "לא מיושם"), ועדכניות סקרים 86.7% (13/15 → סעיף 6.6 "מיושם חלקית"). נבדקה אכיפת RBAC — `avi.levi@company.co.il` (CFO) קיבל `200`, `ronit.shimoni@company.co.il` (FIELD_WORKER) קיבל `403`, גישה ללא אימות קיבלה `401`. הטקסט העברי תקין בתגובה (לא `?`), עקבי עם ה-gotcha המתועד לגבי `Unicode`/`UnicodeText`. בצד ה-Frontend נבדק דרך דפדפן preview אמיתי: התחברות כ-RISK_MANAGER, ניווט ל-`/compliance`, ואימות ויזואלי (screenshot) שכל 4 כרטיסי ה-KPI, חמשת סעיפי ה-ISO עם הצ'יפים הצבעוניים, ורשימת ה-Accordion לפי נכס מוצגים נכון ב-RTL; הורחב נכס אחד (PRP-006) ואומת שטבלת הבקרות בפנים (MFL, תאריך סקר אחרון, סטטוס/יעד/אחראי/ROI) מוצגת נכון.
 
 - [ ] **דוחות רגולטוריים** בהתאם להנחיות רשות שוק ההון / Solvency II.
   📁 `backend/app/services/financials.py` + `frontend/src/pages/Reports.tsx`
