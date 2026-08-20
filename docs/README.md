@@ -19,10 +19,10 @@
                          │ REST (JSON) — proxy /api → :8000, JWT bearer
 ┌───────────────────────▼─────────────────────────────────────────┐
 │  Backend — Python 3.12 · FastAPI · SQLAlchemy 2.0 ORM           │
-│  17 routers (auth/RBAC, properties, incidents, policies,        │
-│  claims, mitigation, media, documents, analytics, simulation,   │
-│  retention, financials, compliance, integrations, notifications,│
-│  audit-log, users, ai) — see §5 for the full list               │
+│  19 routers (auth/RBAC, properties, risk_profiles, incidents,   │
+│  policies, claims, mitigation, media, documents, analytics,     │
+│  simulation, retention, financials, compliance, integrations,   │
+│  notifications, audit-log, users, ai) — see §5 for the full list│
 │  ~15 services: kpi / cashflow / retention / simulation /        │
 │  financials / compliance / notifications / storage / auth /     │
 │  encryption / llm (Anthropic) + integrations/ (erp, gis,        │
@@ -93,6 +93,7 @@
 |---|---|---|
 | `auth.py` (`/api/auth`) | login/refresh/me/logout, שלד SSO (501 כברירת מחדל) | — (public) |
 | `properties.py` (`/api/properties`) | CRUD נכסים (מחיקה = soft delete, `is_active=False`) + פרופיל סיכון | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
+| `risk_profiles.py` (`/api/properties/{id}/risk-profile`) | יצירה/עדכון סקר סיכונים (Asset_Risk_Profiles) — יחס 1:1 לנכס: POST פעם ראשונה בלבד (409 אם כבר קיים), PUT לעדכון (404 אם עוד אין) | RISK_MANAGER/PROPERTY_MANAGER/ADMIN |
 | `incidents.py` (`/api/incidents`) | דיווח אירוע, טיוטה→הגשה, סטטוס, drill-down מאוחד | תלוי endpoint — ראו הקוד |
 | `media.py` (ללא prefix קבוע — `/api/incidents/{id}/media`, `/api/media/...`) | העלאת/שליפת/מחיקת מדיה לאירוע, כולל EXIF GPS | RISK_MANAGER/ADMIN למחיקה |
 | `policies.py` (`/api/policies`) | CRUD פוליסות + שיוך נכסים (`Policy_Assets`) | RISK_MANAGER/CFO/ADMIN |
@@ -119,7 +120,7 @@ risk-management-system/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py, config.py, database.py, models.py, schemas.py
-│   │   ├── routers/         # 17 routers — ראו §6 לרשימה המלאה
+│   │   ├── routers/         # 19 routers — ראו §6 לרשימה המלאה
 │   │   ├── services/        # kpi, cashflow, retention, simulation, financials,
 │   │   │                    # compliance, notifications, storage, auth, encryption, llm
 │   │   ├── integrations/    # erp.py, gis.py, weather.py, economics.py (מסומלים, §9)
