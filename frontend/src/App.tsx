@@ -18,7 +18,9 @@ import Policies from "./pages/Policies";
 import Properties from "./pages/Properties";
 import Reports from "./pages/Reports";
 import Retention from "./pages/Retention";
+import Roles from "./pages/Roles";
 import Simulation from "./pages/Simulation";
+import Users from "./pages/Users";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -52,6 +54,8 @@ export default function App() {
         <Route path="/documents" element={<Documents />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/audit-log" element={<AuditLog />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/roles" element={<Roles />} />
       </Routes>
     </Layout>
   );
