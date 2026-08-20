@@ -285,8 +285,18 @@
 
   נבדק: `npx tsc -b` ללא שגיאות חדשות (רק פער `stylis` הקיים). נבדק בפועל מול `RiskDB` מקומי דרך שרת preview: כניסה עם `dana.cohen@company.co.il` (RISK_MANAGER, סיסמת seed `Demo1234!`) הצליחה (`POST /api/auth/login → 200`) והציגה את כל 11 פריטי הניווט + "דנה כהן" / "מנהל סיכונים" ב-AppBar; התנתקות (`ref logout button`) ניקתה session והחזירה למסך Login. כניסה עם `ronit.shimoni@company.co.il` (FIELD_WORKER) הציגה נכון רק 4 פריטים (דשבורד/דיווח אירוע/ניהול אירועים/מסמכים) ו-"רונית שמעוני" / "עובד שטח". רענון עמוד (F5) עם טוקן קיים שמר את ה-session (קריאה שקטה ל-`GET /auth/me`) ללא חזרה למסך Login. סיסמה שגויה החזירה `401` עם ההודעה "אימייל או סיסמה שגויים" שהוצגה ב-`Alert` אדום בטופס.
 
-- [ ] **הרחבת שכבת ה-API בפרונט** לכל ה-Endpoints החדשים (מדיה, מסמכים, סימולציה, תזרים, אימות).
+- [x] **הרחבת שכבת ה-API בפרונט** לכל ה-Endpoints החדשים (מדיה, מסמכים, סימולציה, תזרים, אימות).
   📁 `frontend/src/api/client.ts`
+  ✅ בוצע ונבדק ב-branch `feature/frontend-api-layer-extension`: השוואה שיטתית בין כל ה-routers ב-`backend/app/routers/*.py` (`grep` על `@router.get/post/put/patch/delete`) מול הפונקציות הקיימות ב-`client.ts` העלתה שרוב הקטגוריות שצוינו במשימה (מדיה, מסמכים, סימולציה, תזרים, אימות) כבר כוסו במלואן במשימות קודמות של שלב 6 — אך נמצאו 4 פערים קונקרטיים:
+
+  1. **`fetchClaim(id)`** — חסרה עטיפה ל-`GET /api/claims/{claim_id}` (היה קיים רק `fetchClaims()` לרשימה); הוחזר `Claim` הקיים.
+  2. **`fetchMitigationTask(id)`** — חסרה עטיפה ל-`GET /api/mitigation-tasks/{task_id}` (היה קיים רק `fetchMitigationTasks()` לרשימה ו-`fetchMitigationTaskRoi`); הוחזר `MitigationTask` הקיים.
+  3. **`fetchRetentionRecommendationForIncident(incidentId)`** — חסרה עטיפה ל-`GET /api/retention/incidents/{incident_id}` (הווריאנט הנוח שמחשב לפי אירוע קיים, לעומת `fetchRetentionRecommendation` שדורש `policy_id`/`property_id`/`estimated_loss` ידניים).
+  4. **`streamExecutiveSummary()`** — `Reports.tsx` קרא ל-`GET /api/ai/executive-summary` (סטרימינג `text/plain`) דרך `fetch()` גולמי, לגמרי מחוץ ל-`client.ts` — כלומר ללא ה-`Authorization: Bearer` header שנוסף למשימת ה-Login (ה-endpoint לא דורש כרגע אימות, אך זה היה הקריאה היחידה בכל האפליקציה שעוקפת את שכבת ה-API המרכזית ולא הייתה עקבית איתה). נוספה פונקציה ב-`client.ts` שעוטפת את אותו `fetch()` (axios לא חושף Response stream נוח בדפדפן) אך מצרפת את הטוקן מ-`getAccessToken()` ומחזירה את ה-`ReadableStream` ישירות; `Reports.tsx` עודכן להשתמש בה במקום ב-`fetch` הגולמי.
+
+  שאר הקטגוריות נמצאו כבר מכוסות במלואן ולא נדרש שינוי: מדיה (`uploadIncidentMedia`/`fetchIncidentMedia`/`deleteIncidentMedia`/`fetchMediaSignedUrl`), מסמכים (`fetchDocumentsForEntity`/`fetchDocumentSignedUrl`/`uploadDocument`/`deleteDocument`), סימולציה (`fetchPortfolioSimulation`/`fetchPropertySimulation`), תזרים (`fetchCashflowSummary`), אימות (`login`/`logout`/`fetchCurrentUser` + interceptors ממשימת ה-Login). לא נוספה עטיפה ל-`GET /api/auth/sso/{provider}/login`/`POST /callback` — אלה stub-ים ללא UI מתאים בפרונט (אין כפתור SSO במסך Login), מחוץ לתחום המשימה הזו.
+
+  נבדק: `npx tsc -b` ללא שגיאות חדשות (רק פער `stylis` הקיים). נבדק בפועל מול `RiskDB` מקומי דרך שרת preview: `GET /api/claims/1`, `GET /api/mitigation-tasks/1`, `GET /api/retention/incidents/1` (כולם עם `Authorization` header) החזירו `200` עם מבנה תואם בדיוק לטיפוסי TS הקיימים (`Claim`/`MitigationTask`/`RetentionRecommendation`). לחיצה על "הפק דוח" בעמוד `/reports` חוללה קריאת `GET /api/ai/executive-summary` תקינה (כצפוי `503` — אין `ANTHROPIC_API_KEY` מוגדר בסביבה המקומית, זו התנהגות תקינה מתועדת) ללא שגיאות JS לא-מטופלות בקונסול.
 
 ---
 
