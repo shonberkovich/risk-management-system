@@ -302,8 +302,14 @@
 
 ## שלב 7 — Mobile & Offline
 
-- [ ] **התאמת PWA**: manifest, Service Worker, והתקנה כאפליקציה במכשיר נייד.
+- [x] **התאמת PWA**: manifest, Service Worker, והתקנה כאפליקציה במכשיר נייד.
   📁 `frontend/index.html`, `frontend/vite.config.ts` + קובץ חדש `frontend/public/manifest.json`
+
+  נוסף `frontend/public/manifest.json` (Web App Manifest) עם `name`/`short_name` בעברית, `dir: "rtl"`/`lang: "he"`, `display: "standalone"`, `theme_color`/`background_color` תואמים לפלטת ה-MUI theme (`#1e5b8a`/`#f4f6f8`), ואייקוני `image/svg+xml` בגודל `"any"` (מטרה `any` + `maskable`) — נבחר SVG במקום PNG כדי להימנע מתלות בכלי רינדור רסטר חיצוני; זה נתמך בדפדפני Chromium מודרניים לצורך installability. `index.html` עודכן עם `<link rel="manifest">`, `<meta name="theme-color">`, ותגיות `apple-mobile-web-app-*`/`mobile-web-app-capable` להתקנה גם ב-iOS Safari.
+
+  נוסף Service Worker ב-`frontend/public/sw.js` שמבצע cache-first ל-assets סטטיים מאותו origin ו-network-first עם fallback ל-`offline.html` (חדש) בניווטים כשאין רשת — **בכוונה לא** מטמין תגובות `/api/*` (`url.pathname.startsWith("/api/")` מדלג על ה-fetch handler) כדי לא להגיש נתונים מיושנים; זה תואם את ה"מחוץ לתחום" המתועד ב-`CLAUDE.md` (offline mobile sync מלא הוא משימה נפרדת ומחוץ לתחום). נוסף `frontend/src/registerServiceWorker.ts` הרושם את ה-SW רק ב-build של production (`import.meta.env.PROD`) כדי לא לשבש HMR בפיתוח, ונקרא מ-`main.tsx`. נדרש `frontend/src/vite-env.d.ts` חדש (`/// <reference types="vite/client" />`) כדי ש-TypeScript יכיר את `import.meta.env` — לא היה קיים בפרויקט קודם לכן. `vite.config.ts` לא שונה: הפלטת `public/` מועתקת אוטומטית ל-root של ה-build הסטנדרטי של Vite, ללא תוסף נוסף.
+
+  נבדק: `npx tsc -b` ללא שגיאות חדשות (רק פער `stylis` הקיים). `npx vite build` הצליח; `dist/` כלל את `manifest.json`, `sw.js`, `offline.html`, `icon.svg`, `icon-maskable.svg` ב-root כצפוי. הרצת `vite preview` ובדיקה בדפדפן אישרה של-`manifest.json` תוכן ומבנה תקינים (`fetch("/manifest.json")` החזיר JSON תקין עם כל השדות). רישום ה-Service Worker (`navigator.serviceWorker.register`) נכשל בסביבת ה-Browser pane הפנימית של הכלים (שגיאת `"An unknown error occurred when fetching the script"`) — אומת שזו מגבלת התשתית של דפדפן האוטומציה/ה-proxy המקומי ולא באג בקוד: אותה קריאת רישום הצליחה במלואה (`active: true`) כנגד Service Worker חיצוני תקין (`https://googlechrome.github.io/samples/service-worker/basic/`) מאותו tabId, ו-`window.isSecureContext` על `http://localhost` החזיר `true` (כלומר לא בעיית secure-context). קובץ ה-`sw.js` עצמו אומת כתקין syntactically ונגיש (`GET /sw.js → 200 OK`).
 
 - [ ] **מנגנון Offline Sync**: שמירת דיווחים ותמונות בזיכרון מקומי (IndexedDB) וסנכרון אוטומטי עם חידוש הקליטה.
   📁 קובץ חדש: `frontend/src/offline/syncQueue.ts`
