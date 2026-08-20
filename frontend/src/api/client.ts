@@ -583,6 +583,7 @@ export const deleteDocument = (documentId: number) =>
 
 export const fetchClaims = (status?: string) =>
   api.get<ClaimTrackingRow[]>("/claims", { params: status ? { status } : undefined }).then((r) => r.data);
+export const fetchClaim = (id: number) => api.get<Claim>(`/claims/${id}`).then((r) => r.data);
 export const createClaim = (payload: ClaimCreate) =>
   api.post<Claim>("/claims", payload).then((r) => r.data);
 export const updateClaim = (id: number, payload: ClaimUpdate) =>
@@ -594,6 +595,8 @@ export const createClaimPayment = (claimId: number, payload: ClaimPaymentCreate)
 
 export const fetchMitigationTasks = () =>
   api.get<MitigationTask[]>("/mitigation-tasks").then((r) => r.data);
+export const fetchMitigationTask = (id: number) =>
+  api.get<MitigationTask>(`/mitigation-tasks/${id}`).then((r) => r.data);
 export const createMitigationTask = (payload: MitigationTaskCreate) =>
   api.post<MitigationTask>("/mitigation-tasks", payload).then((r) => r.data);
 export const updateMitigationTask = (id: number, payload: MitigationTaskUpdate) =>
@@ -641,6 +644,8 @@ export const fetchPropertySimulation = (
 ) => api.get<PropertySimulationResult>(`/simulation/properties/${propertyId}`, { params }).then((r) => r.data);
 export const fetchRetentionRecommendation = (params: { policy_id: number; property_id: number; estimated_loss: number }) =>
   api.get<RetentionRecommendation>("/retention/recommendation", { params }).then((r) => r.data);
+export const fetchRetentionRecommendationForIncident = (incidentId: number) =>
+  api.get<RetentionRecommendation>(`/retention/incidents/${incidentId}`).then((r) => r.data);
 export const fetchAlerts = () => api.get<Alert[]>("/analytics/alerts").then((r) => r.data);
 export const fetchGeographicExposureClusters = () =>
   api.get<GeographicExposureCluster[]>("/analytics/geographic-exposure-clusters").then((r) => r.data);
@@ -650,3 +655,18 @@ export const classifyIncident = (description: string) =>
 
 export const askQuestion = (question: string) =>
   api.post<{ answer: string }>("/ai/ask", { question }).then((r) => r.data);
+
+// Plain-text streaming response (SSE-style chunks) — axios doesn't expose a readable-stream
+// body in the browser, so this uses fetch() directly, but still attaches the same bearer
+// token as every other call so the endpoint isn't left as the one unauthenticated caller.
+export const streamExecutiveSummary = async () => {
+  const token = getAccessToken();
+  const res = await fetch("/api/ai/executive-summary", {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `שגיאה (${res.status})`);
+  }
+  return res.body;
+};

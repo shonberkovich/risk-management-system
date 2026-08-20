@@ -17,7 +17,7 @@ import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { askQuestion, fetchClaims, fetchExposureByRegion, fetchKpis } from "../api/client";
+import { askQuestion, fetchClaims, fetchExposureByRegion, fetchKpis, streamExecutiveSummary } from "../api/client";
 import ExecutiveReportPrintable from "../components/ExecutiveReportPrintable";
 import { exportElementToPdf } from "../exportPdf";
 
@@ -62,12 +62,8 @@ export default function Reports() {
     setSummaryError(null);
     setSummaryText("");
     try {
-      const res = await fetch("/api/ai/executive-summary");
-      if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? `שגיאה (${res.status})`);
-      }
-      const reader = res.body.getReader();
+      const body = await streamExecutiveSummary();
+      const reader = body.getReader();
       const decoder = new TextDecoder("utf-8");
       let done = false;
       while (!done) {
