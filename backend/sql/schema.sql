@@ -87,9 +87,20 @@ CREATE TABLE dbo.Properties (
     updated_at           DATETIME2 NOT NULL DEFAULT SYSDATETIME()
 );
 GO
+-- TODO_SPEC.md "אינדקסים לביצועים" calls for a "spatial index (GIST)" on property
+-- coordinates. GIST is a PostgreSQL/PostGIS index type; SQL Server's equivalent is a
+-- SPATIAL INDEX, but that requires a geometry/geography-typed column, not the separate
+-- latitude/longitude DECIMAL columns used here. Introducing a geography column would be
+-- a materially bigger data-model change (ORM mapping, map/KPI services that currently
+-- read lat/lng directly) than this task's scope. This composite B-tree index over
+-- (latitude, longitude) already supports the actual query pattern in this codebase —
+-- bounding-box/range lookups for the map and MFL geographic-clustering calc (see
+-- services/kpi.py) — so it's kept as the practical equivalent instead.
 CREATE INDEX IX_Properties_Coordinates ON dbo.Properties(latitude, longitude);
 GO
 CREATE INDEX IX_Properties_RegionId ON dbo.Properties(region_id);
+GO
+CREATE INDEX IX_Properties_PrimaryManager ON dbo.Properties(primary_manager_id);
 GO
 
 -- ============================================================================
@@ -146,6 +157,11 @@ CREATE TABLE dbo.Policy_Assets (
     PRIMARY KEY (policy_id, property_id)
 );
 GO
+-- property_id is only the trailing column of the composite PK above, so it isn't
+-- efficiently searchable on its own (e.g. "all policies covering property X") without
+-- a scan; index it standalone.
+CREATE INDEX IX_PolicyAssets_Property ON dbo.Policy_Assets(property_id);
+GO
 
 -- ============================================================================
 -- Incidents
@@ -179,6 +195,7 @@ CREATE TABLE dbo.Incidents (
 GO
 CREATE INDEX IX_Incidents_Property ON dbo.Incidents(property_id);
 CREATE INDEX IX_Incidents_StatusHazard ON dbo.Incidents(status, hazard_type);
+CREATE INDEX IX_Incidents_ReportedBy ON dbo.Incidents(reported_by_user_id);
 GO
 
 -- ============================================================================
@@ -195,6 +212,8 @@ CREATE TABLE dbo.Incident_Media (
     gps_latitude                       FLOAT NULL,
     gps_longitude                      FLOAT NULL
 );
+GO
+CREATE INDEX IX_IncidentMedia_Incident ON dbo.Incident_Media(incident_id);
 GO
 
 -- ============================================================================
@@ -239,7 +258,7 @@ CREATE TABLE dbo.Claim_Payments (
 GO
 -- Composite index for "payments by date, per claim" reporting (the practical equivalent of a
 -- Claims(claim_status, payment_date) index — payment_date lives here, not on Claims; see note
--- in TODO_SPEC.md "אינדקסים חסרים" for the full explanation).
+-- in TODO_SPEC.md "אינדקסים לביצועים" for the full explanation).
 CREATE INDEX IX_ClaimPayments_ClaimDate ON dbo.Claim_Payments(claim_id, payment_date);
 GO
 
@@ -278,6 +297,8 @@ CREATE TABLE dbo.Mitigation_Tasks (
 );
 GO
 CREATE INDEX IX_Mitigation_Property ON dbo.Mitigation_Tasks(property_id);
+GO
+CREATE INDEX IX_Mitigation_AssignedTo ON dbo.Mitigation_Tasks(assigned_to_user_id);
 GO
 
 -- ============================================================================
