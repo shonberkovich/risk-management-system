@@ -18,6 +18,15 @@ export const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
 export const formatDate = (value: string) =>
   new Date(value).toLocaleDateString("he-IL", { year: "numeric", month: "2-digit", day: "2-digit" });
 
+export const formatDateTime = (value: string) =>
+  new Date(value).toLocaleString("he-IL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
 export const ASSET_TYPE_LABELS: Record<string, string> = {
   LOGISTICS_CENTER: "מרכז לוגיסטי",
   OFFICE_BUILDING: "מבנה משרדים",

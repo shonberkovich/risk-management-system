@@ -684,3 +684,25 @@ class RegulatoryReportOut(BaseModel):
     concentration_disclosure: ConcentrationDisclosureOut
     multi_year_trends: list[MultiYearTrendOut]
     trend_summary: TrendSummaryOut | None = None
+
+
+class AuditLogEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    log_id: int
+    user_id: int | None = None
+    user_name: str | None = None
+    entity_type: str
+    entity_id: int
+    action: str
+    old_value: str | None = None
+    new_value: str | None = None
+    timestamp: datetime
+    ip_address: str | None = None
+
+
+class AuditLogPageOut(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    entries: list[AuditLogEntryOut]

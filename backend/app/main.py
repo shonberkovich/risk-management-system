@@ -7,6 +7,7 @@ from app.middleware.audit import AuditLogMiddleware
 from app.routers import (
     ai,
     analytics,
+    audit,
     auth,
     claims,
     compliance,
@@ -68,6 +69,7 @@ app.include_router(integrations.router)
 app.include_router(notifications.router)
 app.include_router(compliance.router)
 app.include_router(financials.router)
+app.include_router(audit.router)
 
 
 @app.get("/api/health")
