@@ -21,7 +21,11 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.dependencies.permissions import require_roles
-from app.services.kpi import calculate_mitigation_roi, calculate_mitigation_roi_breakdown
+from app.services.kpi import (
+    calculate_mitigation_roi,
+    calculate_mitigation_roi_breakdown,
+    calculate_mitigation_roi_summary,
+)
 
 router = APIRouter(prefix="/api/mitigation-tasks", tags=["mitigation"])
 
@@ -60,6 +64,14 @@ def list_tasks(db: Session = Depends(get_db)):
         _sync_overdue(task)
     db.commit()
     return [_to_out(t) for t in tasks]
+
+
+@router.get("/roi-summary", response_model=list[schemas.MitigationRoiBreakdown])
+def get_roi_summary(db: Session = Depends(get_db)):
+    """calculate_mitigation_roi_breakdown for every task, sorted by ROI descending —
+    powers the executive report's "ROI על מיטיגציה" section. Registered before
+    `/{task_id}` so "roi-summary" isn't swallowed by the int path-param route."""
+    return calculate_mitigation_roi_summary(db)
 
 
 @router.get("/{task_id}", response_model=schemas.MitigationTaskOut)

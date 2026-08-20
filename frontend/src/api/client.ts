@@ -715,6 +715,8 @@ export const updateMitigationTask = (id: number, payload: MitigationTaskUpdate) 
   api.patch<MitigationTask>(`/mitigation-tasks/${id}`, payload).then((r) => r.data);
 export const fetchMitigationTaskRoi = (id: number) =>
   api.get<MitigationRoiBreakdown>(`/mitigation-tasks/${id}/roi`).then((r) => r.data);
+export const fetchMitigationRoiSummary = () =>
+  api.get<MitigationRoiBreakdown[]>("/mitigation-tasks/roi-summary").then((r) => r.data);
 
 export const fetchUsers = () => api.get<User[]>("/users").then((r) => r.data);
 
