@@ -1,9 +1,11 @@
+import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
 import { Circle, CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { useNavigate } from "react-router-dom";
 
 import type { GeographicExposureCluster, Incident, Property, PropertyMapPoint } from "../api/client";
 import { HAZARD_LABELS, formatIlsCompact } from "../format";
@@ -38,6 +40,7 @@ export default function RiskMap({
   incidents?: Incident[];
   exposureClusters?: GeographicExposureCluster[];
 }) {
+  const navigate = useNavigate();
   const [showProperties, setShowProperties] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
   const [showFloodZones, setShowFloodZones] = useState(false);
@@ -205,6 +208,14 @@ export default function RiskMap({
                       אין פוליסה פעילה משויכת
                     </Typography>
                   )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ mt: 1 }}
+                    onClick={() => navigate(`/properties/${p.property_id}`)}
+                  >
+                    מעבר לתיק הנכס
+                  </Button>
                 </Popup>
               </CircleMarker>
             );
