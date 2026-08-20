@@ -538,3 +538,25 @@ class WeatherAlertOut(BaseModel):
     issued_at: str
     source_system: str
     status: str
+
+
+class EconomicIndexSeriesOut(BaseModel):
+    as_of: str
+    base_date: str
+    construction_cost_index: float
+    cpi_index: float
+    source_system: str
+
+
+class ReplacementValueUpdateOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    current_replacement_value: float
+    suggested_replacement_value: float
+    drift_percent: float
+    baseline_date: str
+    as_of: str
+    recommended_for_revaluation: bool
+    source_system: str
+    status: str

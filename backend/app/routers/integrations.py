@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.dependencies.permissions import require_roles
-from app.integrations import erp, gis, weather
+from app.integrations import economics, erp, gis, weather
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
@@ -20,6 +20,10 @@ _GIS_ROLES = ("RISK_MANAGER", "RISK_OFFICER", "ADMIN")
 # Weather alerts are an operational/field-facing warning (a property manager
 # or field worker needs to know a storm is coming, not just risk officers) —
 # open to any authenticated role, same as incident reporting.
+
+# Replacement-value/index data feeds revaluation decisions — same finance-
+# facing role set as the ERP endpoints above, not the risk-assessment one.
+_ECONOMICS_ROLES = ("RISK_MANAGER", "CFO", "ADMIN")
 
 
 @router.get("/erp/book-values", response_model=list[schemas.ErpBookValueOut])
@@ -72,3 +76,28 @@ def get_weather_alerts(
     Open to any authenticated role: a field worker at a property needs this
     warning as much as a risk officer does."""
     return weather.fetch_weather_alerts(db, property_ids=property_id, as_of=as_of)
+
+
+@router.get("/economics/index-series", response_model=schemas.EconomicIndexSeriesOut)
+def get_economic_index_series(
+    as_of: date | None = Query(default=None),
+    _user: models.User = Depends(require_roles(*_ECONOMICS_ROLES)),
+):
+    """Simulated construction-cost index + CPI for the given month (default:
+    today) — see app/integrations/economics.py for why this doesn't hit a
+    real Central Bureau of Statistics / Bank of Israel API."""
+    return economics.fetch_index_series(as_of=as_of)
+
+
+@router.get("/economics/replacement-value-updates", response_model=list[schemas.ReplacementValueUpdateOut])
+def get_replacement_value_updates(
+    property_id: list[int] | None = Query(default=None),
+    as_of: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_ECONOMICS_ROLES)),
+):
+    """Recommends an inflation/construction-cost-adjusted replacement value
+    per property, flagging drift beyond the revaluation threshold — see
+    app/integrations/economics.py for why nothing is written back to
+    Properties.replacement_value."""
+    return economics.fetch_replacement_value_updates(db, property_ids=property_id, as_of=as_of)
