@@ -256,3 +256,23 @@ class FinancialStatement(Base):
     total_equity: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     gross_profit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     operating_profit: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+
+
+class NotificationRecipient(Base):
+    """Who gets paged by services/notifications.py, and how. Replaces the previous
+    hardcoded DEFAULT_RECIPIENTS list in that module with a DB-backed table so
+    recipients can eventually be managed through the UI (TODO_SPEC.md §1) instead of
+    requiring a code change. `channels` is a comma-separated subset of EMAIL/SMS/PUSH
+    (SQL Server LocalDB has no native array/set column type, and this mirrors the
+    free-text convention already used for Users.role); parsed to a tuple by
+    services/notifications.py, not enforced at the DB layer."""
+    __tablename__ = "Notification_Recipients"
+
+    recipient_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    role: Mapped[str] = mapped_column(Unicode(30))
+    display_name: Mapped[str] = mapped_column(Unicode(100))
+    email: Mapped[str] = mapped_column(Unicode(200))
+    phone: Mapped[str] = mapped_column(Unicode(30))
+    channels: Mapped[str] = mapped_column(Unicode(30))
+    min_severity: Mapped[str] = mapped_column(Unicode(20), default="warning")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)

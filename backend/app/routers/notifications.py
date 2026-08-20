@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import require_roles
 from app.services import notifications
-from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -14,6 +15,11 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 # risk data, and triggering a (simulated) dispatch is closer to an admin action than
 # a field-worker concern.
 _NOTIFICATIONS_ROLES = ("RISK_MANAGER", "CFO", "ADMIN")
+
+# Managing *who* gets paged (Notification_Recipients) is an administrative action,
+# narrower than previewing/dispatching alerts — ADMIN only, same reasoning as
+# routers/users.py write endpoints.
+_RECIPIENTS_WRITE_ROLES = ("ADMIN",)
 
 
 def _check_enabled() -> None:
@@ -49,3 +55,86 @@ def dispatch_notifications(
     dispatched-flag, so calling this again re-sends the same still-open alerts."""
     _check_enabled()
     return notifications.dispatch_notifications(db)
+
+
+def _recipient_to_out(recipient: models.NotificationRecipient) -> schemas.NotificationRecipientOut:
+    return schemas.NotificationRecipientOut(
+        recipient_id=recipient.recipient_id,
+        role=recipient.role,
+        display_name=recipient.display_name,
+        email=recipient.email,
+        phone=recipient.phone,
+        channels=[c.strip() for c in recipient.channels.split(",") if c.strip()],
+        min_severity=recipient.min_severity,
+        is_active=recipient.is_active,
+    )
+
+
+@router.get("/recipients", response_model=list[schemas.NotificationRecipientOut])
+def list_recipients(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_NOTIFICATIONS_ROLES)),
+):
+    """Who alerts are currently routed to (services/notifications._load_recipients
+    reads the same table). Read access mirrors preview/dispatch; only creating/editing
+    recipients is ADMIN-only, see _RECIPIENTS_WRITE_ROLES."""
+    recipients = db.scalars(
+        select(models.NotificationRecipient).order_by(models.NotificationRecipient.recipient_id)
+    ).all()
+    return [_recipient_to_out(r) for r in recipients]
+
+
+@router.post("/recipients", response_model=schemas.NotificationRecipientOut, status_code=201)
+def create_recipient(
+    payload: schemas.NotificationRecipientCreate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_RECIPIENTS_WRITE_ROLES)),
+):
+    recipient = models.NotificationRecipient(
+        role=payload.role,
+        display_name=payload.display_name,
+        email=payload.email,
+        phone=payload.phone,
+        channels=",".join(payload.channels),
+        min_severity=payload.min_severity,
+        is_active=payload.is_active,
+    )
+    db.add(recipient)
+    db.commit()
+    db.refresh(recipient)
+    return _recipient_to_out(recipient)
+
+
+@router.patch("/recipients/{recipient_id}", response_model=schemas.NotificationRecipientOut)
+def update_recipient(
+    recipient_id: int,
+    payload: schemas.NotificationRecipientUpdate,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_RECIPIENTS_WRITE_ROLES)),
+):
+    recipient = db.get(models.NotificationRecipient, recipient_id)
+    if not recipient:
+        raise HTTPException(404, "Notification recipient not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "channels" in updates:
+        updates["channels"] = ",".join(updates["channels"])
+    for field, value in updates.items():
+        setattr(recipient, field, value)
+
+    db.commit()
+    db.refresh(recipient)
+    return _recipient_to_out(recipient)
+
+
+@router.delete("/recipients/{recipient_id}", status_code=204)
+def delete_recipient(
+    recipient_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_RECIPIENTS_WRITE_ROLES)),
+):
+    recipient = db.get(models.NotificationRecipient, recipient_id)
+    if not recipient:
+        raise HTTPException(404, "Notification recipient not found")
+    db.delete(recipient)
+    db.commit()

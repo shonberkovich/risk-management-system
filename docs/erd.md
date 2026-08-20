@@ -1,6 +1,6 @@
 # ERD — תרשים ישויות וקשרים
 
-מעודכן נכון לסיום שלב 9 של [TODO_SPEC.md](../TODO_SPEC.md) (18 טבלאות). מקור האמת ל-DDL בפועל: [backend/sql/schema.sql](../backend/sql/schema.sql); מקור האמת למודל ה-ORM: [backend/app/models.py](../backend/app/models.py) — שני הקבצים מתוחזקים יד-ביד (ראו [CLAUDE.md](../CLAUDE.md)); Alembic (`backend/alembic/`) עוקב אחרי שינויים הדרגתיים קדימה מנקודת הבסיס, לא מחליף את `schema.sql` ליצירת סכימה על DB חדש.
+מעודכן נכון להוספת `Notification_Recipients` ב-TODO_SPEC.md §1 (19 טבלאות). מקור האמת ל-DDL בפועל: [backend/sql/schema.sql](../backend/sql/schema.sql); מקור האמת למודל ה-ORM: [backend/app/models.py](../backend/app/models.py) — שני הקבצים מתוחזקים יד-ביד (ראו [CLAUDE.md](../CLAUDE.md)); Alembic (`backend/alembic/`) עוקב אחרי שינויים הדרגתיים קדימה מנקודת הבסיס, לא מחליף את `schema.sql` ליצירת סכימה על DB חדש.
 
 ```mermaid
 erDiagram
@@ -204,6 +204,17 @@ erDiagram
         decimal gross_profit "nullable"
         decimal operating_profit "nullable"
     }
+
+    Notification_Recipients {
+        bigint recipient_id PK
+        nvarchar role
+        nvarchar display_name
+        nvarchar email
+        nvarchar phone
+        nvarchar channels "CSV subset of EMAIL/SMS/PUSH"
+        nvarchar min_severity "warning/critical"
+        bit is_active
+    }
 ```
 
 ## שרשרת הערך המרכזית
@@ -225,6 +236,7 @@ erDiagram
 - **`Role_Permissions`** מגדירה מטריצת הרשאות תיאורית (role → permission_key) המוצגת/נצרכת כתיעוד; האכיפה בפועל היא ברמת ה-endpoint דרך `dependencies/permissions.py::require_roles(...)`, לא שאילתה חיה כנגד הטבלה הזו.
 - **`Documents`** מקשרת קבצים (פוליסות, דוחות שמאי, תכתובות) לכל אחת מארבע ישויות (`policy`/`claim`/`property`/`incident`) בדפוס פוליארפי — `entity_type` + `entity_id` בלבד, לא ארבעה FK-ים נפרדים nullable (אותו דפוס גם ב-`Audit_Log`).
 - **`Financial_Statements`** היא טבלה עצמאית (ללא FK), שורה אחת לשנה, המשמשת את `services/financials.py` לניתוח מגמות רב-שנתי ואת הדוח הרגולטורי (`GET /api/financials/regulatory-report`).
+- **`Notification_Recipients`** היא טבלה עצמאית (ללא FK) שמחליפה את רשימת ה-`DEFAULT_RECIPIENTS` הקבועה-בקוד הקודמת ב-`services/notifications.py`: מי מקבל התראות סף ובאילו ערוצים (`channels` — מחרוזת CSV מתוך EMAIL/SMS/PUSH, ללא סוג עמודת מערך ב-SQL Server). `services/notifications._load_recipients` קורא ממנה שורות פעילות (`is_active=1`), עם נפילה חזרה ל-`DEFAULT_RECIPIENTS` אם הטבלה ריקה. ניהול (CRUD) דרך `POST/PATCH/DELETE /api/notifications/recipients`, מוגבל ל-`ADMIN`.
 
 ## התראות סף (Threshold Alerts)
 

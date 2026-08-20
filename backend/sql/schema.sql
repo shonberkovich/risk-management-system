@@ -20,6 +20,7 @@ IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
 IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
 IF OBJECT_ID('dbo.Documents', 'U') IS NOT NULL DROP TABLE dbo.Documents;
 IF OBJECT_ID('dbo.Financial_Statements', 'U') IS NOT NULL DROP TABLE dbo.Financial_Statements;
+IF OBJECT_ID('dbo.Notification_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Notification_Recipients;
 IF OBJECT_ID('dbo.Claim_Payments', 'U') IS NOT NULL DROP TABLE dbo.Claim_Payments;
 IF OBJECT_ID('dbo.Claim_Reserves', 'U') IS NOT NULL DROP TABLE dbo.Claim_Reserves;
 IF OBJECT_ID('dbo.Claims', 'U') IS NOT NULL DROP TABLE dbo.Claims;
@@ -354,5 +355,25 @@ CREATE TABLE dbo.Financial_Statements (
     total_equity                  DECIMAL(18,2) NULL,
     gross_profit                   DECIMAL(18,2) NULL,
     operating_profit                 DECIMAL(18,2) NULL
+);
+GO
+
+-- ============================================================================
+-- Notification_Recipients — who services/notifications.py routes threshold
+-- alerts to, and over which channels. Replaces the previous hardcoded
+-- DEFAULT_RECIPIENTS list with a DB-backed table (TODO_SPEC.md §1) so
+-- recipients can eventually be managed through the UI.
+-- ============================================================================
+IF OBJECT_ID('dbo.Notification_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Notification_Recipients;
+GO
+CREATE TABLE dbo.Notification_Recipients (
+    recipient_id    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    role            NVARCHAR(30) NOT NULL,
+    display_name    NVARCHAR(100) NOT NULL,
+    email           NVARCHAR(200) NOT NULL,
+    phone           NVARCHAR(30) NOT NULL,
+    channels        NVARCHAR(30) NOT NULL,   -- comma-separated subset of EMAIL/SMS/PUSH
+    min_severity    NVARCHAR(20) NOT NULL DEFAULT 'warning',
+    is_active       BIT NOT NULL DEFAULT 1
 );
 GO
