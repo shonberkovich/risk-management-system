@@ -1,4 +1,5 @@
 import BalanceIcon from "@mui/icons-material/Balance";
+import GridOnIcon from "@mui/icons-material/GridOn";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -16,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { fetchProperties, fetchRetentionRecommendation, type Property } from "../api/client";
+import { exportRetentionReportToExcel } from "../exportRetentionReport";
 import { formatIls } from "../format";
 
 /** "לספוג או לתבוע" — compares self-absorbing a loss out of pocket against filing an
@@ -133,16 +135,26 @@ export default function RetentionCalculator() {
         {data && (
           <>
             <Divider sx={{ my: 2 }} />
-            <Box sx={{ mb: 2 }}>
-              <Chip
-                label={data.recommendation === "ABSORB" ? "המלצה: לספוג את הנזק עצמונית" : "המלצה: להגיש תביעה"}
-                color={data.recommendation === "ABSORB" ? "primary" : "success"}
-                sx={{ fontWeight: 700 }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                חיסכון צפוי בבחירה זו לעומת החלופה: {formatIls(data.estimated_savings)}
-              </Typography>
-            </Box>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+              <Box>
+                <Chip
+                  label={data.recommendation === "ABSORB" ? "המלצה: לספוג את הנזק עצמונית" : "המלצה: להגיש תביעה"}
+                  color={data.recommendation === "ABSORB" ? "primary" : "success"}
+                  sx={{ fontWeight: 700 }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  חיסכון צפוי בבחירה זו לעומת החלופה: {formatIls(data.estimated_savings)}
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<GridOnIcon />}
+                onClick={() => selectedProperty && exportRetentionReportToExcel(selectedProperty, data)}
+              >
+                ייצוא ל-Excel
+              </Button>
+            </Stack>
 
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>

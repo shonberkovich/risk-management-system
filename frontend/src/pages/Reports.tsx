@@ -1,5 +1,6 @@
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import GridOnIcon from "@mui/icons-material/GridOn";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SendIcon from "@mui/icons-material/Send";
 import SummarizeIcon from "@mui/icons-material/Summarize";
@@ -37,6 +38,7 @@ import {
 } from "../api/client";
 import ExecutiveReportPrintable from "../components/ExecutiveReportPrintable";
 import KpiCard from "../components/KpiCard";
+import { exportExposureReportToExcel } from "../exportExposureReport";
 import { exportElementToPdf } from "../exportPdf";
 import { formatIls } from "../format";
 
@@ -263,11 +265,24 @@ export default function Reports() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-            <AccountBalanceIcon color="primary" />
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              דוח רגולטורי — רשות שוק ההון / Solvency II
-            </Typography>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <AccountBalanceIcon color="primary" />
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                דוח רגולטורי — רשות שוק ההון / Solvency II
+              </Typography>
+            </Stack>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<GridOnIcon />}
+              disabled={!exposureByRegion.data}
+              onClick={() =>
+                exportExposureReportToExcel(exposureByRegion.data ?? [], regulatoryReport.data?.multi_year_trends)
+              }
+            >
+              ייצוא דוח חשיפה ל-Excel
+            </Button>
           </Stack>
 
           {regulatoryReport.isLoading && (
