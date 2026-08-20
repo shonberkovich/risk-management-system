@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.dependencies.permissions import require_roles
-from app.integrations import erp, gis
+from app.integrations import erp, gis, weather
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
@@ -16,6 +16,10 @@ _ERP_ROLES = ("RISK_MANAGER", "CFO", "ADMIN")
 # Flood-zone/climate layers feed risk assessment, not finance — same role set
 # already used for risk-scoring/survey endpoints, not the ERP one above.
 _GIS_ROLES = ("RISK_MANAGER", "RISK_OFFICER", "ADMIN")
+
+# Weather alerts are an operational/field-facing warning (a property manager
+# or field worker needs to know a storm is coming, not just risk officers) —
+# open to any authenticated role, same as incident reporting.
 
 
 @router.get("/erp/book-values", response_model=list[schemas.ErpBookValueOut])
@@ -53,3 +57,18 @@ def get_gis_risk_layers(
     app/integrations/gis.py for why this doesn't hit a real GIS API and why a
     mismatch isn't persisted anywhere."""
     return gis.fetch_risk_layers(db, property_ids=property_id)
+
+
+@router.get("/weather/alerts", response_model=list[schemas.WeatherAlertOut])
+def get_weather_alerts(
+    property_id: list[int] | None = Query(default=None),
+    as_of: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
+    """Simulated extreme-weather-alert feed (storm/flood/heatwave) per property
+    location — see app/integrations/weather.py for why this doesn't hit a real
+    weather API and why calm properties simply don't appear in the response.
+    Open to any authenticated role: a field worker at a property needs this
+    warning as much as a risk officer does."""
+    return weather.fetch_weather_alerts(db, property_ids=property_id, as_of=as_of)
