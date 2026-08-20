@@ -30,6 +30,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import CopilotWidget from "./CopilotWidget";
 import { ROLE_LABELS } from "../format";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
@@ -216,6 +217,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <Box component="main" sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
         {children}
       </Box>
+      <CopilotWidget />
     </Box>
   );
 }
