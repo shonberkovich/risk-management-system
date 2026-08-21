@@ -55,15 +55,18 @@
   - ✅ בוצע ב-branch feature/integrations-retry-queue-and-safe-parsing: חוזק `environmental.py` (data.gov.il) מול מפתחות JSON שקיימים אך עם ערך `null` (לא רק חסרים) — `_find_datastore_resource_id`/`fetch_hazmat_sites` עברו ל-`or {}`/`or []` בכל שלב בשרשרת ולא רק `.get(key, default)`, ו-`_extract_site` מוגנת מפני שורה שאינה dict. שאר קבצי האינטגרציות (economics/BOI, home_front/פיקוד העורף, seismology/GSI, gis/Nominatim) נבדקו ונמצאו כבר עטופים כראוי ב-`.get()`/try-except עם ערכי ברירת מחדל.
 
 # 4. Frontend / ממשק משתמש
-- [ ] קפיאת מוטציות (Mutations) בהיעדר רשת
+- [x] קפיאת מוטציות (Mutations) בהיעדר רשת
   - **מה צריך לממש:** הגדרת `networkMode: 'always'` במוטציות הקשורות למסמכים ולמדיה כדי שה-Mutation תמיד ירוץ וייפול פנימה לתור ה-Offline המקומי, במקום להיתקע במצב Pending נצחי ב-TanStack v5 בעת אובדן רשת.
   - **הרשאות:** זמין לכל משתמש קצה (בדגש על `FIELD_WORKER`).
   - **קובץ/תיקייה:** `frontend/src/components/MediaUploader.tsx` ו-`frontend/src/offline/syncQueue.ts`
-- [ ] חפיפת Popups וניווט רפאים במפה (Risk Map)
+  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: `saveDraftMutation`/`submitMutation` ב-`IncidentReport.tsx` (המוטציות בפועל בזרימת המדיה/הטיוטות — `MediaUploader.tsx` עצמו לא מריץ מוטציות, רק אוסף קבצים מקומית) מוגדרות עם `networkMode: 'always'`, וה-`onError`/catch שלהן נופל לתור `enqueueIncidentReport`/`enqueueDraftUpdate`/`enqueueDraftSubmit`/`enqueueMediaUpload` ב-`syncQueue.ts`.
+- [x] חפיפת Popups וניווט רפאים במפה (Risk Map)
   - **מה צריך לממש:** ניהול נכון של חלונות המידע ב-React Leaflet, כך שלחיצות מהירות לא ישאירו שאריות ב-DOM שיגרמו ללחיצה על "תיק נכס" לנווט לנכס הלא נכון מהלחיצה הקודמת.
   - **הרשאות:** בעלי הרשאת צפייה במפה (`RISK_MANAGER`, `ADMIN`, `CFO`).
   - **קובץ/תיקייה:** `frontend/src/components/RiskMap.tsx`
-- [ ] ולידציית טווחי תאריכים בבחירת פוליסות (באג לוגי)
+  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: נוסף state יחיד (`selectedPropertyId`) שעוקב אחר סמן הנכס שנבחר, סגירת ה-Popup הפתוח דרך `mapRef.current.closePopup()` לפני פתיחת חדש, וכפתור "מעבר לתיק הנכס" קורא את מזהה הנכס מה-state הנוכחי במקום מ-closure שעלול להיות מיושן.
+- [x] ולידציית טווחי תאריכים בבחירת פוליסות (באג לוגי)
   - **מה צריך לממש:** אכיפה ב-UI שתאריך סיום (`end_date`) של פוליסה או דוח חייב להיות מאוחר מתאריך ההתחלה (`start_date`), כולל חסימה ויזואלית בפקד לוח השנה.
   - **הרשאות:** כלל המשתמשים המזינים פוליסות ומפיקים דוחות.
   - **קובץ/תיקייה:** `frontend/src/components/PolicyDialog.tsx` וקומפוננטות רלוונטיות נוספות
+  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: נוספה ולידציית `end_date > start_date` עם הודעת שגיאה מוצגת inline (`helperText`/`error` ב-`TextField`), `min` על שדה תאריך הסיום שחוסם בפקד לוח השנה בחירת תאריך על/לפני תאריך ההתחלה, וחסימת שליחת הטופס כל עוד הטווח לא תקין (`canSubmit`).

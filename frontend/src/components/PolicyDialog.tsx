@@ -16,6 +16,15 @@ import { POLICY_STATUS_LABELS } from "../format";
 
 const STATUS_OPTIONS: PolicyStatus[] = ["ACTIVE", "PENDING_RENEWAL", "EXPIRED"];
 
+/** One calendar day after a "YYYY-MM-DD" string — used as the native date input's `min` for
+ * end_date, since HTML's `min` is inclusive but end_date must be *strictly* later than
+ * start_date. */
+function dayAfter(isoDate: string): string {
+  const d = new Date(`${isoDate}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 const emptyForm = {
   policy_number: "",
   insurer_name: "",
@@ -64,6 +73,14 @@ export default function PolicyDialog({
     }
   }, [policy, open]);
 
+  // end_date must be strictly later than start_date. Both are plain "YYYY-MM-DD" strings
+  // (from <TextField type="date">), so a lexicographic compare is equivalent to a date
+  // compare and avoids timezone-conversion pitfalls of parsing into Date objects.
+  const dateRangeError =
+    form.start_date && form.end_date && form.end_date <= form.start_date
+      ? "תאריך סוף תוקף חייב להיות מאוחר מתאריך תחילת התוקף."
+      : null;
+
   const mutation = useMutation({
     mutationFn: () => {
       const payload = {
@@ -93,6 +110,7 @@ export default function PolicyDialog({
     form.insurer_name.trim() &&
     form.start_date &&
     form.end_date &&
+    !dateRangeError &&
     form.total_limit !== "" &&
     form.deductible_default !== "" &&
     form.annual_premium !== "";
@@ -138,6 +156,12 @@ export default function PolicyDialog({
                 InputLabelProps={{ shrink: true }}
                 value={form.end_date}
                 onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                error={!!dateRangeError}
+                helperText={dateRangeError ?? undefined}
+                // Visually blocks picking an end date on/before the current start_date in
+                // the native date-picker control, in addition to the inline error + the
+                // disabled-submit guard below.
+                inputProps={{ min: form.start_date ? dayAfter(form.start_date) : undefined }}
               />
             </Grid>
             <Grid item xs={4}>

@@ -3,8 +3,9 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Circle, CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import type { Map as LeafletMap } from "leaflet";
 import { useNavigate } from "react-router-dom";
 
 import type { GeographicExposureCluster, Incident, Property, PropertyMapPoint } from "../api/client";
@@ -46,6 +47,20 @@ export default function RiskMap({
   const [showFloodZones, setShowFloodZones] = useState(false);
   const [showFireZones, setShowFireZones] = useState(false);
   const [showExposureClusters, setShowExposureClusters] = useState(false);
+
+  // Single source of truth for "which marker's popup is open". Rapid clicks across
+  // different markers used to leave stale Popup DOM/handlers behind (each CircleMarker
+  // managed its own uncontrolled popup), which could make "מעבר לתיק הנכס" navigate using
+  // a previous click's property id. Tracking one selected id here — and explicitly closing
+  // any currently-open popup on the map before a new marker's popup opens — means the
+  // "view property" handler always reads the id of the marker that was actually clicked.
+  const mapRef = useRef<LeafletMap | null>(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
+
+  const selectProperty = (propertyId: number) => {
+    mapRef.current?.closePopup();
+    setSelectedPropertyId(propertyId);
+  };
 
   const center: [number, number] =
     points.length > 0
@@ -106,6 +121,7 @@ export default function RiskMap({
       </Stack>
 
       <MapContainer
+        ref={mapRef}
         center={center}
         zoom={7}
         style={{ height: 420, width: "100%", borderRadius: 8, overflow: "hidden" }}
@@ -180,8 +196,15 @@ export default function RiskMap({
                 center={[p.latitude, p.longitude]}
                 radius={10}
                 pathOptions={{ color: COLOR_MAP[p.status_color], fillColor: COLOR_MAP[p.status_color], fillOpacity: 0.8 }}
+                eventHandlers={{
+                  click: () => selectProperty(p.property_id),
+                }}
               >
-                <Popup>
+                <Popup
+                  eventHandlers={{
+                    remove: () => setSelectedPropertyId((cur) => (cur === p.property_id ? null : cur)),
+                  }}
+                >
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                     {p.name}
                   </Typography>
@@ -212,7 +235,14 @@ export default function RiskMap({
                     size="small"
                     variant="outlined"
                     sx={{ mt: 1 }}
-                    onClick={() => navigate(`/properties/${p.property_id}`)}
+                    // Reads the id from the single controlled `selectedPropertyId` state (set
+                    // synchronously by this exact marker's click handler above), not from a
+                    // per-render closure over `p` — that's what keeps rapid clicks on different
+                    // markers from ever navigating to a previous click's property.
+                    onClick={() => {
+                      const targetId = selectedPropertyId ?? p.property_id;
+                      navigate(`/properties/${targetId}`);
+                    }}
                   >
                     מעבר לתיק הנכס
                   </Button>
@@ -234,6 +264,9 @@ export default function RiskMap({
                 center={coords}
                 radius={6}
                 pathOptions={{ color: "#6a1b9a", fillColor: "#ce93d8", fillOpacity: 0.9, weight: 2 }}
+                eventHandlers={{
+                  click: () => mapRef.current?.closePopup(),
+                }}
               >
                 <Popup>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
