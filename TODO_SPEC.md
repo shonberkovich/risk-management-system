@@ -56,17 +56,18 @@
 
 ---
 
-### [ ] משימה 5: פיתוח סוכן אופרטיבי ותאימות (Action & Compliance Agent)
+### [x] משימה 5: פיתוח סוכן אופרטיבי ותאימות (Action & Compliance Agent)
 * **מהות המשימה (איזה חלק עושים)**: סוכן בעל הרשאות לביצוע פעולות (פתיחת טיוטות) וניתוח תאימות מול התקנים והדוחות הקיימים. Human-in-the-loop.
 * **מיקום במערכת**: Backend (Services).
 * **תיקיות וקבצים רלוונטיים להסתכל בהם**:
   - `backend/app/services/compliance.py`
   - יצירת קובץ חדש: `backend/app/services/agents/action_agent.py`
 * **שלבי ביצוע (Checklist)**:
-  - [ ] שלב 1: הנגשת כלי המערכת הפנימיים (Tools) כמו יצירת טיוטת `Incident`, יצירת משימת `Mitigation_Task` וקריאת דוחות `compliance`.
-  - [ ] שלב 2: הגדרת System Prompt לסוכן כקצין ציות וסיכונים (Risk Officer).
-  - [ ] שלב 3: כתיבת מנגנון בו הסוכן ממליץ על פעולה (ומחזיר אותה כ-JSON), אך אינו מבצע קומיט סופי עד לאישור משתמש (פרט ליצירת "טיוטות").
+  - [x] שלב 1: הנגשת כלי המערכת הפנימיים (Tools) כמו יצירת טיוטת `Incident`, יצירת משימת `Mitigation_Task` וקריאת דוחות `compliance`.
+  - [x] שלב 2: הגדרת System Prompt לסוכן כקצין ציות וסיכונים (Risk Officer).
+  - [x] שלב 3: כתיבת מנגנון בו הסוכן ממליץ על פעולה (ומחזיר אותה כ-JSON), אך אינו מבצע קומיט סופי עד לאישור משתמש (פרט ליצירת "טיוטות").
 * **קריטריוני הצלחה (Acceptance Criteria)**: כאשר המערכת מזהה נכס שחורג מתאימות, הסוכן מפיק המלצה ליצירת משימת מיטיגציה ובונה את ה-Payload המתאים להכנה לאישור משתמש.
+  - ✅ בוצע ב-branch feature/action-compliance-agent: נוסף `backend/app/services/agents/action_agent.py` עם `build_mitigation_task_proposal()` דטרמיניסטי (ללא LLM, מבוסס `compliance.build_iso31000_report`) שמזהה נכס שחורג מתאימות (סיכון גבוה/קריטי ללא בעל אחריות, או בקרות באיחור) ובונה Payload בצורת `MitigationTaskCreate`; `log_proposal`/`mark_action_status` מממשים את מחזור החיים proposed→confirmed/rejected ב-`Agent_Actions_Log` (טיוטה בלבד — אין כתיבה ל-`Mitigation_Tasks` עד אישור המשתמש). כלים (`@beta_tool`) לסקירת תאימות ולהצעת הפעולה נחשפים לסוכן עם System Prompt של קצין ציות וסיכונים, ונרשם כ-`COMPLIANCE_AGENT` ב-orchestrator. נוספו endpoints `POST /api/ai/actions/propose-mitigation-task` ו-`{action_id}/confirm|reject` ב-`routers/ai.py` לשימוש כרטיס הפעולה בצד לקוח (משימה 7). כוסה ב-`tests/test_action_agent.py` ו-`tests/test_api_ai_auth.py`.
 
 ---
 

@@ -71,3 +71,27 @@ def test_agent_chat_with_token_passes_auth_gate(client, make_user):
         headers=auth_headers(user),
     )
     assert resp.status_code == 503
+
+
+def test_propose_mitigation_task_without_token_is_401(client):
+    resp = client.post("/api/ai/actions/propose-mitigation-task", json={"property_id": 1})
+    assert resp.status_code == 401
+
+
+def test_propose_mitigation_task_no_op_for_unknown_property(client, make_user):
+    # Pure DB computation (no ANTHROPIC_API_KEY needed) — an unknown property_id
+    # yields a null proposal rather than an error.
+    user = make_user(role="RISK_MANAGER", email="rm-propose-test@example.com")
+    resp = client.post(
+        "/api/ai/actions/propose-mitigation-task",
+        json={"property_id": 999999},
+        headers=auth_headers(user),
+    )
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+
+def test_confirm_unknown_action_is_404(client, make_user):
+    user = make_user(role="RISK_MANAGER", email="rm-confirm-test@example.com")
+    resp = client.post("/api/ai/actions/999999/confirm", headers=auth_headers(user))
+    assert resp.status_code == 404
