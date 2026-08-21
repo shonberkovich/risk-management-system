@@ -79,3 +79,32 @@ def test_list_and_filter_policies_by_status(client, make_user):
     resp = client.get("/api/policies", params={"status": "ACTIVE"}, headers=headers)
     assert resp.status_code == 200
     assert [p["policy_number"] for p in resp.json()] == ["POL-A"]
+
+
+def test_create_policy_rejects_negative_total_limit(client, make_user):
+    """Money fields must be non-negative — same Field(ge=0) guard as
+    deductible_default already had, now applied to total_limit/annual_premium/
+    per_event_limit/bi_waiting_period_hours too."""
+    cfo = make_user(role="CFO")
+    resp = client.post("/api/policies", json=_policy_payload(total_limit=-1), headers=auth_headers(cfo))
+    assert resp.status_code == 422
+
+
+def test_create_policy_rejects_negative_annual_premium(client, make_user):
+    cfo = make_user(role="CFO")
+    resp = client.post("/api/policies", json=_policy_payload(annual_premium=-1), headers=auth_headers(cfo))
+    assert resp.status_code == 422
+
+
+def test_create_policy_rejects_negative_per_event_limit(client, make_user):
+    cfo = make_user(role="CFO")
+    resp = client.post("/api/policies", json=_policy_payload(per_event_limit=-1), headers=auth_headers(cfo))
+    assert resp.status_code == 422
+
+
+def test_create_policy_rejects_negative_bi_waiting_period_hours(client, make_user):
+    cfo = make_user(role="CFO")
+    resp = client.post(
+        "/api/policies", json=_policy_payload(bi_waiting_period_hours=-1), headers=auth_headers(cfo)
+    )
+    assert resp.status_code == 422

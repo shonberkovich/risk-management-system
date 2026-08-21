@@ -182,8 +182,8 @@ class PropertyCreate(BaseModel):
     latitude: float
     longitude: float
     asset_type: AssetType
-    replacement_value: float
-    book_value: float
+    replacement_value: float = Field(ge=0)
+    book_value: float = Field(ge=0)
     primary_manager_id: int | None = None
 
 
@@ -200,8 +200,8 @@ class PropertyUpdate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     asset_type: AssetType | None = None
-    replacement_value: float | None = None
-    book_value: float | None = None
+    replacement_value: float | None = Field(default=None, ge=0)
+    book_value: float | None = Field(default=None, ge=0)
     primary_manager_id: int | None = None
     is_active: bool | None = None
 
@@ -400,12 +400,12 @@ class PolicyCreate(BaseModel):
     insurer_name: str
     start_date: date
     end_date: date
-    total_limit: float
+    total_limit: float = Field(ge=0)
     deductible_default: float = Field(ge=0)
-    annual_premium: float
+    annual_premium: float = Field(ge=0)
     status: PolicyStatus = "ACTIVE"
-    per_event_limit: float | None = None
-    bi_waiting_period_hours: int | None = None
+    per_event_limit: float | None = Field(default=None, ge=0)
+    bi_waiting_period_hours: int | None = Field(default=None, ge=0)
     exclusions: str | None = None
 
 
@@ -413,12 +413,12 @@ class PolicyUpdate(BaseModel):
     insurer_name: str | None = None
     start_date: date | None = None
     end_date: date | None = None
-    total_limit: float | None = None
+    total_limit: float | None = Field(default=None, ge=0)
     deductible_default: float | None = Field(default=None, ge=0)
-    annual_premium: float | None = None
+    annual_premium: float | None = Field(default=None, ge=0)
     status: PolicyStatus | None = None
-    per_event_limit: float | None = None
-    bi_waiting_period_hours: int | None = None
+    per_event_limit: float | None = Field(default=None, ge=0)
+    bi_waiting_period_hours: int | None = Field(default=None, ge=0)
     exclusions: str | None = None
 
 
@@ -498,16 +498,16 @@ class MitigationTaskOut(BaseModel):
 class MitigationTaskCreate(BaseModel):
     property_id: int
     title: str
-    cost_estimate: float
-    expected_annual_savings: float = 0
+    cost_estimate: float = Field(ge=0)
+    expected_annual_savings: float = Field(default=0, ge=0)
     due_date: date
     assigned_to_user_id: int | None = None
 
 
 class MitigationTaskUpdate(BaseModel):
     title: str | None = None
-    cost_estimate: float | None = None
-    expected_annual_savings: float | None = None
+    cost_estimate: float | None = Field(default=None, ge=0)
+    expected_annual_savings: float | None = Field(default=None, ge=0)
     due_date: date | None = None
     status: MitigationStatus | None = None
     assigned_to_user_id: int | None = None

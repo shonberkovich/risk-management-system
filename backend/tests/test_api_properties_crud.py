@@ -115,3 +115,29 @@ def test_delete_property_forbidden_for_field_worker(client, make_user, make_prop
     prop = make_property()
     resp = client.delete(f"/api/properties/{prop.property_id}", headers=auth_headers(field_worker))
     assert resp.status_code == 403
+
+
+def test_create_property_rejects_negative_replacement_value(client, make_user):
+    """replacement_value/book_value must be non-negative — same Field(ge=0)
+    guard already applied to every other money field in schemas.py
+    (claimed_amount, deductible_default, reserve_amount, ...)."""
+    admin = make_user(role="ADMIN")
+    resp = client.post(
+        "/api/properties", json=_property_payload(replacement_value=-1), headers=auth_headers(admin)
+    )
+    assert resp.status_code == 422
+
+
+def test_create_property_rejects_negative_book_value(client, make_user):
+    admin = make_user(role="ADMIN")
+    resp = client.post("/api/properties", json=_property_payload(book_value=-500), headers=auth_headers(admin))
+    assert resp.status_code == 422
+
+
+def test_update_property_rejects_negative_replacement_value(client, make_user, make_property):
+    admin = make_user(role="ADMIN")
+    prop = make_property()
+    resp = client.put(
+        f"/api/properties/{prop.property_id}", json={"replacement_value": -1}, headers=auth_headers(admin)
+    )
+    assert resp.status_code == 422
