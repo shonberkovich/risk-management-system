@@ -16,6 +16,8 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Agent_Actions_Log', 'U') IS NOT NULL DROP TABLE dbo.Agent_Actions_Log;
+IF OBJECT_ID('dbo.Agent_Sessions', 'U') IS NOT NULL DROP TABLE dbo.Agent_Sessions;
 IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
 IF OBJECT_ID('dbo.Role_Permissions', 'U') IS NOT NULL DROP TABLE dbo.Role_Permissions;
 IF OBJECT_ID('dbo.Documents', 'U') IS NOT NULL DROP TABLE dbo.Documents;
@@ -428,4 +430,36 @@ CREATE TABLE dbo.Notification_Log (
 );
 GO
 CREATE INDEX IX_Notification_Log_sent_at ON dbo.Notification_Log(sent_at);
+GO
+
+-- ============================================================================
+-- Agent_Sessions / Agent_Actions_Log — short/long-term context memory and
+-- action audit trail for the AI agent orchestrator (TODO_SPEC.md §1).
+-- session_id is a client-minted UUID string (not IDENTITY) so the frontend can
+-- mint it before the first message is persisted. context_data/payload are
+-- stored as NVARCHAR(MAX) (no native JSON column type in SQL Server LocalDB),
+-- same convention as Notification_Log.property_ids.
+-- ============================================================================
+IF OBJECT_ID('dbo.Agent_Actions_Log', 'U') IS NOT NULL DROP TABLE dbo.Agent_Actions_Log;
+GO
+IF OBJECT_ID('dbo.Agent_Sessions', 'U') IS NOT NULL DROP TABLE dbo.Agent_Sessions;
+GO
+CREATE TABLE dbo.Agent_Sessions (
+    session_id      NVARCHAR(64) NOT NULL PRIMARY KEY,
+    user_id         BIGINT NULL REFERENCES dbo.Users(user_id),
+    context_data    NVARCHAR(MAX) NULL,
+    created_at      DATETIME2 NOT NULL,
+    updated_at      DATETIME2 NOT NULL
+);
+GO
+CREATE TABLE dbo.Agent_Actions_Log (
+    action_id       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    session_id      NVARCHAR(64) NOT NULL REFERENCES dbo.Agent_Sessions(session_id) ON DELETE CASCADE,
+    action_type     NVARCHAR(50) NOT NULL,
+    payload         NVARCHAR(MAX) NULL,
+    status          NVARCHAR(20) NOT NULL DEFAULT 'proposed',
+    created_at      DATETIME2 NOT NULL
+);
+GO
+CREATE INDEX IX_Agent_Actions_Log_session_id ON dbo.Agent_Actions_Log(session_id);
 GO

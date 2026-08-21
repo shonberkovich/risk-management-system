@@ -352,3 +352,49 @@ class NotificationLog(Base):
     threshold: Mapped[float] = mapped_column(Numeric(18, 4))
     status: Mapped[str] = mapped_column(Unicode(20))
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class AgentSession(Base):
+    """A conversation thread with the AI agent orchestrator (TODO_SPEC.md §1/§2) —
+    one row per session, carrying short/long-term context so a multi-turn chat (or a
+    later request that references the same session_id) can pick up where it left off
+    without resending the whole history. `session_id` is a client-generated UUID
+    string (not an identity column) so the frontend can mint it before the first
+    message is ever persisted. `context_data` is a free-form JSON blob (serialized
+    conversation state, last routed agent, tool results, etc.) — SQL Server LocalDB
+    has no native JSON column type, so it's stored as NVARCHAR(MAX) like every other
+    "structured text" column in this file (see Notification_Log.property_ids) and
+    (de)serialized by the orchestrator layer, not enforced at the DB layer."""
+    __tablename__ = "Agent_Sessions"
+
+    session_id: Mapped[str] = mapped_column(Unicode(64), primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
+    context_data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    user: Mapped["User | None"] = relationship()
+    actions: Mapped[list["AgentActionLog"]] = relationship(back_populates="session", passive_deletes=True)
+
+
+class AgentActionLog(Base):
+    """Audit trail of autonomous/semi-autonomous actions proposed or taken by an AI
+    agent within a session (e.g. drafting an Incident, proposing a Mitigation_Task) —
+    TODO_SPEC.md §1. `action_type` is a free-text label (e.g. "CREATE_INCIDENT_DRAFT",
+    "CREATE_MITIGATION_TASK_PROPOSAL"); `payload` is the JSON the agent built for that
+    action (candidate row data, tool call args/results), same NVARCHAR(MAX)-as-JSON
+    convention as Agent_Sessions.context_data. `status` tracks the human-in-the-loop
+    lifecycle used by the Action/Compliance agent (TODO_SPEC.md §5): "proposed" until
+    a user approves it, then "confirmed"/"rejected"."""
+    __tablename__ = "Agent_Actions_Log"
+
+    action_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        Unicode(64), ForeignKey("Agent_Sessions.session_id", ondelete="CASCADE")
+    )
+    action_type: Mapped[str] = mapped_column(Unicode(50))
+    payload: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    status: Mapped[str] = mapped_column(Unicode(20), default="proposed")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    session: Mapped["AgentSession"] = relationship(back_populates="actions")

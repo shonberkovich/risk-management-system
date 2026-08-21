@@ -1048,3 +1048,50 @@ class AuditLogPageOut(BaseModel):
     limit: int
     offset: int
     entries: list[AuditLogEntryOut]
+
+
+# ---------------------------------------------------------------------------
+# AI Agents — Sessions & Action Log (TODO_SPEC.md §1)
+# ---------------------------------------------------------------------------
+
+class AgentSessionCreate(BaseModel):
+    """Body for opening (or resuming) an agent session. `session_id` is a
+    client-minted UUID string — omit it to let the server mint one."""
+    session_id: str | None = Field(default=None, max_length=64)
+    user_id: int | None = None
+    context_data: dict | list | str | None = None
+
+
+class AgentSessionUpdate(BaseModel):
+    context_data: dict | list | str | None = None
+
+
+class AgentSessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: str
+    user_id: int | None = None
+    context_data: dict | list | str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+AgentActionStatus = Literal["proposed", "confirmed", "rejected", "executed"]
+
+
+class AgentActionLogCreate(BaseModel):
+    session_id: str = Field(max_length=64)
+    action_type: str = Field(max_length=50)
+    payload: dict | list | str | None = None
+    status: AgentActionStatus = "proposed"
+
+
+class AgentActionLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    action_id: int
+    session_id: str
+    action_type: str
+    payload: dict | list | str | None = None
+    status: AgentActionStatus
+    created_at: datetime
