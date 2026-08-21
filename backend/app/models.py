@@ -68,6 +68,10 @@ class AssetRiskProfile(Base):
     mfl_amount: Mapped[float] = mapped_column(Numeric(18, 2))
     has_sprinklers: Mapped[bool] = mapped_column(Boolean)
     notes: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    # TODO_SPEC.md §11 item 1: proximity to a hazmat/dangerous-materials site,
+    # feeding a fire-risk-score penalty (see app/integrations/environmental.py
+    # and, per §13, routers/risk_profiles.py — out of this branch's scope).
+    near_hazmat_site: Mapped[bool] = mapped_column(Boolean, default=False)
 
     property_: Mapped["Property"] = relationship(back_populates="risk_profile")
 
@@ -127,6 +131,11 @@ class Incident(Base):
     business_interruption_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     area_or_building: Mapped[str | None] = mapped_column(Unicode(150), nullable=True)
     reported_coordinates: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    # TODO_SPEC.md §11 item 2: street address reverse-geocoded from
+    # reported_coordinates via OSM Nominatim (see app/integrations/gis.py).
+    # MUST be Unicode (not String) — see CLAUDE.md's Hebrew-text gotcha;
+    # Nominatim can return Hebrew street/city names for Israeli coordinates.
+    resolved_address: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
 
     property_: Mapped["Property"] = relationship(back_populates="incidents")
     media: Mapped[list["IncidentMedia"]] = relationship(back_populates="incident")
