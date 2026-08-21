@@ -31,6 +31,7 @@ import {
   createIncident,
   fetchIncident,
   fetchProperties,
+  reverseGeocode,
   submitDraftIncident,
   updateDraftIncident,
   uploadIncidentMedia,
@@ -94,6 +95,9 @@ const IMPACT_OPTIONS: OperationalImpact[] = ["FULL_OPERATION", "PARTIAL_SHUTDOWN
 export default function IncidentReport() {
   const [activeStep, setActiveStep] = useState(0);
   const [property, setProperty] = useState<Property | null>(null);
+  const [areaOrBuilding, setAreaOrBuilding] = useState("");
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
   const [timestamp, setTimestamp] = useState(() => new Date().toISOString().slice(0, 16));
   const [hazardType, setHazardType] = useState<HazardType | "">("");
   const [severity, setSeverity] = useState<SeverityLevel | "">("");
@@ -116,6 +120,10 @@ export default function IncidentReport() {
   // (vs. a deliberate manual choice) — a fresh GPS fix is allowed to update an
   // auto-pick, but must never silently override a property the user picked themselves.
   const autoSelectedPropertyId = useRef<number | null>(null);
+  // Tracks whether the current `areaOrBuilding` text came from reverse-geocoding
+  // (vs. the user typing it in themselves) — same "auto-pick, never override a
+  // manual entry" rule as autoSelectedPropertyId above, applied to the address field.
+  const geocodedAreaValue = useRef<string | null>(null);
 
   const { data: properties } = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const geo = useGeolocation();
@@ -145,6 +153,7 @@ export default function IncidentReport() {
         setDraftId(incident.incident_id);
         setDraftCode(incident.incident_code);
         setProperty(properties.find((p) => p.property_id === incident.property_id) ?? null);
+        setAreaOrBuilding(incident.area_or_building ?? "");
         setTimestamp(incident.incident_timestamp.slice(0, 16));
         setHazardType(incident.hazard_type);
         setSeverity(incident.severity_level);
@@ -181,6 +190,34 @@ export default function IncidentReport() {
     // array (a new reference every render) or `property` (would fight the user's own picks).
   }, [geo.coords, properties]);
 
+  // Reverse-geocode the GPS fix into a street address and autofill "אזור / מבנה" —
+  // additive to the nearest-property auto-select above, doesn't touch `property`.
+  // Same "never override a manual entry" rule: only fills the field when it's still
+  // empty, or still holds a *previous* auto-geocoded value (tracked via
+  // geocodedAreaValue), never a value the user typed themselves. Failure here is
+  // non-blocking — matches the graceful-degradation pattern used by the AI classify
+  // button (classifyMutation.isError) elsewhere in this form: leave the field for
+  // manual entry rather than blocking the wizard.
+  useEffect(() => {
+    if (!geo.coords) return;
+    setGeocodeError(null);
+    setGeocoding(true);
+    const { latitude, longitude } = geo.coords;
+    reverseGeocode(latitude, longitude)
+      .then((result) => {
+        if (!result.address) return;
+        setAreaOrBuilding((current) => {
+          if (current !== "" && current !== geocodedAreaValue.current) return current;
+          geocodedAreaValue.current = result.address as string;
+          return result.address as string;
+        });
+      })
+      .catch(() => {
+        setGeocodeError("לא ניתן היה לאתר כתובת אוטומטית — ניתן למלא ידנית.");
+      })
+      .finally(() => setGeocoding(false));
+  }, [geo.coords]);
+
   const classifyMutation = useMutation({
     mutationFn: () => classifyIncident(description),
     onSuccess: (result) => {
@@ -216,6 +253,7 @@ export default function IncidentReport() {
         initial_estimated_loss: loss ? Number(loss) : undefined,
         description,
         business_interruption_requested: businessInterruption,
+        area_or_building: areaOrBuilding || undefined,
         reported_coordinates: reportedCoordinates,
       };
       // Draft rows still need a value in every required column — fields the
@@ -231,6 +269,7 @@ export default function IncidentReport() {
         description: description || "(טיוטה — יושלם מאוחר יותר)",
         is_draft: true,
         business_interruption_requested: businessInterruption,
+        area_or_building: areaOrBuilding || undefined,
         reported_coordinates: reportedCoordinates,
       };
       try {
@@ -293,6 +332,7 @@ export default function IncidentReport() {
         initial_estimated_loss: Number(loss) || 0,
         description,
         business_interruption_requested: businessInterruption,
+        area_or_building: areaOrBuilding || undefined,
         reported_coordinates: reportedCoordinates,
       };
       try {
@@ -535,6 +575,21 @@ export default function IncidentReport() {
                 value={property}
                 onChange={(_, value) => setProperty(value)}
                 renderInput={(params) => <TextField {...params} label="נכס" required />}
+              />
+              {geocodeError && <Alert severity="warning">{geocodeError}</Alert>}
+              <TextField
+                label="אזור / מבנה"
+                value={areaOrBuilding}
+                onChange={(e) => {
+                  // A deliberate manual edit — the reverse-geocode effect above must never
+                  // silently overwrite this again unless a *new* GPS fix arrives.
+                  geocodedAreaValue.current = null;
+                  setAreaOrBuilding(e.target.value);
+                }}
+                placeholder="לדוגמה: מבנה B, קומה 2 — מתמלא אוטומטית ממיקום GPS אם זמין"
+                InputProps={{
+                  endAdornment: geocoding ? <CircularProgress size={16} /> : undefined,
+                }}
               />
               <TextField
                 label="תאריך ושעת האירוע"

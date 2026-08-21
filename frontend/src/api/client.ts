@@ -1125,5 +1125,63 @@ export const fetchWeatherAlerts = () =>
   api.get<WeatherAlert[]>("/integrations/weather/alerts").then((r) => r.data);
 export const fetchEconomicIndexSeries = () =>
   api.get<EconomicIndexSeries>("/integrations/economics/index-series").then((r) => r.data);
-export const fetchReplacementValueUpdates = () =>
-  api.get<ReplacementValueUpdate[]>("/integrations/economics/replacement-value-updates").then((r) => r.data);
+export const fetchReplacementValueUpdates = (propertyId?: number) =>
+  api
+    .get<ReplacementValueUpdate[]>("/integrations/economics/replacement-value-updates", {
+      params: propertyId != null ? { property_id: propertyId } : undefined,
+    })
+    .then((r) => r.data);
+
+// --- Real external connectors (TODO_SPEC.md §12) ---
+
+export interface BoiSeries {
+  series: string;
+  value: number | null;
+  unit: string;
+  status: string;
+  source_system: string;
+}
+
+export interface BoiMarketData {
+  as_of: string;
+  series: BoiSeries[];
+  source_system: string;
+}
+
+export const fetchBoiMarketData = () =>
+  api.get<BoiMarketData>("/integrations/economics/boi-market-data").then((r) => r.data);
+
+export interface HomeFrontAlert {
+  category: string;
+  title: string;
+  areas: string[];
+}
+
+export interface HomeFrontAffectedProperty {
+  property_id: number;
+  property_code: string;
+  name: string;
+  region: string;
+  matched_area: string;
+}
+
+export interface HomeFrontAlerts {
+  status: string;
+  alerts: HomeFrontAlert[];
+  source_system: string;
+  affected_properties: HomeFrontAffectedProperty[];
+}
+
+export const fetchHomeFrontAlerts = () =>
+  api.get<HomeFrontAlerts>("/integrations/home-front/alerts").then((r) => r.data);
+
+export interface ReverseGeocodeResult {
+  status: string;
+  address: string | null;
+  source_system: string;
+}
+
+export const reverseGeocode = (latitude: number, longitude: number) =>
+  api
+    .get<ReverseGeocodeResult>("/integrations/gis/reverse-geocode", { params: { latitude, longitude } })
+    .then((r) => r.data);

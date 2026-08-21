@@ -6,6 +6,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import PublicIcon from "@mui/icons-material/Public";
 import ShieldIcon from "@mui/icons-material/Shield";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import Alert from "@mui/material/Alert";
@@ -34,6 +35,7 @@ import {
   fetchDocumentSignedUrl,
   fetchDocumentsForEntity,
   fetchProperty,
+  fetchReplacementValueUpdates,
   uploadDocument,
   type DocumentFile,
 } from "../api/client";
@@ -47,6 +49,11 @@ const DOC_TYPE_OPTIONS = Object.keys(DOCUMENT_TYPE_LABELS);
 // enforces server-side (_PROPERTIES_WRITE_ROLES) — mirrored here just to hide edit/deactivate
 // controls from roles that would get a 403 anyway, not as the actual enforcement.
 const PROPERTY_WRITE_ROLES = ["RISK_MANAGER", "PROPERTY_MANAGER", "ADMIN"];
+// Same role set backend/app/routers/integrations.py enforces server-side for the
+// economics endpoints (_ECONOMICS_ROLES) — mirrored here to hide the BOI-drift block
+// from FIELD_WORKER (TODO_SPEC.md §14, "תצוגה מוסתרת ל-FIELD_WORKER"), not as the
+// actual enforcement (the endpoint itself 403s a FIELD_WORKER request regardless).
+const ECONOMICS_VIEW_ROLES = ["RISK_MANAGER", "CFO", "ADMIN"];
 
 function RiskScoreRow({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   const color = value >= 4 ? "error.main" : value >= 3 ? "warning.main" : "success.main";
@@ -107,6 +114,7 @@ export default function PropertyDetail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const canWrite = !!user && PROPERTY_WRITE_ROLES.includes(user.role);
+  const canViewEconomics = !!user && ECONOMICS_VIEW_ROLES.includes(user.role);
 
   const [editOpen, setEditOpen] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
@@ -125,6 +133,17 @@ export default function PropertyDetail() {
     queryKey: ["documents", "entity", "PROPERTY", propertyId],
     queryFn: () => fetchDocumentsForEntity("PROPERTY", propertyId),
     enabled: !Number.isNaN(propertyId),
+  });
+
+  // Real Bank of Israel construction-cost/CPI-driven replacement-value recommendation
+  // (TODO_SPEC.md §14, "תצוגת חשיפה לאינפלציה") — only fetched for roles allowed to see
+  // it server-side anyway (routers/integrations.py's _ECONOMICS_ROLES), so a FIELD_WORKER
+  // session never even issues the request.
+  const replacementValueUpdate = useQuery({
+    queryKey: ["replacement-value-update", propertyId],
+    queryFn: () => fetchReplacementValueUpdates(propertyId),
+    enabled: !Number.isNaN(propertyId) && canViewEconomics,
+    select: (rows) => rows[0] ?? null,
   });
 
   const handleUpload = async (fileList: FileList | null) => {
@@ -251,6 +270,71 @@ export default function PropertyDetail() {
           </Grid>
         </CardContent>
       </Card>
+
+      {canViewEconomics && (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+              <TrendingUpIcon fontSize="small" sx={{ verticalAlign: "middle", marginInlineEnd: 0.5 }} />
+              חשיפה לאינפלציה — עדכון שווי כינון (בנק ישראל)
+            </Typography>
+            {replacementValueUpdate.isLoading ? (
+              <CircularProgress size={20} />
+            ) : replacementValueUpdate.data ? (
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    ערך בספרים
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>{formatIlsCompact(p.book_value)}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    שווי כינון עדכני מותאם למדד תשומות בנייה
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    {formatIlsCompact(replacementValueUpdate.data.suggested_replacement_value)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    סטייה (Drift) משווי הכינון הרשום
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontWeight: 700,
+                      color: replacementValueUpdate.data.recommended_for_revaluation ? "error.main" : "text.primary",
+                    }}
+                  >
+                    {replacementValueUpdate.data.drift_percent > 0 ? "+" : ""}
+                    {replacementValueUpdate.data.drift_percent.toFixed(1)}%
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    נכון לתאריך
+                  </Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{formatDate(replacementValueUpdate.data.as_of)}</Typography>
+                </Grid>
+                {replacementValueUpdate.data.recommended_for_revaluation && (
+                  <Grid item xs={12}>
+                    <Chip
+                      size="small"
+                      color="error"
+                      variant="outlined"
+                      label="הסטייה חורגת מהסף — מומלץ לבחון עדכון שווי כינון בספרים"
+                    />
+                  </Grid>
+                )}
+              </Grid>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                לא ניתן היה לטעון נתוני מדד עדכניים כרגע.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
