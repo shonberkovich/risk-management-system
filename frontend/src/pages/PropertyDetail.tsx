@@ -6,6 +6,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import PublicIcon from "@mui/icons-material/Public";
 import ShieldIcon from "@mui/icons-material/Shield";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
@@ -40,6 +41,7 @@ import {
   type DocumentFile,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useAIAssistant } from "../components/AIAssistant/AIAssistantContext";
 import PropertyDialog from "../components/PropertyDialog";
 import RiskSurveyDialog from "../components/RiskSurveyDialog";
 import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatIls, formatIlsCompact } from "../format";
@@ -113,6 +115,7 @@ export default function PropertyDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { openWithProperty } = useAIAssistant();
   const canWrite = !!user && PROPERTY_WRITE_ROLES.includes(user.role);
   const canViewEconomics = !!user && ECONOMICS_VIEW_ROLES.includes(user.role);
 
@@ -210,20 +213,32 @@ export default function PropertyDetail() {
             </Typography>
           </Box>
         </Stack>
-        {canWrite && (
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setEditOpen(true)}>
-              עריכה
+        <Stack direction="row" spacing={1}>
+          <Tooltip title="פותח את עוזר ה-AI עם ההקשר של הנכס הזה כדי לנתח סיכון ותאימות">
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<SmartToyIcon />}
+              onClick={() => openWithProperty({ propertyId: p.property_id, propertyName: p.name })}
+            >
+              נתח סיכונים באמצעות AI
             </Button>
-            {p.is_active && (
-              <Tooltip title="השבתת נכס">
-                <Button color="error" variant="outlined" startIcon={<BlockIcon />} onClick={handleDeactivate}>
-                  השבתה
-                </Button>
-              </Tooltip>
-            )}
-          </Stack>
-        )}
+          </Tooltip>
+          {canWrite && (
+            <>
+              <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setEditOpen(true)}>
+                עריכה
+              </Button>
+              {p.is_active && (
+                <Tooltip title="השבתת נכס">
+                  <Button color="error" variant="outlined" startIcon={<BlockIcon />} onClick={handleDeactivate}>
+                    השבתה
+                  </Button>
+                </Tooltip>
+              )}
+            </>
+          )}
+        </Stack>
       </Stack>
 
       {deactivateError && <Alert severity="error">{deactivateError}</Alert>}
