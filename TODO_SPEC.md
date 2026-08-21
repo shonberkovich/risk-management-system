@@ -43,14 +43,16 @@
   - **קובץ/תיקייה:** `backend/app/models.py` ו-`backend/app/schemas.py`
 
 # 3. Integrations / אינטגרציות (שירותים ציבוריים חינמיים)
-- [ ] אובדן סנכרון תקלות בנפילת ERP מדומה
+- [x] אובדן סנכרון תקלות בנפילת ERP מדומה
   - **מה צריך לממש:** הוספת מנגנון כשל רך או תור (Retry/Queue) פנימי לפונקציה שפותחת כרטיס תחזוקה ב-ERP בעת דיווח אירוע קריטי, כך שהבקשה לא תלך לאיבוד במקרה של ניתוק זמני בלוגיקת הסימולציה.
   - **הרשאות:** פנימי למערכת (מופעל תחת Trigger אוטומטי).
   - **קובץ/תיקייה:** `backend/app/integrations/erp.py` ו-`backend/app/routers/incidents.py`
-- [ ] שגיאות Parsing בנתוני שירותים ציבוריים (באג לוגי)
+  - ✅ בוצע ב-branch feature/integrations-retry-queue-and-safe-parsing: `open_maintenance_ticket` ב-`erp.py` עוטפת את קריאת הפתיחה ב-retry עם backoff אקספוננציאלי (עד 3 ניסיונות), ואם כל הניסיונות נכשלים היא לא זורקת חריגה — מתעדת שגיאה ברמת ERROR ומכניסה את הכרטיס לתור פנימי בזיכרון (`_pending_tickets`), עם `retry_pending_tickets()`/`get_pending_tickets()` לניסיון חוזר מאוחר יותר.
+- [x] שגיאות Parsing בנתוני שירותים ציבוריים (באג לוגי)
   - **מה צריך לממש:** הגנה מפני קריסות `ValueError` וגישה לשדות חסרים (Missing Keys/Nulls) בעת ניתוח קובצי ה-JSON/טקסט שחוזרים משירותים שאינם דורשים הרשמה (בנק ישראל, פיקוד העורף, gov.il). יש לדאוג ל-Fallback ערכי גם כששדה ספציפי משתנה או חסר במקור.
   - **הרשאות:** שקוף למשתמש.
   - **קובץ/תיקייה:** קבצי האינטגרציות תחת `backend/app/integrations/` ו-`_http.py`
+  - ✅ בוצע ב-branch feature/integrations-retry-queue-and-safe-parsing: חוזק `environmental.py` (data.gov.il) מול מפתחות JSON שקיימים אך עם ערך `null` (לא רק חסרים) — `_find_datastore_resource_id`/`fetch_hazmat_sites` עברו ל-`or {}`/`or []` בכל שלב בשרשרת ולא רק `.get(key, default)`, ו-`_extract_site` מוגנת מפני שורה שאינה dict. שאר קבצי האינטגרציות (economics/BOI, home_front/פיקוד העורף, seismology/GSI, gis/Nominatim) נבדקו ונמצאו כבר עטופים כראוי ב-`.get()`/try-except עם ערכי ברירת מחדל.
 
 # 4. Frontend / ממשק משתמש
 - [ ] קפיאת מוטציות (Mutations) בהיעדר רשת
