@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
 
+    # --- Real weather connector (app/integrations/weather.py) ---
+    # OpenWeatherMap "Current Weather Data" API key (free tier, api.openweathermap.org/data/2.5/
+    # weather — no paid subscription needed, unlike their One Call 3.0 alerts endpoint). Left
+    # blank by default: fetch_weather_alerts() degrades to the pre-existing simulated feed, same
+    # graceful-degradation convention as ANTHROPIC_API_KEY above. Get a free key at
+    # https://home.openweathermap.org/users/sign_up.
+    openweathermap_api_key: str = ""
+
     # AI rate limiting (services/rate_limit.py) — protects the Anthropic API key
     # from being hammered by a single client; see routers/ai.py.
     ai_rate_limit_per_window: int = 10
