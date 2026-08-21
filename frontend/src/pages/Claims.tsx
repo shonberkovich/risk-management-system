@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { fetchClaims, type ClaimTrackingRow } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import ClaimPaymentsDialog from "../components/ClaimPaymentsDialog";
 import ClaimUpdateDialog from "../components/ClaimUpdateDialog";
 import ClaimsTable from "../components/ClaimsTable";
@@ -18,8 +19,15 @@ import { exportClaimsToExcel } from "../exportClaims";
 import { CLAIM_STATUS_LABELS } from "../format";
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECTED", "SETTLED"];
+// Same role set backend/app/routers/claims.py enforces server-side for PATCH
+// /claims/{id} (_CLAIMS_WRITE_ROLES) — gates the table's edit action. Viewing
+// payments (onPayments) stays open to every role, matching the backend's public
+// GET /claims/{id}/payments; ClaimPaymentsDialog gates *adding* a payment itself.
+const CLAIMS_WRITE_ROLES = ["RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN"];
 
 export default function Claims() {
+  const { user } = useAuth();
+  const canWrite = !!user && CLAIMS_WRITE_ROLES.includes(user.role);
   const [status, setStatus] = useState("");
   const [editClaim, setEditClaim] = useState<ClaimTrackingRow | null>(null);
   const [paymentsClaim, setPaymentsClaim] = useState<ClaimTrackingRow | null>(null);
@@ -66,7 +74,7 @@ export default function Claims() {
           {isLoading ? (
             <CircularProgress size={24} />
           ) : (
-            <ClaimsTable rows={data ?? []} onEdit={setEditClaim} onPayments={setPaymentsClaim} />
+            <ClaimsTable rows={data ?? []} onEdit={canWrite ? setEditClaim : undefined} onPayments={setPaymentsClaim} />
           )}
         </CardContent>
       </Card>

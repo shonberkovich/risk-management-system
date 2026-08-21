@@ -19,10 +19,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { createClaimPayment, fetchClaimPayments, type ClaimTrackingRow, type PaymentType } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { PAYMENT_TYPE_LABELS, formatDate, formatIls } from "../format";
 
 const PAYABLE_STATUSES = new Set(["APPROVED", "SETTLED"]);
 const PAYMENT_TYPE_OPTIONS: PaymentType[] = ["ADVANCE", "FINAL_SETTLEMENT"];
+// Same role set backend/app/routers/claims.py enforces server-side for POST
+// /claims/{id}/payments (_CLAIMS_WRITE_ROLES) — this dialog itself is reachable by
+// every role (viewing payments is public, matching the backend's public GET), so the
+// "add payment" form specifically needs its own gate rather than relying on the
+// caller never opening the dialog at all.
+const CLAIMS_WRITE_ROLES = ["RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN"];
 
 export default function ClaimPaymentsDialog({
   open,
@@ -33,6 +40,8 @@ export default function ClaimPaymentsDialog({
   claim: ClaimTrackingRow | null;
   onClose: () => void;
 }) {
+  const { user } = useAuth();
+  const canWrite = !!user && CLAIMS_WRITE_ROLES.includes(user.role);
   const [paymentDate, setPaymentDate] = useState("");
   const [amount, setAmount] = useState("");
   const [reference, setReference] = useState("");
@@ -47,7 +56,7 @@ export default function ClaimPaymentsDialog({
 
   const paid = (payments.data ?? []).reduce((sum, p) => sum + p.amount, 0);
   const remaining = (claim?.approved_amount ?? 0) - paid;
-  const canPay = !!claim && PAYABLE_STATUSES.has(claim.claim_status) && remaining > 0;
+  const canPay = canWrite && !!claim && PAYABLE_STATUSES.has(claim.claim_status) && remaining > 0;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -175,6 +184,8 @@ export default function ClaimPaymentsDialog({
                 הוספת תשלום
               </Button>
             </>
+          ) : !canWrite ? (
+            <Alert severity="info">אין לך הרשאה לרשום תשלומים לתביעות.</Alert>
           ) : (
             <Alert severity="info">
               {claim && !PAYABLE_STATUSES.has(claim.claim_status)
