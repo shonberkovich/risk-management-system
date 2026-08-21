@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import get_current_user, require_roles
 from app.services import llm
+from app.services.agents import data_agent  # noqa: F401 — registers EXTERNAL_DATA_AGENT on import
 from app.services.ai_orchestrator import AgentOrchestrator, AgentType
 from app.services.rate_limit import enforce_ai_rate_limit
 
