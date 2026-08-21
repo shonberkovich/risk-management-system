@@ -9,18 +9,26 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchPropertyMock, fetchDocumentsForEntityMock, fetchReplacementValueUpdatesMock, useAuthMock } = vi.hoisted(
-  () => ({
-    fetchPropertyMock: vi.fn(),
-    fetchDocumentsForEntityMock: vi.fn(),
-    fetchReplacementValueUpdatesMock: vi.fn(),
-    useAuthMock: vi.fn(),
-  }),
-);
+const {
+  fetchPropertyMock,
+  fetchDocumentsForEntityMock,
+  fetchReplacementValueUpdatesMock,
+  useAuthMock,
+  sendAgentChatMessageMock,
+  proposeMitigationTaskMock,
+} = vi.hoisted(() => ({
+  fetchPropertyMock: vi.fn(),
+  fetchDocumentsForEntityMock: vi.fn(),
+  fetchReplacementValueUpdatesMock: vi.fn(),
+  useAuthMock: vi.fn(),
+  sendAgentChatMessageMock: vi.fn(),
+  proposeMitigationTaskMock: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({
   deactivateProperty: vi.fn(),
@@ -30,11 +38,18 @@ vi.mock("../api/client", () => ({
   fetchProperty: fetchPropertyMock,
   fetchReplacementValueUpdates: fetchReplacementValueUpdatesMock,
   uploadDocument: vi.fn(),
+  sendAgentChatMessage: sendAgentChatMessageMock,
+  proposeMitigationTask: proposeMitigationTaskMock,
+  confirmAgentAction: vi.fn(),
+  rejectAgentAction: vi.fn(),
+  createMitigationTask: vi.fn(),
 }));
 vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../components/PropertyDialog", () => ({ default: () => null }));
 vi.mock("../components/RiskSurveyDialog", () => ({ default: () => null }));
 
+import AIAssistant from "../components/AIAssistant/AIAssistant";
+import { AIAssistantProvider } from "../components/AIAssistant/AIAssistantContext";
 import PropertyDetail from "./PropertyDetail";
 
 const PROPERTY = {
@@ -71,7 +86,9 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/properties/1"]}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={["/properties/1"]}>
+        <AIAssistantProvider>{children}</AIAssistantProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
   return render(
@@ -112,5 +129,59 @@ describe("PropertyDetail — BOI inflation exposure block", () => {
     await screen.findByText("מרכז לוגיסטי תל אביב");
     expect(screen.queryByText(/חשיפה לאינפלציה/)).not.toBeInTheDocument();
     expect(fetchReplacementValueUpdatesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("PropertyDetail — 'נתח סיכונים באמצעות AI' button (TODO_SPEC.md §7)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchPropertyMock.mockResolvedValue(PROPERTY);
+    fetchDocumentsForEntityMock.mockResolvedValue([]);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "מנהל סיכונים", role: "RISK_MANAGER" } });
+  });
+
+  function renderPageWithAssistant() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/properties/1"]}>
+          <AIAssistantProvider>
+            {children}
+            <AIAssistant />
+          </AIAssistantProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    return render(
+      <Routes>
+        <Route path="/properties/:id" element={<PropertyDetail />} />
+      </Routes>,
+      { wrapper },
+    );
+  }
+
+  it("opens the AI Assistant and sends the exact property context, without the user typing the property id", async () => {
+    sendAgentChatMessageMock.mockResolvedValue({
+      session_id: "s1",
+      agent: "COMPLIANCE_AGENT",
+      reasoning: "ניתוח תאימות",
+      answer: "הנכס תואם לדרישות התאימות.",
+    });
+    proposeMitigationTaskMock.mockResolvedValue(null);
+
+    renderPageWithAssistant();
+    await screen.findByText("מרכז לוגיסטי תל אביב");
+
+    await userEvent.click(screen.getByText("נתח סיכונים באמצעות AI"));
+
+    await waitFor(() =>
+      expect(sendAgentChatMessageMock).toHaveBeenCalledWith(
+        expect.stringContaining("מרכז לוגיסטי תל אביב"),
+        null,
+      ),
+    );
+    expect(sendAgentChatMessageMock.mock.calls[0][0]).toContain("1");
+    await waitFor(() => expect(proposeMitigationTaskMock).toHaveBeenCalledWith(1, null));
+    expect(await screen.findByText("הנכס תואם לדרישות התאימות.")).toBeInTheDocument();
   });
 });
