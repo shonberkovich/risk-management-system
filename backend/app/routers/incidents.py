@@ -8,7 +8,7 @@ from app import models, schemas
 from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import require_roles
-from app.integrations import erp
+from app.integrations import erp, gis, seismology
 from app.services import notifications
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -16,6 +16,17 @@ router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 _STATUS_WRITE_ROLES = ("RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "ADMIN")
 
 _STATUS_ORDER = ["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED", "CLOSED"]
+
+# TODO_SPEC.md §13 item 1 ("אוטומציה: פתיחת טיוטת אירוע בעקבות רעידת אדמה") —
+# role-gated to the same "can act on incidents on behalf of the org" set as the
+# manual-trigger endpoint below, per the spec's explicit role note.
+_SEISMIC_TRIGGER_ROLES = ("RISK_MANAGER", "ADMIN")
+
+# GSI's bulletin has no "felt/significant" flag of its own — this is this
+# course project's own simple, documented threshold (Richter-scale magnitude)
+# for "worth auto-drafting an incident for nearby properties", not a real
+# seismological intensity/felt-shaking model.
+_SIGNIFICANT_MAGNITUDE = 3.0
 
 # Days a CRITICAL-incident follow-up task gets before it's OVERDUE — short on
 # purpose, this is the "someone must look at this now" branch, not routine
@@ -55,6 +66,110 @@ def _trigger_critical_incident_ticket(db: Session, incident: models.Incident) ->
 
     if settings.notifications_enabled:
         notifications.dispatch_critical_incident_alert(db, incident)
+
+
+def check_seismic_activity(db: Session) -> list[models.Incident]:
+    """TODO_SPEC.md §13 item 1 ("אוטומציה: פתיחת טיוטת אירוע בעקבות רעידת אדמה"):
+    calls the GSI seismology connector (app/integrations/seismology.py) and, for
+    every felt/significant earthquake (magnitude >= _SIGNIFICANT_MAGNITUDE),
+    auto-creates a draft (is_draft=True) STRUCTURAL_FAILURE incident — "go
+    inspect this property" instruction for a risk manager, not a confirmed
+    incident report — for every active property within the felt radius
+    (seismology.nearest_properties_to_epicenter's felt_locally flag, itself a
+    real haversine distance).
+
+    Background/system-triggered, same pattern as `_trigger_critical_incident_ticket`
+    above: a plain callable, not an endpoint body, so it can be invoked from
+    anywhere (the manual endpoint below, a future real scheduler, a test).
+    System-generated: `reported_by_user_id` is left None — no end user reported
+    these, same convention as this table already allows for any other
+    system-authored row (the column is nullable specifically for this reason;
+    see models.py). Auto-created drafts need no new permission to view — normal
+    incident-read RBAC (i.e. none — GET /api/incidents is open) already covers
+    them, per the spec's explicit note.
+
+    Scope decision: no real cron/scheduler runs this automatically in this
+    course demo (TODO_SPEC.md explicitly says one isn't required) — it's meant
+    to be invoked either by a real scheduler in a production deployment, or, for
+    this demo, via `POST /api/incidents/check-seismic-activity` below.
+
+    Idempotency: re-invoking this (e.g. the manual endpoint called twice while
+    the same earthquake is still in GSI's "recent" bulletin) must not spam a
+    fresh draft per call — before creating one, this checks for an existing
+    draft STRUCTURAL_FAILURE incident on the same property whose description
+    already references that exact event's timestamp, and skips it if found.
+
+    Returns the list of newly-created Incident rows (already committed); does
+    NOT reuse `_trigger_critical_incident_ticket` — these drafts are
+    deliberately not CRITICAL/submitted, so that side-effect chain (real
+    mitigation ticket, ERP ticket, push/SMS/email alert) intentionally does not
+    fire until/unless a risk manager reviews and submits the draft."""
+    feed = seismology.fetch_recent_earthquakes()
+    if feed["status"] != "ok":
+        return []
+
+    created: list[models.Incident] = []
+    for event in feed["events"]:
+        if event["magnitude"] < _SIGNIFICANT_MAGNITUDE:
+            continue
+
+        nearby = seismology.nearest_properties_to_epicenter(db, event["latitude"], event["longitude"])
+        for row in nearby:
+            if not row["felt_locally"]:
+                continue
+
+            description = (
+                f"טיוטת אירוע אוטומטית: רעידת אדמה בעוצמה {event['magnitude']} זוהתה על ידי המכון "
+                f"הגיאולוגי ב-{event['event_time']} ({event.get('region') or 'ללא ציון אזור'}), "
+                f"במרחק {row['distance_km']} ק\"מ מהנכס. נדרשת סריקה ידנית של מנהל הסיכונים."
+            )
+
+            duplicate = db.scalar(
+                select(models.Incident)
+                .where(models.Incident.property_id == row["property_id"])
+                .where(models.Incident.hazard_type == "STRUCTURAL_FAILURE")
+                .where(models.Incident.description.like(f"%{event['event_time']}%"))
+            )
+            if duplicate:
+                continue
+
+            incident = models.Incident(
+                incident_code=_next_incident_code(db),
+                property_id=row["property_id"],
+                reported_by_user_id=None,
+                incident_timestamp=datetime.now(),
+                hazard_type="STRUCTURAL_FAILURE",
+                # Unknown until a human inspects the property — MEDIUM/full-operation
+                # are the conservative "not yet assessed" defaults for an
+                # auto-generated draft, not a claim about actual damage.
+                severity_level="MEDIUM",
+                operational_impact="FULL_OPERATION",
+                initial_estimated_loss=0,
+                description=description,
+                status="NEW",
+                ai_classified=False,
+                created_at=datetime.now(),
+                is_draft=True,
+            )
+            db.add(incident)
+            db.commit()
+            db.refresh(incident)
+
+            # Optional nice-to-have (TODO_SPEC.md §13 item 1): populate
+            # resolved_address via reverse geocoding, best-effort — a failed/
+            # unavailable geocode must never block the draft incident itself
+            # from being created (it's already committed above).
+            prop = db.get(models.Property, row["property_id"])
+            if prop is not None:
+                geocoded = gis.reverse_geocode(float(prop.latitude), float(prop.longitude))
+                if geocoded["status"] == "ok":
+                    incident.resolved_address = geocoded["address"]
+                    db.commit()
+                    db.refresh(incident)
+
+            created.append(incident)
+
+    return created
 
 
 def _next_incident_code(db: Session) -> str:
@@ -238,6 +353,20 @@ def update_incident_status(
     db.commit()
     db.refresh(incident)
     return incident
+
+
+@router.post("/check-seismic-activity", response_model=list[schemas.IncidentOut])
+def trigger_seismic_activity_check(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles(*_SEISMIC_TRIGGER_ROLES)),
+):
+    """Manually-triggerable wrapper around `check_seismic_activity` (TODO_SPEC.md
+    §13 item 1) — this course project has no real cron/scheduler, so this endpoint
+    exists purely so the earthquake-triggered-draft-incident automation can be
+    invoked/demoed/tested on demand instead of waiting on a real recurring job. A
+    production deployment would call `check_seismic_activity(db)` from an actual
+    scheduler instead of/in addition to exposing this endpoint."""
+    return check_seismic_activity(db)
 
 
 _POLICIES_READ_ROLES = ("RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER", "ADMIN")
