@@ -26,6 +26,7 @@ import {
   type MitigationStatus,
   type MitigationTask,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import KpiCard from "../components/KpiCard";
 import MitigationReportPrintable from "../components/MitigationReportPrintable";
 import MitigationRoiDialog from "../components/MitigationRoiDialog";
@@ -35,6 +36,10 @@ import { exportElementToPdf } from "../exportPdf";
 import { MITIGATION_STATUS_LABELS, formatIlsCompact } from "../format";
 
 const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
+// Same RISK_MANAGER/PROPERTY_MANAGER/ADMIN set backend/app/routers/mitigation.py
+// enforces server-side (_MITIGATION_WRITE_ROLES) — mirrored here to hide
+// create/edit/mark-complete controls from roles that would get a 403 anyway.
+const MITIGATION_WRITE_ROLES = ["RISK_MANAGER", "PROPERTY_MANAGER", "ADMIN"];
 
 const STATUS_ORDER: Record<MitigationStatus, number> = {
   OVERDUE: 0,
@@ -44,6 +49,8 @@ const STATUS_ORDER: Record<MitigationStatus, number> = {
 };
 
 export default function Mitigation() {
+  const { user } = useAuth();
+  const canWrite = !!user && MITIGATION_WRITE_ROLES.includes(user.role);
   const [status, setStatus] = useState<MitigationStatus | "">("");
   const [dialogTask, setDialogTask] = useState<MitigationTask | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -142,9 +149,11 @@ export default function Mitigation() {
           >
             ייצוא ל-PDF
           </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-            משימה חדשה
-          </Button>
+          {canWrite && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+              משימה חדשה
+            </Button>
+          )}
         </Stack>
       </Stack>
 
@@ -209,14 +218,16 @@ export default function Mitigation() {
           </Stack>
           <MitigationTable
             rows={rows}
-            onEdit={openEdit}
+            onEdit={canWrite ? openEdit : undefined}
             onShowRoi={(t) => setRoiTaskId(t.task_id)}
-            onMarkComplete={(t) => markComplete.mutate(t.task_id)}
+            onMarkComplete={canWrite ? (t) => markComplete.mutate(t.task_id) : undefined}
           />
         </CardContent>
       </Card>
 
-      <MitigationTaskDialog open={dialogOpen} task={dialogTask} onClose={() => setDialogOpen(false)} />
+      {canWrite && (
+        <MitigationTaskDialog open={dialogOpen} task={dialogTask} onClose={() => setDialogOpen(false)} />
+      )}
       <MitigationRoiDialog open={roiTaskId !== null} taskId={roiTaskId} onClose={() => setRoiTaskId(null)} />
 
       {/* Off-screen (not display:none — html2canvas needs a laid-out element to capture)

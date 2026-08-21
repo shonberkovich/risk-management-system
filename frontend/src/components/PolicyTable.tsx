@@ -27,9 +27,13 @@ export default function PolicyTable({
   onManageAssets,
 }: {
   rows: Policy[];
-  onEdit: (policy: Policy) => void;
-  onManageAssets: (policy: Policy) => void;
+  // Optional — same "pass undefined to hide the action" convention as ClaimsTable.tsx,
+  // so a page can hide edit/manage-assets for a role that isn't allowed to write
+  // policies (backend's _POLICIES_WRITE_ROLES) without this component knowing about roles.
+  onEdit?: (policy: Policy) => void;
+  onManageAssets?: (policy: Policy) => void;
 }) {
+  const hasActions = !!onEdit || !!onManageAssets;
   if (rows.length === 0) {
     return (
       <Typography color="text.secondary" variant="body2" sx={{ py: 2 }}>
@@ -50,7 +54,7 @@ export default function PolicyTable({
             <TableCell align="left">פרמיה שנתית</TableCell>
             <TableCell>תוקף</TableCell>
             <TableCell>סטטוס</TableCell>
-            <TableCell align="center">פעולות</TableCell>
+            {hasActions && <TableCell align="center">פעולות</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -67,20 +71,26 @@ export default function PolicyTable({
               <TableCell>
                 <Chip size="small" label={POLICY_STATUS_LABELS[p.status] ?? p.status} color={STATUS_COLOR[p.status]} />
               </TableCell>
-              <TableCell align="center">
-                <Stack direction="row" spacing={0.5} justifyContent="center">
-                  <Tooltip title="נכסים מבוטחים">
-                    <IconButton size="small" onClick={() => onManageAssets(p)}>
-                      <DomainIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="עריכת פוליסה">
-                    <IconButton size="small" onClick={() => onEdit(p)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-              </TableCell>
+              {hasActions && (
+                <TableCell align="center">
+                  <Stack direction="row" spacing={0.5} justifyContent="center">
+                    {onManageAssets && (
+                      <Tooltip title="נכסים מבוטחים">
+                        <IconButton size="small" onClick={() => onManageAssets(p)}>
+                          <DomainIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {onEdit && (
+                      <Tooltip title="עריכת פוליסה">
+                        <IconButton size="small" onClick={() => onEdit(p)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>
