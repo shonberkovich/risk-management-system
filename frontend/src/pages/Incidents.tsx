@@ -1,7 +1,10 @@
+import BoltIcon from "@mui/icons-material/Bolt";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -13,20 +16,44 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { fetchIncidents, fetchProperties, updateIncidentStatus, type Incident, type IncidentStatus } from "../api/client";
+import {
+  checkSeismicActivity,
+  fetchIncidents,
+  fetchProperties,
+  updateIncidentStatus,
+  type Incident,
+  type IncidentStatus,
+} from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import FileClaimDialog from "../components/FileClaimDialog";
 import IncidentsTable from "../components/IncidentsTable";
 import { INCIDENT_STATUS_LABELS } from "../format";
 
 const STATUS_OPTIONS: IncidentStatus[] = ["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED", "CLOSED"];
+// Same RISK_MANAGER/ADMIN set backend/app/routers/incidents.py enforces server-side
+// (_SEISMIC_TRIGGER_ROLES) for POST /incidents/check-seismic-activity — mirrored here
+// to hide the manual-scan button from roles that would get a 403 anyway.
+const SEISMIC_TRIGGER_ROLES = ["RISK_MANAGER", "ADMIN"];
 
 export default function Incidents() {
+  const { user } = useAuth();
   const [status, setStatus] = useState<IncidentStatus | "">("");
   const [claimIncident, setClaimIncident] = useState<Incident | null>(null);
   const queryClient = useQueryClient();
+  const canTriggerSeismicScan = !!user && SEISMIC_TRIGGER_ROLES.includes(user.role);
 
   const incidents = useQuery({ queryKey: ["incidents"], queryFn: () => fetchIncidents() });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+
+  // Manual stand-in for the GSI (Geological Survey of Israel) seismic-activity cron job
+  // that doesn't exist in this course project (TODO_SPEC.md §2) — creates draft incidents
+  // for properties felt-locally near a real recent earthquake epicenter.
+  const seismicScanMutation = useMutation({
+    mutationFn: checkSeismicActivity,
+    onSuccess: (createdDrafts) => {
+      if (createdDrafts.length > 0) queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    },
+  });
 
   const propertyNames = useMemo(() => {
     const map: Record<number, string> = {};
@@ -64,9 +91,31 @@ export default function Incidents() {
 
   return (
     <Stack spacing={3}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        ניהול אירועים וזרימת עבודה
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          ניהול אירועים וזרימת עבודה
+        </Typography>
+        {canTriggerSeismicScan && (
+          <Button
+            variant="outlined"
+            color="warning"
+            startIcon={seismicScanMutation.isPending ? <CircularProgress size={16} /> : <BoltIcon />}
+            disabled={seismicScanMutation.isPending}
+            onClick={() => seismicScanMutation.mutate()}
+          >
+            בצע סריקת רעידות אדמה (GSI)
+          </Button>
+        )}
+      </Stack>
+
+      {seismicScanMutation.isSuccess && (
+        <Alert severity={seismicScanMutation.data.length > 0 ? "warning" : "success"}>
+          {seismicScanMutation.data.length > 0
+            ? `נוצרו ${seismicScanMutation.data.length} טיוטות אירוע חדשות בעקבות פעילות סייסמית שזוהתה.`
+            : "לא זוהתה פעילות סייסמית רלוונטית לנכסי החברה."}
+        </Alert>
+      )}
+      {seismicScanMutation.isError && <Alert severity="error">סריקת הרעידות נכשלה. נסו שוב.</Alert>}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>

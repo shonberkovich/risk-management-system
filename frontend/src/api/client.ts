@@ -750,6 +750,8 @@ export const updateRiskProfile = (propertyId: number, payload: RiskProfileUpdate
 
 export const fetchIncidents = (params?: { status?: string; property_id?: number }) =>
   api.get<Incident[]>("/incidents", { params }).then((r) => r.data);
+export const checkSeismicActivity = () =>
+  api.post<Incident[]>("/incidents/check-seismic-activity").then((r) => r.data);
 export const createIncident = (payload: IncidentCreate) =>
   api.post<Incident>("/incidents", payload).then((r) => r.data);
 export const fetchIncident = (id: number) => api.get<Incident>(`/incidents/${id}`).then((r) => r.data);
