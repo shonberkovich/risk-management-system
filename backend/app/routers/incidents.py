@@ -1,6 +1,8 @@
+import threading
+import time
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -12,6 +14,38 @@ from app.integrations import erp, gis, seismology
 from app.services import notifications
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+# --- Idempotent/duplicate-safe creation (TODO_SPEC.md §2, "Race Conditions
+# ביצירת אירועים/תביעות") --------------------------------------------------
+#
+# Two mechanisms, both guarded by the same process-wide lock so there's no
+# TOCTOU window between a duplicate check and the insert:
+#
+# 1. Idempotency-Key header: if the client sends one (a double-click handler
+#    or a retried request would reuse the same key), a second request with
+#    the same key short-circuits to the record created by the first instead
+#    of inserting again. Entries expire after _IDEMPOTENCY_TTL_SECONDS so the
+#    in-process cache doesn't grow unbounded on a long-running server.
+# 2. No header sent: fall back to a narrow natural-key duplicate check —
+#    same property + hazard type + reporter, created within the last few
+#    seconds — and return the existing row instead of inserting a near-
+#    identical duplicate.
+#
+# This is an in-process cache/lock (module-level dict + threading.Lock), not
+# a distributed one — correct for this course project's single-worker
+# uvicorn deployment, not intended to survive a multi-process/multi-instance
+# setup without a shared store instead.
+_CREATE_LOCK = threading.Lock()
+_IDEMPOTENCY_CACHE: dict[str, tuple[float, "models.Incident"]] = {}
+_IDEMPOTENCY_TTL_SECONDS = 120
+_DUPLICATE_WINDOW_SECONDS = 5
+
+
+def _purge_idempotency_cache_locked() -> None:
+    """Caller must hold _CREATE_LOCK."""
+    cutoff = time.monotonic() - _IDEMPOTENCY_TTL_SECONDS
+    for stale_key in [k for k, (ts, _) in _IDEMPOTENCY_CACHE.items() if ts < cutoff]:
+        del _IDEMPOTENCY_CACHE[stale_key]
 
 _STATUS_WRITE_ROLES = ("RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "ADMIN")
 
@@ -246,38 +280,67 @@ def create_incident(
     payload: schemas.IncidentCreate,
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles()),  # any authenticated role — field workers report incidents
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    prop = db.get(models.Property, payload.property_id)
-    if not prop:
-        raise HTTPException(404, "Property not found")
+    """Race-condition-safe against two near-simultaneous duplicate submissions
+    (double-click, retried request) — see the idempotency/duplicate-check
+    helpers above the router. The whole check-then-insert critical section
+    runs under _CREATE_LOCK so there's no window for two concurrent requests
+    to both pass the duplicate check before either has committed."""
+    with _CREATE_LOCK:
+        if idempotency_key:
+            _purge_idempotency_cache_locked()
+            cached = _IDEMPOTENCY_CACHE.get(idempotency_key)
+            if cached:
+                return cached[1]
 
-    incident = models.Incident(
-        incident_code=_next_incident_code(db),
-        property_id=payload.property_id,
-        reported_by_user_id=payload.reported_by_user_id,
-        incident_timestamp=payload.incident_timestamp,
-        hazard_type=payload.hazard_type,
-        severity_level=payload.severity_level,
-        operational_impact=payload.operational_impact,
-        initial_estimated_loss=payload.initial_estimated_loss,
-        description=payload.description,
-        status="NEW",
-        ai_classified=payload.ai_classified,
-        ai_confidence=payload.ai_confidence,
-        created_at=datetime.now(),
-        is_draft=payload.is_draft,
-        business_interruption_requested=payload.business_interruption_requested,
-        area_or_building=payload.area_or_building,
-        reported_coordinates=payload.reported_coordinates,
-    )
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
+        prop = db.get(models.Property, payload.property_id)
+        if not prop:
+            raise HTTPException(404, "Property not found")
 
-    if not incident.is_draft:
-        _trigger_critical_incident_ticket(db, incident)
+        if not idempotency_key:
+            duplicate_cutoff = datetime.now() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
+            duplicate = db.scalar(
+                select(models.Incident)
+                .where(models.Incident.property_id == payload.property_id)
+                .where(models.Incident.hazard_type == payload.hazard_type)
+                .where(models.Incident.reported_by_user_id == payload.reported_by_user_id)
+                .where(models.Incident.created_at >= duplicate_cutoff)
+                .order_by(models.Incident.created_at.desc())
+            )
+            if duplicate:
+                return duplicate
 
-    return incident
+        incident = models.Incident(
+            incident_code=_next_incident_code(db),
+            property_id=payload.property_id,
+            reported_by_user_id=payload.reported_by_user_id,
+            incident_timestamp=payload.incident_timestamp,
+            hazard_type=payload.hazard_type,
+            severity_level=payload.severity_level,
+            operational_impact=payload.operational_impact,
+            initial_estimated_loss=payload.initial_estimated_loss,
+            description=payload.description,
+            status="NEW",
+            ai_classified=payload.ai_classified,
+            ai_confidence=payload.ai_confidence,
+            created_at=datetime.now(),
+            is_draft=payload.is_draft,
+            business_interruption_requested=payload.business_interruption_requested,
+            area_or_building=payload.area_or_building,
+            reported_coordinates=payload.reported_coordinates,
+        )
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+
+        if not incident.is_draft:
+            _trigger_critical_incident_ticket(db, incident)
+
+        if idempotency_key:
+            _IDEMPOTENCY_CACHE[idempotency_key] = (time.monotonic(), incident)
+
+        return incident
 
 
 @router.patch("/{incident_id}", response_model=schemas.IncidentOut)
