@@ -1,32 +1,18 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+
+import { ROLE_CREDENTIALS, login, logout } from "./helpers";
 
 // E2E coverage for TODO_SPEC.md §9.3's field flow: Offline -> Sync -> Incident -> Claim.
 //
 // Requires a real backend + seeded LocalDB running alongside the frontend dev server (see
 // playwright.config.ts's header comment and this repo's CLAUDE.md for how to bring both up).
-// Credentials below are the fixed demo accounts from backend/app/seed.py (DEMO_PASSWORD =
-// "Demo1234!" for every seeded user).
-const FIELD_WORKER = { email: "ronit.shimoni@company.co.il", password: "Demo1234!" };
+const FIELD_WORKER = ROLE_CREDENTIALS.FIELD_WORKER;
 // Claim filing is restricted server-side to RISK_MANAGER/CFO/ADJUSTER/ADMIN (see
 // backend/app/routers/claims.py's _CLAIMS_WRITE_ROLES) — FIELD_WORKER cannot file a claim
 // themselves, so the last leg of this flow switches actor to an ADMIN, exactly like a real
 // field worker's report would be picked up by an office-side risk manager/adjuster in this
 // system. See this file's bottom comment / TODO_SPEC.md for the full scope note.
-const ADMIN = { email: "admin@company.co.il", password: "Demo1234!" };
-
-async function login(page: Page, creds: { email: string; password: string }) {
-  await page.goto("/");
-  await page.getByLabel("אימייל").fill(creds.email);
-  await page.getByLabel("סיסמה").fill(creds.password);
-  await page.getByRole("button", { name: "התחברות" }).click();
-  await expect(page.getByRole("button", { name: "התנתקות" })).toBeVisible({ timeout: 15_000 });
-}
-
-async function logout(page: Page) {
-  await page.getByRole("button", { name: "התנתקות" }).click();
-  await expect(page.getByLabel("אימייל")).toBeVisible();
-}
+const ADMIN = ROLE_CREDENTIALS.ADMIN;
 
 test.describe("Field flow: Offline -> Sync -> Incident -> Claim", () => {
   test("a field worker files an incident offline, it syncs on reconnect, and an admin files a claim from it", async ({
