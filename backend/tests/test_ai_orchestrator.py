@@ -45,7 +45,14 @@ def test_handle_reuses_existing_session_and_accumulates_history(db, monkeypatch)
 
 
 def test_unregistered_agent_falls_back_gracefully(db, monkeypatch):
+    # COMPLIANCE_AGENT/EXTERNAL_DATA_AGENT are genuinely registered once
+    # services/agents/{action_agent,data_agent}.py have been imported
+    # elsewhere in the test session (routers/ai.py does this at import time) —
+    # so this test removes the registration to exercise the
+    # not-yet-implemented fallback path itself, independent of whether those
+    # agent modules happen to be loaded.
     monkeypatch.setattr(ai_orchestrator, "classify_intent", lambda message, history=None: _fake_decision("COMPLIANCE_AGENT"))
+    monkeypatch.delitem(ai_orchestrator.AGENT_REGISTRY, "COMPLIANCE_AGENT", raising=False)
 
     orchestrator = ai_orchestrator.AgentOrchestrator(db, session_id=None, user=None)
     result = orchestrator.handle("האם הנכס עומד בתקן ISO 31000?")
