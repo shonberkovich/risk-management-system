@@ -3,11 +3,29 @@
 Run directly: python -m app.seed
 Uses parameterized pyodbc inserts so Hebrew (Unicode) text round-trips
 correctly regardless of console/file codepage issues that affect sqlcmd.
+
+Exception: rows with an encrypted column (`Insurance_Policies.per_event_limit`,
+`Policy_Assets.specific_deductible`, `Claims.adjuster_name`,
+`Claim_Payments.reference_number` — see `services/encryption.py`) are inserted via the
+SQLAlchemy ORM session instead of raw pyodbc. `EncryptedString`'s encryption only runs
+through SQLAlchemy's `process_bind_param` hook; a raw pyodbc INSERT bypasses the ORM
+entirely and would silently write those columns as plaintext. ORM instances are built
+with plain Python values (e.g. `adjuster_name="רון גבע"`) exactly as application code
+would, and the encryption happens transparently on flush/commit.
 """
+from datetime import date
+
 import pyodbc
 
-from app.database import get_connection_string
+from app.database import SessionLocal, get_connection_string
+from app.models import Claim, ClaimPayment, InsurancePolicy, PolicyAsset
 from app.services.auth import hash_password
+
+
+def _d(iso: str | None) -> date | None:
+    """Parse an ISO 'YYYY-MM-DD' string into a `date` for ORM assignment (pyodbc accepts
+    those strings directly for a DATE column; the ORM needs an actual `date`)."""
+    return date.fromisoformat(iso) if iso else None
 
 # Demo login password for every seeded user (see routers/auth.py POST /api/auth/login).
 # A course-demo convenience, not a security posture — real deployments provision
@@ -126,7 +144,15 @@ def run():
         profiles,
     )
 
-    # --- Insurance_Policies ---
+    # --- Insurance_Policies / Policy_Assets ---
+    # per_event_limit / specific_deductible are encrypted at rest (EncryptedString —
+    # see services/encryption.py). Encryption only happens via SQLAlchemy's
+    # process_bind_param, so these two tables are inserted through the ORM session
+    # (see module docstring) rather than the raw pyodbc cursor used everywhere else.
+    # Commit and flush the pyodbc work so far first — Policy_Assets needs the just-
+    # inserted Properties to already be visible.
+    conn.commit()
+
     policies = [
         ("POL-2026-CENTRAL", "הפניקס ביטוח", "2026-01-01", "2026-12-31", 200000000, 100000, 1850000, "ACTIVE",
          50000000, 72, "נזקי מלחמה ופעולות איבה; נזק גרעיני; בלאי טבעי ותחזוקה לקויה"),
@@ -137,15 +163,6 @@ def run():
         ("POL-2026-BI", "הראל ביטוח - אובדן רווחים", "2026-01-01", "2026-12-31", 50000000, 50000, 380000, "ACTIVE",
          20000000, 168, "אובדן רווחים עקב שביתה או השבתה יזומה; נזק עקיף שאינו תוצאה ישירה מאירוע מבוטח"),
     ]
-    cur.executemany(
-        """INSERT INTO Insurance_Policies
-           (policy_number, insurer_name, start_date, end_date, total_limit,
-            deductible_default, annual_premium, status, per_event_limit,
-            bi_waiting_period_hours, exclusions)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        policies,
-    )
-
     policy_assets = [
         (1, 1, None), (1, 2, None), (1, 7, None), (1, 8, None), (1, 9, None),
         (1, 10, None), (1, 12, None), (1, 15, None),
@@ -153,10 +170,24 @@ def run():
         (3, 4, None), (3, 6, None), (3, 11, 100000),
         (4, 1, None), (4, 2, None), (4, 7, None),
     ]
-    cur.executemany(
-        "INSERT INTO Policy_Assets (policy_id, property_id, specific_deductible) VALUES (?, ?, ?)",
-        policy_assets,
-    )
+    session = SessionLocal()
+    try:
+        for (policy_number, insurer_name, start_date, end_date, total_limit, deductible_default,
+             annual_premium, status, per_event_limit, bi_waiting_period_hours, exclusions) in policies:
+            session.add(InsurancePolicy(
+                policy_number=policy_number, insurer_name=insurer_name,
+                start_date=_d(start_date), end_date=_d(end_date), total_limit=total_limit,
+                deductible_default=deductible_default, annual_premium=annual_premium, status=status,
+                per_event_limit=per_event_limit, bi_waiting_period_hours=bi_waiting_period_hours,
+                exclusions=exclusions,
+            ))
+        for policy_id, property_id, specific_deductible in policy_assets:
+            session.add(PolicyAsset(
+                policy_id=policy_id, property_id=property_id, specific_deductible=specific_deductible,
+            ))
+        session.commit()
+    finally:
+        session.close()
 
     # --- Incidents ---
     # Base tuples: (code, property_id, reporter_id, timestamp, hazard, severity, impact,
@@ -270,8 +301,11 @@ def run():
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         incidents,
     )
+    conn.commit()
 
     # --- Claims (incident_id 1,4,8,11,13,14,17,19,21 map to CLAIM_FILED rows above) ---
+    # adjuster_name / reference_number are encrypted at rest, so Claims and
+    # Claim_Payments are inserted via the ORM session too (see module docstring).
     claims = [
         ("CLM-2025-01", 1, 1, 400000, 50000, 380000, "APPROVED", "רון גבע", "2026-08-15"),
         ("CLM-2025-04", 4, 1, 1100000, 100000, 950000, "IN_ADJUSTMENT", "שרה כהן", None),
@@ -283,14 +317,6 @@ def run():
         ("CLM-2026-03", 19, 3, 100000, 75000, 95000, "APPROVED", "דוד לוי", "2026-09-10"),
         ("CLM-2026-05", 21, 2, 650000, 75000, 0, "IN_ADJUSTMENT", "שרה כהן", None),
     ]
-    cur.executemany(
-        """INSERT INTO Claims
-           (claim_number, incident_id, policy_id, claimed_amount, deductible_applied,
-            approved_amount, claim_status, adjuster_name, expected_payment_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        claims,
-    )
-
     payments = [
         (1, "2026-07-20", 200000, "PMT-10021", "ADVANCE"),
         (1, "2026-08-15", 180000, "PMT-10088", "FINAL_SETTLEMENT"),
@@ -298,11 +324,24 @@ def run():
         (5, "2026-08-01", 300000, "PMT-10077", "FINAL_SETTLEMENT"),
         (8, "2026-08-25", 95000, "PMT-10099", "FINAL_SETTLEMENT"),
     ]
-    cur.executemany(
-        """INSERT INTO Claim_Payments (claim_id, payment_date, amount, reference_number, payment_type)
-           VALUES (?, ?, ?, ?, ?)""",
-        payments,
-    )
+    session = SessionLocal()
+    try:
+        for (claim_number, incident_id, policy_id, claimed_amount, deductible_applied,
+             approved_amount, claim_status, adjuster_name, expected_payment_date) in claims:
+            session.add(Claim(
+                claim_number=claim_number, incident_id=incident_id, policy_id=policy_id,
+                claimed_amount=claimed_amount, deductible_applied=deductible_applied,
+                approved_amount=approved_amount, claim_status=claim_status, adjuster_name=adjuster_name,
+                expected_payment_date=_d(expected_payment_date),
+            ))
+        for claim_id, payment_date, amount, reference_number, payment_type in payments:
+            session.add(ClaimPayment(
+                claim_id=claim_id, payment_date=_d(payment_date), amount=amount,
+                reference_number=reference_number, payment_type=payment_type,
+            ))
+        session.commit()
+    finally:
+        session.close()
 
     # --- Claim_Reserves: open balance on claims still owed money ---
     # claim 3 (CLM-2025-08) has an ADVANCE of 400000 against an approved 850000 -> 450000 still reserved.
