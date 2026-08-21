@@ -73,11 +73,13 @@ def get_weather_alerts(
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles()),
 ):
-    """Simulated extreme-weather-alert feed (storm/flood/heatwave) per property
-    location — see app/integrations/weather.py for why this doesn't hit a real
-    weather API and why calm properties simply don't appear in the response.
-    Open to any authenticated role: a field worker at a property needs this
-    warning as much as a risk officer does."""
+    """Extreme-weather-alert feed (storm/flood/heatwave) per property location.
+    Real OpenWeatherMap-backed if OPENWEATHERMAP_API_KEY is configured,
+    otherwise falls back to a simulated feed — see
+    app/integrations/weather.py for the dispatch logic and why calm
+    properties simply don't appear in the response either way. Open to any
+    authenticated role: a field worker at a property needs this warning as
+    much as a risk officer does."""
     return weather.fetch_weather_alerts(db, property_ids=property_id, as_of=as_of)
 
 
