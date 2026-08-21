@@ -151,3 +151,60 @@
 
 [x] TanStack Query v5 `networkMode: "online"` עוצר mutations לפני `mutationFn` כש-`navigator.onLine=false`, עוקף את ה-fallback הפנימי לתור ה-offline ב-`IncidentReport.tsx`.
 ✅ בוצע ב-branch feature/offline-mutation-network-mode-fix: כפי שתועד בחלק 9 ("בדיקות Frontend ו-E2E"), ברירת המחדל של `useMutation` ב-TanStack Query v5 היא `networkMode: "online"` — כש-`onlineManager.isOnline()` (הנגזר מ-`navigator.onLine`) הוא `false`, ה-mutation נכנס למצב `paused` ו-**לעולם לא קורא ל-`mutationFn`**. הבעיה: הלוגיקה הידנית של `saveDraftMutation`/`submitMutation` ב-`IncidentReport.tsx` מזהה ניתוק **בתוך** ה-`try/catch` של `mutationFn` עצמו (`isNetworkFailure = !navigator.onLine || (isAxiosError(err) && !err.response)`) ורק אז קוראת ל-`enqueueIncidentReport`/`enqueueDraftUpdate`/`enqueueDraftSubmit` — אך אם `mutationFn` אף פעם לא רץ, ה-`catch` הזה אף פעם לא מגיע להיקרא, כך שדיווח/עדכון אמיתי כשמכשיר במצב Offline אמיתי (כלומר `navigator.onLine===false`, לא רק בקשת רשת שנכשלת בעוד יש חיבור) היה נתקע ב-pending במקום ליפול לתור המקומי. **תוקן**: נוסף `networkMode: "always"` לשתי ה-mutations (`saveDraftMutation`, `submitMutation` ב-`IncidentReport.tsx`) — מכריח את `mutationFn` לרוץ תמיד, כך שניסיון ה-fetch האמיתי קורה, נכשל, וה-`catch` הקיים מקבל הזדמנות לתפוס אותו ולתפעל את התור. שונה **רק** בשני ה-mutations האלה (לא ברמת ה-`QueryClient` הגלובלי ב-`main.tsx`) — שינוי גלובלי היה משפיע גם על מוטציות CRUD אחרות (Properties/Users/Roles/וכו') שאין להן שום fallback לתור אופליין, והיה הופך את התנהגות ה-pause-עד-שהחיבור-חוזר (רצויה שם) להודעת שגיאה מיידית. נוסף טסט חדש **`frontend/src/pages/IncidentReport.networkMode.test.tsx`** (3 טסטים, עם `onlineManager.setOnline(false)` מ-`@tanstack/react-query` — לא רק `navigator.onLine`, כי ה-`onlineManager` הפנימי לא מגיב לשינוי הישיר בלי אירוע `online`/`offline`) שמבודד את המנגנון המדויק: (1) `networkMode` ברירת המחדל אף פעם לא קורא ל-`mutationFn` כש-Offline (מדגים את הבאג המקורי), (2) `networkMode: "always"` כן קורא לו, (3) עם `"always"` דחיית `mutationFn` עדיין מגיעה ל-`isError`/מופצת כראוי כדי שהקוד הקורא יוכל לתפוס אותה. לא נבדק מול הרינדור המלא של אשף IncidentReport (כבד: geolocation/media/AI/מצב רב-שלבי) — הטסט מבודד את המנגנון הבסיסי שקובע את ההתנהגות, לא את כל הזרימה. `npm run test`: **32/32 עוברים** (היה 29). `npx tsc --noEmit` נקי (מלבד שגיאת stylis הקיימת מראש). לא נגעתי ב-Backend.
+
+
+## 11. Database & Models (בסיס נתונים)
+- [ ] הרחבת פרופיל סיכון לנכס לטובת חומרים מסוכנים (Hazmat Proximity)
+  - **מה צריך לממש:** הוספת שדה אינדיקציה (למשל `near_hazmat_site`) בטבלת `Asset_Risk_Profiles` לתיעוד קרבה למפעלי חומרים מסוכנים, כדי להשפיע על ציון סיכון האש.
+  - **הרשאות:** אין שינוי בהרשאות גישה ברמת ה-DB (המידע חשוף למנהלי סיכונים/כספים).
+  - **קובץ/תיקייה:** `backend/app/models.py` (ומיגרציה ב-`backend/alembic/versions/`)
+- [ ] תמיכה בכתובות דינמיות מבוססות מיקום
+  - **מה צריך לממש:** הוספת שדה `resolved_address` בטבלת `Incidents` לשמירת כתובת רחוב שפוענחה אוטומטית מקואורדינטות ה-GPS בעת הדיווח.
+  - **הרשאות:** זמין לכל מי שיש לו הרשאה לצפות/לדווח על אירוע (כולל `FIELD_WORKER`).
+  - **קובץ/תיקייה:** `backend/app/models.py` (ומיגרציה ב-`backend/alembic/versions/`)
+
+## 12. Backend - Integrations (שירותי נתונים חיצוניים חינמיים)
+- [ ] אינטגרציה: נתוני בנק ישראל (BOI)
+  - **מה צריך לממש:** פיתוח פונקציית שליפה של מדד המחירים לצרכן (CPI) ושערי חליפין מה-API הפתוח והציבורי של בנק ישראל, לשערוך אוטומטי ואמיתי של שווי נכסים (`replacement_value`).
+  - **הרשאות:** חסימה ברמת ה-Router לדרג שטח (Require `_ECONOMICS_ROLES` - `RISK_MANAGER`, `CFO`, `ADMIN`).
+  - **קובץ/תיקייה:** `backend/app/integrations/economics.py`
+- [ ] אינטגרציה: התראות פיקוד העורף (Home Front Command)
+  - **מה צריך לממש:** חיבור ל-JSON/API הפתוח של פיקוד העורף. המערכת תמשוך בזמן אמת התראות חירום ביטחוניות ותצליב אותן מול מיקומי הנכסים ב-DB.
+  - **הרשאות:** פתוח לכולם (`require_roles()`) ללא הגבלת תפקיד, בטיחות קודמת לכל.
+  - **קובץ/תיקייה:** `backend/app/integrations/home_front.py` (קובץ חדש)
+- [ ] אינטגרציה: המכון הגיאולוגי (רעידות אדמה)
+  - **מה צריך לממש:** משיכת נתוני ה-API הפתוח של אגף הסייסמולוגיה. זיהוי רעידות אדמה בזמן אמת וחישוב מרחק מוקד הרעש (Epicenter) לכלל הנכסים הפעילים.
+  - **הרשאות:** הרשאת ניהול סיכונים (`_GIS_ROLES` או דומה).
+  - **קובץ/תיקייה:** `backend/app/integrations/seismology.py` (קובץ חדש)
+- [ ] אינטגרציה: מפעלי חומרים מסוכנים (Data.gov.il)
+  - **מה צריך לממש:** קריאה למאגר החומרים המסוכנים הממשלתי. זיהוי האם נכס ממוקם ברדיוס סכנה ממפעל כימי/תעשייתי קיים.
+  - **הרשאות:** הרשאת ניהול סיכונים (`_GIS_ROLES`).
+  - **קובץ/תיקייה:** `backend/app/integrations/environmental.py` (קובץ חדש)
+- [ ] אינטגרציה: המרת קואורדינטות לכתובת (Reverse Geocoding דרך OSM)
+  - **מה צריך לממש:** שימוש ב-API החינמי של Nominatim (OpenStreetMap) להמרת קואורדינטות GPS המדווחות מהשטח לשם רחוב ועיר באופן אוטומטי, ללא צורך במפתח API.
+  - **הרשאות:** פתוח לכולם (`require_roles()`), משרת את עובדי השטח.
+  - **קובץ/תיקייה:** `backend/app/integrations/gis.py`
+
+## 13. Backend - API & Logic (לוגיקה ואוטומציות צד שרת)
+- [ ] אוטומציה: פתיחת טיוטת אירוע בעקבות רעידת אדמה
+  - **מה צריך לממש:** מנגנון שקורא לנתוני הסייסמולוגיה, ואם זוהתה רעידה מורגשת - פותח אוטומטית טיוטת אירוע (`is_draft=True`) מסוג `STRUCTURAL_FAILURE` לנכסים ברדיוס ההשפעה, כהנחיה למנהל לבצע סריקה.
+  - **הרשאות:** פונקציונליות צד-שרת (Background task/cron), נוצר תחת מזהה מערכת ולא משתמש קצה. נצפה רק על ידי הרשאות הצפייה הרגילות של אירועים.
+  - **קובץ/תיקייה:** `backend/app/routers/incidents.py` ו-`backend/app/services/kpi.py`
+- [ ] שערוך ציון אש לפי חומרים מסוכנים (Hazmat)
+  - **מה צריך לממש:** בעת יצירה או עדכון נכס, הצלבה מול מאגר החומ"ס. במידה ונמצאת קרבה, הוספת ניקוד עונש (Penalty) אוטומטי ל-`fire_risk_score` בפרופיל הסיכון.
+  - **הרשאות:** פעולת הכתיבה שמורה למורשי עדכון נכס (`_PROPERTIES_WRITE_ROLES`).
+  - **קובץ/תיקייה:** `backend/app/routers/risk_profiles.py`
+
+## 14. Frontend & UI (ממשק משתמש)
+- [ ] עדכון אשף הדיווח: השלמת כתובת אוטומטית
+  - **מה צריך לממש:** בשלב הדיווח באשף (`IncidentReport`), כאשר משתמש השטח נותן גישת GPS, המערכת תיגש לנקודת הקצה של ה-Reverse Geocoding ותאכלס אוטומטית את שדה "אזור / מבנה" בכתובת המדויקת.
+  - **הרשאות:** חשוף לכל משתמש המדווח אירוע, ובפרט מותאם לחווית ה-`FIELD_WORKER`.
+  - **קובץ/תיקייה:** `frontend/src/pages/IncidentReport.tsx` (ו-`hooks/useGeolocation.ts`)
+- [ ] באנר התראות חירום מרחביות (פיקוד העורף)
+  - **מה צריך לממש:** הוספת התראות אדומות וקריטיות ל-`AlertsBanner` אשר צפות מיידית למנהל הסיכונים או לעובד השטח אם קיים נכס באזור סכנה המדווח כעת בפיקוד העורף.
+  - **הרשאות:** מוצג ללא סינון RBAC פיננסי, רלוונטי לכלל הדשבורדים (מנהלים ושטח כאחד).
+  - **קובץ/תיקייה:** `frontend/src/components/AlertsBanner.tsx`
+- [ ] תצוגת חשיפה לאינפלציה (BOI)
+  - **מה צריך לממש:** הוספת תצוגה בעמוד תיק הנכס המראה את הפער (Drift) בין השווי בספרים לשווי הכינון העדכני המחושב לפי מדד תשומות הבנייה/CPI הפתוח מבנק ישראל.
+  - **הרשאות:** תצוגה מוסתרת ל-`FIELD_WORKER`. גלויה ל-`CFO`, `RISK_MANAGER`, ו-`ADMIN`.
+  - **קובץ/תיקייה:** `frontend/src/pages/PropertyDetail.tsx`
