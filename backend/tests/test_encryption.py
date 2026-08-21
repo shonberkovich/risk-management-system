@@ -118,3 +118,27 @@ def test_pre_existing_plaintext_value_still_readable(db: Session, make_property,
 
     reloaded = db.get(models.PolicyAsset, {"policy_id": policy.policy_id, "property_id": prop.property_id})
     assert reloaded.specific_deductible == "10000.00"
+
+
+def test_pre_existing_non_ascii_plaintext_value_still_readable(db: Session, make_property, make_policy, make_incident, make_claim):
+    """Same as `test_pre_existing_plaintext_value_still_readable`, but for legacy plaintext
+    containing non-ASCII characters (e.g. a Hebrew `Claims.adjuster_name` seeded before this
+    column was encrypted — this is exactly `seed.py`'s raw pyodbc path). `decrypt_value`'s
+    `ciphertext.encode("ascii")` raises `UnicodeEncodeError` on such values *before* Fernet
+    ever gets a chance to reject them as an invalid token, so `EncryptedString
+    .process_result_value`'s fallback must catch `UnicodeError` too, not just `InvalidToken`
+    — this was a real bug that 500'd `GET /api/analytics/cashflow` (and any other query
+    touching `Claims`) against real seeded data."""
+    prop = make_property()
+    policy = make_policy()
+    incident = make_incident(property_id=prop.property_id)
+    claim = make_claim(incident_id=incident.incident_id, policy_id=policy.policy_id)
+    db.execute(
+        text("UPDATE Claims SET adjuster_name = :v WHERE claim_id = :id"),
+        {"v": "רונית כהן", "id": claim.claim_id},
+    )
+    db.commit()
+    db.expire_all()
+
+    reloaded = db.get(models.Claim, claim.claim_id)
+    assert reloaded.adjuster_name == "רונית כהן"
