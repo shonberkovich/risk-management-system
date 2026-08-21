@@ -25,7 +25,7 @@
 
 ---
 
-### [ ] משימה 2: הנתב הראשי - Agent Orchestrator
+### [x] משימה 2: הנתב הראשי - Agent Orchestrator
 * **מהות המשימה (איזה חלק עושים)**: בניית מנגנון הניתוב הלוגי שיקבל בקשות ממשתמשים או מטריגרים במערכת, יבין את הכוונה (Intent) וינתב לסוכן הרלוונטי (Orchestration).
 * **מיקום במערכת**: Backend (Services).
 * **תיקיות וקבצים רלוונטיים להסתכל בהם**:
@@ -33,10 +33,11 @@
   - יצירת קובץ חדש: `backend/app/services/ai_orchestrator.py`
   - `backend/app/routers/ai.py`
 * **שלבי ביצוע (Checklist)**:
-  - [ ] שלב 1: יצירת מחלקת `AgentOrchestrator` ב-`ai_orchestrator.py` המנהלת את ה-State של הבקשה.
-  - [ ] שלב 2: שילוב Anthropic Structured Outputs כדי לנתח את הבקשה ולהחזיר JSON שמגדיר איזה סוכן צריך לפעול (למשל: `DATA_AGENT`, `COMPLIANCE_AGENT`).
-  - [ ] שלב 3: הרחבת התקשורת ב-`routers/ai.py` שתעבוד מול ה-Orchestrator במקום ישירות מול פונקציות בודדות.
+  - [x] שלב 1: יצירת מחלקת `AgentOrchestrator` ב-`ai_orchestrator.py` המנהלת את ה-State של הבקשה.
+  - [x] שלב 2: שילוב Anthropic Structured Outputs כדי לנתח את הבקשה ולהחזיר JSON שמגדיר איזה סוכן צריך לפעול (למשל: `DATA_AGENT`, `COMPLIANCE_AGENT`).
+  - [x] שלב 3: הרחבת התקשורת ב-`routers/ai.py` שתעבוד מול ה-Orchestrator במקום ישירות מול פונקציות בודדות.
 * **קריטריוני הצלחה (Acceptance Criteria)**: שליחת פקודה טקסטואלית דרך ה-API מחזירה החלטת ניתוב נכונה (לדוגמה, השאלה "מה הסטטוס של תקן ISO בנכס 1?" תנותב לסוכן ה-Compliance).
+  - ✅ בוצע ב-branch feature/ai-agent-orchestrator: נוסף `backend/app/services/ai_orchestrator.py` עם מחלקת `AgentOrchestrator` (טוענת/יוצרת `Agent_Sessions`, שומרת היסטוריה מתגלגלת ב-`context_data`, רושמת `Agent_Actions_Log`), `classify_intent()` המשתמש ב-`client.messages.parse` (Structured Outputs) להחזרת `RoutingDecision{agent, reasoning}` מתוך `AgentType = DATA_AGENT|COMPLIANCE_AGENT|EXTERNAL_DATA_AGENT`, ו-`AGENT_REGISTRY`/`register_agent()` להרחבה עתידית ע"י סוכני משימה 4/5. נוסף `POST /api/ai/agent-chat` ב-`routers/ai.py` שמפעיל את ה-Orchestrator (עם session_id אופציונלי להמשך שיחה). כוסה בבדיקות `tests/test_ai_orchestrator.py` (עם classify_intent מדומה) ו-`tests/test_api_ai_auth.py`.
 
 ---
 
