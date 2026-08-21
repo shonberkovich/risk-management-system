@@ -34,9 +34,13 @@ export default function IncidentsTable({
 }: {
   rows: Incident[];
   propertyNames: Record<number, string>;
-  onInvestigate: (incident: Incident) => void;
-  onClose: (incident: Incident) => void;
-  onFileClaim: (incident: Incident) => void;
+  // Optional — same "pass undefined to hide the action" convention as ClaimsTable.tsx.
+  // onInvestigate/onClose gate on backend's incidents.py _STATUS_WRITE_ROLES; onFileClaim
+  // gates separately on claims.py's _CLAIMS_WRITE_ROLES — two different role sets, so each
+  // caller decides its own visibility rather than one shared canWrite flag.
+  onInvestigate?: (incident: Incident) => void;
+  onClose?: (incident: Incident) => void;
+  onFileClaim?: (incident: Incident) => void;
 }) {
   const navigate = useNavigate();
 
@@ -84,21 +88,21 @@ export default function IncidentsTable({
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  {inc.status === "NEW" && (
+                  {onInvestigate && inc.status === "NEW" && (
                     <Tooltip title="העבר לבדיקה">
                       <IconButton size="small" onClick={() => onInvestigate(inc)}>
                         <PlayArrowIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   )}
-                  {inc.status !== "CLOSED" && (
+                  {onFileClaim && inc.status !== "CLOSED" && (
                     <Tooltip title="פתח תביעה">
                       <IconButton size="small" onClick={() => onFileClaim(inc)}>
                         <GavelIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   )}
-                  {(inc.status === "NEW" || inc.status === "UNDER_INVESTIGATION") && (
+                  {onClose && (inc.status === "NEW" || inc.status === "UNDER_INVESTIGATION") && (
                     <Tooltip title="סגור אירוע (ללא תביעה)">
                       <IconButton size="small" onClick={() => onClose(inc)}>
                         <TaskAltIcon fontSize="small" />

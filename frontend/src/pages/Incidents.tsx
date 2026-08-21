@@ -34,6 +34,13 @@ const STATUS_OPTIONS: IncidentStatus[] = ["NEW", "UNDER_INVESTIGATION", "CLAIM_F
 // (_SEISMIC_TRIGGER_ROLES) for POST /incidents/check-seismic-activity — mirrored here
 // to hide the manual-scan button from roles that would get a 403 anyway.
 const SEISMIC_TRIGGER_ROLES = ["RISK_MANAGER", "ADMIN"];
+// Same role set backend/app/routers/incidents.py enforces server-side for PATCH
+// .../status (_STATUS_WRITE_ROLES) — gates IncidentsTable's investigate/close actions.
+const STATUS_WRITE_ROLES = ["RISK_MANAGER", "PROPERTY_MANAGER", "RISK_OFFICER", "ADMIN"];
+// Same role set backend/app/routers/claims.py enforces server-side for POST /claims
+// (_CLAIMS_WRITE_ROLES) — a *different* set from STATUS_WRITE_ROLES above, so
+// "file a claim" gets its own flag rather than reusing canChangeStatus.
+const CLAIMS_WRITE_ROLES = ["RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN"];
 
 export default function Incidents() {
   const { user } = useAuth();
@@ -41,6 +48,8 @@ export default function Incidents() {
   const [claimIncident, setClaimIncident] = useState<Incident | null>(null);
   const queryClient = useQueryClient();
   const canTriggerSeismicScan = !!user && SEISMIC_TRIGGER_ROLES.includes(user.role);
+  const canChangeStatus = !!user && STATUS_WRITE_ROLES.includes(user.role);
+  const canFileClaim = !!user && CLAIMS_WRITE_ROLES.includes(user.role);
 
   const incidents = useQuery({ queryKey: ["incidents"], queryFn: () => fetchIncidents() });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
@@ -213,9 +222,15 @@ export default function Incidents() {
           <IncidentsTable
             rows={rows}
             propertyNames={propertyNames}
-            onInvestigate={(inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "UNDER_INVESTIGATION" })}
-            onClose={(inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "CLOSED" })}
-            onFileClaim={setClaimIncident}
+            onInvestigate={
+              canChangeStatus
+                ? (inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "UNDER_INVESTIGATION" })
+                : undefined
+            }
+            onClose={
+              canChangeStatus ? (inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "CLOSED" }) : undefined
+            }
+            onFileClaim={canFileClaim ? setClaimIncident : undefined}
           />
         </CardContent>
       </Card>

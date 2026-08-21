@@ -10,14 +10,16 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchClaimsMock, exportClaimsToExcelMock, updateDialogSpy, paymentsDialogSpy } = vi.hoisted(() => ({
+const { fetchClaimsMock, exportClaimsToExcelMock, updateDialogSpy, paymentsDialogSpy, useAuthMock } = vi.hoisted(() => ({
   fetchClaimsMock: vi.fn(),
   exportClaimsToExcelMock: vi.fn(),
   updateDialogSpy: vi.fn(),
   paymentsDialogSpy: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock("../api/client", () => ({ fetchClaims: fetchClaimsMock }));
+vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../exportClaims", () => ({ exportClaimsToExcel: exportClaimsToExcelMock }));
 vi.mock("../components/ClaimUpdateDialog", () => ({
   default: (props: unknown) => {
@@ -60,6 +62,7 @@ describe("Claims", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchClaimsMock.mockResolvedValue([CLAIM]);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "RISK_MANAGER" } });
   });
 
   it("loads with no status filter and shows the row once resolved", async () => {
@@ -137,5 +140,22 @@ describe("Claims", () => {
     fetchClaimsMock.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
     expect(container.querySelector('[role="progressbar"]')).toBeInTheDocument();
+  });
+
+  it("hides the edit action for a non-write role (FIELD_WORKER) but keeps the payments-view action", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "FIELD_WORKER" } });
+    renderPage();
+    await screen.findByText("CLM-001");
+
+    expect(screen.queryByTestId("EditIcon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("PaymentsIcon")).toBeInTheDocument();
+  });
+
+  it("shows the edit action for a write role (ADJUSTER)", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADJUSTER" } });
+    renderPage();
+    await screen.findByText("CLM-001");
+
+    expect(screen.getByTestId("EditIcon")).toBeInTheDocument();
   });
 });
