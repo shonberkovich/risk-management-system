@@ -4,14 +4,16 @@
   - **מה צריך לממש:** הוספת הגדרות `ondelete="CASCADE"` במודלים של SQLAlchemy עבור ישויות התלויות בנכסים (כמו אירועים, פוליסות ומשימות מיטיגציה) כדי למנוע שגיאות Foreign Key במידה ומוחקים נכס.
   - **הרשאות:** שקוף למשתמש, קשור להרשאות מחיקת נכס (`ADMIN`, `RISK_MANAGER`).
   - **קובץ/תיקייה:** `backend/app/models.py`
-- [ ] מניעת תאריכים עתידיים בדיווחים (באג לוגי)
+- [x] מניעת תאריכים עתידיים בדיווחים (באג לוגי)
   - **מה צריך לממש:** הוספת ולידציה מובנית (ברמת Pydantic ואכיפה ב-DB) שחוסמת דיווח על תאריך התרחשות אירוע נזק (`incident_timestamp`) עתידי ביחס לזמן השרת.
   - **הרשאות:** חל על כל התפקידים המדווחים (כולל `FIELD_WORKER`).
   - **קובץ/תיקייה:** `backend/app/schemas.py`
-- [ ] חסימת ערכים כספיים שליליים (באג לוגי)
+  - ✅ בוצע ב-branch feature/pydantic-date-amount-validation: נוספה פונקציית ולידציה משותפת (`_reject_future_timestamp`) עם `field_validator` על `incident_timestamp` ב-`IncidentCreate` ו-`IncidentUpdate`, שחוסמת תאריך עתידי ביחס לזמן השרת ב-UTC.
+- [x] חסימת ערכים כספיים שליליים (באג לוגי)
   - **מה צריך לממש:** ולידציה המונעת הזנת ערכים שליליים בסכומי אומדן נזק (`initial_estimated_loss`), תביעות (`claimed_amount`), השתתפות עצמית, או רזרבות.
   - **הרשאות:** חל על כל התפקידים המורשים להזין נתונים פיננסיים ותפעוליים.
   - **קובץ/תיקייה:** `backend/app/schemas.py` ו-`backend/app/models.py`
+  - ✅ בוצע ב-branch feature/pydantic-date-amount-validation: נוסף `Field(ge=0, ...)` על שדות כספיים ב-`backend/app/schemas.py` — `initial_estimated_loss` (IncidentCreate/Update), `claimed_amount`/`deductible_applied` (ClaimCreate), `approved_amount` (ClaimUpdate), `reserve_amount` (ClaimReserveCreate/Update), `deductible_default` (PolicyCreate/Update) ו-`specific_deductible` (PolicyAssetCreate), החוסם ערכים שליליים ב-422 (models.py לא נגע).
 
 # 2. Backend / צד שרת
 [x] קריסות בפענוח נתונים מוצפנים מה-Seed
