@@ -84,7 +84,11 @@ class EncryptedString(TypeDecorator):
     Values that are already plaintext in the database (e.g. rows inserted before this
     type was introduced) are tolerated on read: if decryption fails with `InvalidToken`,
     the raw stored value is returned as-is rather than raising, so existing demo data
-    doesn't need a backfill migration to remain readable.
+    doesn't need a backfill migration to remain readable. Legacy plaintext containing
+    non-ASCII characters (e.g. a Hebrew `adjuster_name` seeded before this column was
+    encrypted) fails even earlier than `InvalidToken` — `decrypt_value`'s
+    `ciphertext.encode("ascii")` raises `UnicodeEncodeError` before Fernet ever gets to
+    reject it as an invalid token — so that must be tolerated here too.
     """
 
     impl = Unicode
@@ -100,7 +104,7 @@ class EncryptedString(TypeDecorator):
             return None
         try:
             return decrypt_value(value)
-        except InvalidToken:
+        except (InvalidToken, UnicodeError):
             return value
 
 
