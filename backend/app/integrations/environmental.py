@@ -75,10 +75,21 @@ def _find_datastore_resource_id() -> str | None:
             logger.warning("[DATA.GOV.IL] package_search(%r) failed: %s", query, exc)
             continue
 
-        results = (payload or {}).get("result", {}).get("results", [])
+        # `.get("result", {})` alone isn't enough here: CKAN can return a JSON
+        # body where "result"/"results"/"resources" are explicitly present but
+        # null rather than absent, in which case dict.get's default never
+        # kicks in and a plain `.get("x", {})` chain would hand back None and
+        # raise AttributeError/TypeError on the next `.get`/iteration. Every
+        # step below falls back to `or {}` / `or []` to guard that case too,
+        # not just the "key missing entirely" case.
+        result = (payload or {}).get("result") or {}
+        results = result.get("results") or [] if isinstance(result, dict) else []
         for dataset in results:
-            for resource in dataset.get("resources", []):
-                if resource.get("datastore_active"):
+            if not isinstance(dataset, dict):
+                continue
+            resources = dataset.get("resources") or []
+            for resource in resources:
+                if isinstance(resource, dict) and resource.get("datastore_active"):
                     return resource.get("id")
     return None
 
@@ -90,6 +101,8 @@ def _extract_site(row: dict) -> dict | None:
     this matches by common substrings rather than one exact key name; a row
     without a recognizable lat/long pair is skipped (returns None) rather
     than guessed at."""
+    if not isinstance(row, dict):
+        return None
     lat = lon = None
     name = address = None
     for key, value in row.items():
@@ -141,7 +154,8 @@ def fetch_hazmat_sites(limit: int = 100) -> dict:
         logger.warning("[DATA.GOV.IL] datastore_search(%s) failed: %s", resource_id, exc)
         return {"status": "unavailable", "sites": [], "source_system": "DATA-GOV-IL"}
 
-    raw_records = (payload or {}).get("result", {}).get("records", [])
+    result = (payload or {}).get("result") or {}
+    raw_records = (result.get("records") or []) if isinstance(result, dict) else []
     sites = [s for s in (_extract_site(r) for r in raw_records) if s is not None]
 
     logger.info("[DATA.GOV.IL] fetched hazmat-sites dataset (resource=%s): %d/%d rows normalized",

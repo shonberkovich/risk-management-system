@@ -39,6 +39,12 @@ from `routers/incidents.py` right after a CRITICAL incident is created or a
 CRITICAL draft is submitted; unlike the pull/post functions above it is a
 side effect of another router's write path, not its own endpoint, so it takes
 an already-loaded `Incident` ORM object rather than querying for one.
+`open_maintenance_ticket` itself never raises: the simulated "opening" call is
+wrapped in a small retry-with-backoff (`_open_ticket_with_retry`, up to
+`_TICKET_MAX_ATTEMPTS`), and if every attempt fails the ticket is appended to
+an in-process `_pending_tickets` queue (see `retry_pending_tickets` /
+`get_pending_tickets`) instead of the sync being silently dropped — added for
+TODO_SPEC.md §3, "אובדן סנכרון תקלות בנפילת ERP מדומה".
 
 Both directions are read-only with respect to RMIS's own data: nothing here
 writes back to `Properties.book_value` or marks a `Claim_Payments` row as
@@ -51,6 +57,8 @@ counting on the RMIS side (a real ERP would still need idempotency keys on
 its end, same as any at-least-once integration).
 """
 import logging
+import random
+import time
 from datetime import date, datetime
 
 from sqlalchemy import select
@@ -59,6 +67,103 @@ from sqlalchemy.orm import Session
 from app import models
 
 logger = logging.getLogger("rmis.integrations.erp")
+
+# --- Retry/backoff + pending-queue for open_maintenance_ticket ---------------
+# Added for TODO_SPEC.md §3, "אובדן סנכרון תקלות בנפילת ERP מדומה": even a
+# simulated ERP call can represent a transient failure (the real SAP RFC /
+# Priority REST call this stands in for would occasionally time out or 5xx),
+# and routers/incidents.py calls open_maintenance_ticket() as a side effect of
+# incident creation — it must never raise and break that write path. So the
+# "opening" step is wrapped in a small retry-with-backoff, and if every retry
+# still fails the ticket is queued in-process instead of lost, for a caller to
+# re-attempt later via retry_pending_tickets().
+_TICKET_MAX_ATTEMPTS = 3
+_TICKET_BACKOFF_BASE_SECONDS = 0.25  # short: this is a mocked call, not a real network round trip; doubles each retry
+
+# Course-project stand-in for "the outbound call sometimes fails transiently" —
+# there's no real ERP endpoint to actually be flaky, so a small deterministic
+# chance of raising is injected in _simulate_erp_ticket_call so the retry path
+# has something real to retry against, the same spirit as the "simulated"
+# pattern used elsewhere in this module.
+_SIMULATED_TICKET_FAILURE_RATE = 0.15
+
+# In-process queue of tickets whose simulated ERP call failed after every
+# retry attempt. A simple module-level list is enough for this demo's scope
+# (no persistent broker) — see retry_pending_tickets() to drain it.
+_pending_tickets: list[dict] = []
+
+
+class ErpTicketOpenError(RuntimeError):
+    """Raised internally by _simulate_erp_ticket_call to represent a transient
+    failure opening the ERP/CMMS ticket. Caught and retried by
+    _open_ticket_with_retry; never escapes open_maintenance_ticket itself."""
+
+
+def _simulate_erp_ticket_call(ticket: dict) -> None:
+    """Stands in for the actual outbound SAP RFC / Priority REST call that
+    would open the maintenance ticket. Occasionally raises ErpTicketOpenError
+    to simulate a transient network failure (see _SIMULATED_TICKET_FAILURE_RATE
+    above); a real integration replaces this function's body with the actual
+    call and keeps the retry/queue wrapper around it unchanged."""
+    if random.random() < _SIMULATED_TICKET_FAILURE_RATE:
+        raise ErpTicketOpenError(
+            f"simulated transient network failure opening {ticket['ticket_number']}"
+        )
+
+
+def _open_ticket_with_retry(ticket: dict) -> bool:
+    """Attempts _simulate_erp_ticket_call up to _TICKET_MAX_ATTEMPTS times with
+    short exponential backoff between attempts (plain time.sleep — this
+    module's callers are all sync). Returns True once a call succeeds, False
+    if every attempt failed. Never raises: a caller that exhausts retries just
+    gets False back and decides what to do (open_maintenance_ticket queues it)."""
+    for attempt in range(1, _TICKET_MAX_ATTEMPTS + 1):
+        try:
+            _simulate_erp_ticket_call(ticket)
+            return True
+        except ErpTicketOpenError as exc:
+            logger.warning(
+                "[SIMULATED ERP TICKET] attempt %d/%d failed for %s: %s",
+                attempt, _TICKET_MAX_ATTEMPTS, ticket.get("ticket_number"), exc,
+            )
+            if attempt < _TICKET_MAX_ATTEMPTS:
+                time.sleep(_TICKET_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)))
+    return False
+
+
+def retry_pending_tickets() -> dict:
+    """Re-attempts every ticket currently queued in _pending_tickets (i.e.
+    every open_maintenance_ticket call that failed all its retries). Tickets
+    that succeed this time are removed from the queue and flip to
+    status="simulated_ticket"; tickets that fail again stay queued for a
+    future call. Safe to call repeatedly (e.g. from a scheduled job or an
+    admin action) — never raises."""
+    global _pending_tickets
+    still_pending: list[dict] = []
+    retried_ok = 0
+    for ticket in _pending_tickets:
+        if _open_ticket_with_retry(ticket):
+            ticket["status"] = "simulated_ticket"
+            ticket["opened_at"] = datetime.utcnow().isoformat()
+            retried_ok += 1
+            logger.warning(
+                "[SIMULATED ERP TICKET] queued ticket %s opened successfully on retry",
+                ticket.get("ticket_number"),
+            )
+        else:
+            still_pending.append(ticket)
+    _pending_tickets = still_pending
+    logger.info(
+        "[SIMULATED ERP TICKET] retry_pending_tickets: %d opened, %d still pending",
+        retried_ok, len(_pending_tickets),
+    )
+    return {"retried_ok": retried_ok, "still_pending": len(_pending_tickets)}
+
+
+def get_pending_tickets() -> list[dict]:
+    """Read-only snapshot of tickets currently queued for retry (copies of the
+    dicts, so a caller can't mutate the internal queue directly)."""
+    return [dict(t) for t in _pending_tickets]
 
 # In a real integration this would come from the ERP's chart of accounts /
 # backend/.env config; fixed here for the same reason DEFAULT_RECIPIENTS is
@@ -181,8 +286,21 @@ def open_maintenance_ticket(incident: models.Incident) -> dict | None:
         "target_system": "ERP-SIM",
         "status": "simulated_ticket",
     }
-    logger.warning(
-        "[SIMULATED ERP TICKET] opened %s for incident %s (property %s, hazard %s)",
-        ticket["ticket_number"], incident.incident_code, incident.property_id, incident.hazard_type,
-    )
+
+    if _open_ticket_with_retry(ticket):
+        logger.warning(
+            "[SIMULATED ERP TICKET] opened %s for incident %s (property %s, hazard %s)",
+            ticket["ticket_number"], incident.incident_code, incident.property_id, incident.hazard_type,
+        )
+    else:
+        # All retries exhausted: never let this propagate into the
+        # incident-creation write path in routers/incidents.py — log clearly
+        # and queue the ticket so retry_pending_tickets() can pick it up later
+        # instead of the sync being silently lost.
+        ticket["status"] = "queued_for_retry"
+        _pending_tickets.append(ticket)
+        logger.error(
+            "[SIMULATED ERP TICKET] failed to open %s for incident %s after %d attempts; queued for later retry",
+            ticket["ticket_number"], incident.incident_code, _TICKET_MAX_ATTEMPTS,
+        )
     return ticket
