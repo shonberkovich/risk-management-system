@@ -1,7 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 HazardType = Literal["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"]
 SeverityLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -218,6 +218,18 @@ class PropertyMapPoint(BaseModel):
 
 
 # --- Incidents ---
+def _reject_future_timestamp(v: datetime | None) -> datetime | None:
+    """Shared by IncidentCreate/IncidentUpdate — an incident cannot be reported as
+    happening in the future (relative to server time in UTC)."""
+    if v is None:
+        return v
+    now_utc = datetime.now(timezone.utc)
+    compare_v = v if v.tzinfo is not None else v.replace(tzinfo=timezone.utc)
+    if compare_v > now_utc:
+        raise ValueError("incident_timestamp cannot be in the future")
+    return v
+
+
 class IncidentCreate(BaseModel):
     property_id: int
     reported_by_user_id: int | None = None
@@ -225,7 +237,7 @@ class IncidentCreate(BaseModel):
     hazard_type: HazardType
     severity_level: SeverityLevel
     operational_impact: OperationalImpact
-    initial_estimated_loss: float
+    initial_estimated_loss: float = Field(ge=0)
     description: str
     ai_classified: bool = False
     ai_confidence: float | None = None
@@ -233,6 +245,11 @@ class IncidentCreate(BaseModel):
     business_interruption_requested: bool = False
     area_or_building: str | None = None
     reported_coordinates: str | None = None  # "lat,lng"
+
+    @field_validator("incident_timestamp")
+    @classmethod
+    def _validate_incident_timestamp(cls, v: datetime) -> datetime:
+        return _reject_future_timestamp(v)
 
 
 class IncidentOut(BaseModel):
@@ -264,11 +281,16 @@ class IncidentUpdate(BaseModel):
     hazard_type: HazardType | None = None
     severity_level: SeverityLevel | None = None
     operational_impact: OperationalImpact | None = None
-    initial_estimated_loss: float | None = None
+    initial_estimated_loss: float | None = Field(default=None, ge=0)
     description: str | None = None
     business_interruption_requested: bool | None = None
     area_or_building: str | None = None
     reported_coordinates: str | None = None
+
+    @field_validator("incident_timestamp")
+    @classmethod
+    def _validate_incident_timestamp(cls, v: datetime | None) -> datetime | None:
+        return _reject_future_timestamp(v)
 
 
 class IncidentStatusUpdate(BaseModel):
@@ -293,15 +315,15 @@ class ClaimOut(BaseModel):
 class ClaimCreate(BaseModel):
     incident_id: int
     policy_id: int
-    claimed_amount: float
-    deductible_applied: float = 0
+    claimed_amount: float = Field(ge=0)
+    deductible_applied: float = Field(default=0, ge=0)
     adjuster_name: str | None = None
     expected_payment_date: date | None = None
 
 
 class ClaimUpdate(BaseModel):
     claim_status: ClaimStatus | None = None
-    approved_amount: float | None = None
+    approved_amount: float | None = Field(default=None, ge=0)
     adjuster_name: str | None = None
     expected_payment_date: date | None = None
 
@@ -333,12 +355,12 @@ class ClaimReserveOut(BaseModel):
 
 
 class ClaimReserveCreate(BaseModel):
-    reserve_amount: float
+    reserve_amount: float = Field(ge=0)
     expected_payment_date: date | None = None
 
 
 class ClaimReserveUpdate(BaseModel):
-    reserve_amount: float | None = None
+    reserve_amount: float | None = Field(default=None, ge=0)
     expected_payment_date: date | None = None
 
 
@@ -379,7 +401,7 @@ class PolicyCreate(BaseModel):
     start_date: date
     end_date: date
     total_limit: float
-    deductible_default: float
+    deductible_default: float = Field(ge=0)
     annual_premium: float
     status: PolicyStatus = "ACTIVE"
     per_event_limit: float | None = None
@@ -392,7 +414,7 @@ class PolicyUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     total_limit: float | None = None
-    deductible_default: float | None = None
+    deductible_default: float | None = Field(default=None, ge=0)
     annual_premium: float | None = None
     status: PolicyStatus | None = None
     per_event_limit: float | None = None
@@ -409,7 +431,7 @@ class PolicyAssetOut(BaseModel):
 
 class PolicyAssetCreate(BaseModel):
     property_id: int
-    specific_deductible: float | None = None
+    specific_deductible: float | None = Field(default=None, ge=0)
 
 
 # --- Incident Media ---
