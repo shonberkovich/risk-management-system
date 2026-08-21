@@ -56,3 +56,18 @@ def test_executive_summary_with_token_passes_auth_gate(client, make_user):
     user = make_user(role="CFO", email="cfo-ai-test@example.com")
     resp = client.get("/api/ai/executive-summary", headers=auth_headers(user))
     assert resp.status_code == 503
+
+
+def test_agent_chat_without_token_is_401(client):
+    resp = client.post("/api/ai/agent-chat", json={"message": "מה ה-TIV הכולל?"})
+    assert resp.status_code == 401
+
+
+def test_agent_chat_with_token_passes_auth_gate(client, make_user):
+    user = make_user(role="RISK_MANAGER", email="rm-agent-chat-test@example.com")
+    resp = client.post(
+        "/api/ai/agent-chat",
+        json={"message": "מה ה-TIV הכולל?"},
+        headers=auth_headers(user),
+    )
+    assert resp.status_code == 503

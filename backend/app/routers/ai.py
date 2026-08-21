@@ -3,10 +3,14 @@ import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app import models
 from app.config import settings
-from app.dependencies.permissions import require_roles
+from app.database import get_db
+from app.dependencies.permissions import get_current_user, require_roles
 from app.services import llm
+from app.services.ai_orchestrator import AgentOrchestrator, AgentType
 from app.services.rate_limit import enforce_ai_rate_limit
 
 # require_roles() with no args = authenticated, any role — classify-incident is used by
@@ -32,6 +36,18 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
+    answer: str
+
+
+class AgentChatRequest(BaseModel):
+    message: str
+    session_id: str | None = None
+
+
+class AgentChatResponse(BaseModel):
+    session_id: str
+    agent: AgentType
+    reasoning: str
     answer: str
 
 
@@ -82,3 +98,26 @@ def ask(payload: AskRequest):
     except anthropic.APIConnectionError as e:
         raise HTTPException(502, "AI service unreachable") from e
     return AskResponse(answer=answer)
+
+
+@router.post("/agent-chat", response_model=AgentChatResponse)
+def agent_chat(
+    payload: AgentChatRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Multi-turn chat routed through the AgentOrchestrator (TODO_SPEC.md §2):
+    classifies intent and dispatches to the matching agent, persisting
+    context onto the `Agent_Sessions` row so a follow-up call with the same
+    `session_id` continues the same conversation."""
+    _require_api_key()
+    if not payload.message.strip():
+        raise HTTPException(400, "Message is required")
+    try:
+        orchestrator = AgentOrchestrator(db, session_id=payload.session_id, user=user)
+        result = orchestrator.handle(payload.message)
+    except anthropic.APIStatusError as e:
+        raise HTTPException(502, f"AI service error: {e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(502, "AI service unreachable") from e
+    return AgentChatResponse(**result.model_dump())
