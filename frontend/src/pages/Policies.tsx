@@ -16,14 +16,22 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { fetchPolicies, type Policy, type PolicyStatus } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import PolicyAssetsDialog from "../components/PolicyAssetsDialog";
 import PolicyDialog from "../components/PolicyDialog";
 import PolicyTable from "../components/PolicyTable";
 import { POLICY_STATUS_LABELS, formatIlsCompact } from "../format";
 
 const STATUS_OPTIONS: PolicyStatus[] = ["ACTIVE", "PENDING_RENEWAL", "EXPIRED"];
+// Same RISK_MANAGER/CFO/ADMIN set backend/app/routers/policies.py enforces
+// server-side (_POLICIES_WRITE_ROLES) — mirrored here to hide create/edit/
+// manage-assets controls from roles that would get a 403 anyway (matches the
+// canWrite pattern already used by Properties.tsx/PropertyDetail.tsx).
+const POLICIES_WRITE_ROLES = ["RISK_MANAGER", "CFO", "ADMIN"];
 
 export default function Policies() {
+  const { user } = useAuth();
+  const canWrite = !!user && POLICIES_WRITE_ROLES.includes(user.role);
   const [status, setStatus] = useState<PolicyStatus | "">("");
   const [dialogPolicy, setDialogPolicy] = useState<Policy | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -68,9 +76,11 @@ export default function Policies() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           ניהול פוליסות ביטוח
         </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          פוליסה חדשה
-        </Button>
+        {canWrite && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            פוליסה חדשה
+          </Button>
+        )}
       </Stack>
 
       <Grid container spacing={2}>
@@ -166,12 +176,20 @@ export default function Policies() {
               ))}
             </TextField>
           </Stack>
-          <PolicyTable rows={rows} onEdit={openEdit} onManageAssets={setAssetsPolicy} />
+          <PolicyTable
+            rows={rows}
+            onEdit={canWrite ? openEdit : undefined}
+            onManageAssets={canWrite ? setAssetsPolicy : undefined}
+          />
         </CardContent>
       </Card>
 
-      <PolicyDialog open={dialogOpen} policy={dialogPolicy} onClose={() => setDialogOpen(false)} />
-      <PolicyAssetsDialog open={!!assetsPolicy} policy={assetsPolicy} onClose={() => setAssetsPolicy(null)} />
+      {canWrite && (
+        <>
+          <PolicyDialog open={dialogOpen} policy={dialogPolicy} onClose={() => setDialogOpen(false)} />
+          <PolicyAssetsDialog open={!!assetsPolicy} policy={assetsPolicy} onClose={() => setAssetsPolicy(null)} />
+        </>
+      )}
     </Stack>
   );
 }

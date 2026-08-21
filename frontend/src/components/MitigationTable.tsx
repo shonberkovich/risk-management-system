@@ -35,8 +35,13 @@ export default function MitigationTable({
   onShowRoi,
 }: {
   rows: MitigationRow[];
-  onEdit: (task: MitigationRow) => void;
-  onMarkComplete: (task: MitigationRow) => void;
+  // Optional — same "pass undefined to hide the action" convention as ClaimsTable.tsx,
+  // so a page can hide edit/mark-complete for a role that isn't allowed to write
+  // mitigation tasks (backend's _MITIGATION_WRITE_ROLES) without this component
+  // knowing about roles. onShowRoi stays required — it's a read-only view, open
+  // to every role that can see this table at all.
+  onEdit?: (task: MitigationRow) => void;
+  onMarkComplete?: (task: MitigationRow) => void;
   onShowRoi: (task: MitigationRow) => void;
 }) {
   if (rows.length === 0) {
@@ -82,23 +87,27 @@ export default function MitigationTable({
               <TableCell>{formatDate(t.due_date)}</TableCell>
               <TableCell align="center">
                 <Stack direction="row" spacing={0.5} justifyContent="center">
-                  <Tooltip title="עריכה">
-                    <IconButton size="small" onClick={() => onEdit(t)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {onEdit && (
+                    <Tooltip title="עריכה">
+                      <IconButton size="small" onClick={() => onEdit(t)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Tooltip title="פירוט ROI">
                     <IconButton size="small" onClick={() => onShowRoi(t)}>
                       <InsightsIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title={t.status === "COMPLETED" ? "המשימה כבר הושלמה" : "סימון כבוצע"}>
-                    <span>
-                      <IconButton size="small" disabled={t.status === "COMPLETED"} onClick={() => onMarkComplete(t)}>
-                        <AssignmentTurnedInIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
+                  {onMarkComplete && (
+                    <Tooltip title={t.status === "COMPLETED" ? "המשימה כבר הושלמה" : "סימון כבוצע"}>
+                      <span>
+                        <IconButton size="small" disabled={t.status === "COMPLETED"} onClick={() => onMarkComplete(t)}>
+                          <AssignmentTurnedInIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
                 </Stack>
               </TableCell>
             </TableRow>
