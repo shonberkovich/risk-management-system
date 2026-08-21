@@ -36,8 +36,13 @@ def test_boi_market_data_success(monkeypatch):
             return {"currentExchangeRate": 3.65}
         if "GetExchangeRate" in url and params["key"] == "EUR":
             return {"currentExchangeRate": 3.95}
-        if "GetInflation" in url:
-            return {"currentInflation": 3.1}
+        if economics._CBS_BASE_URL in url and params["id"] == economics._CBS_CPI_SERIES_ID:
+            # cpi_yoy_percent is sourced from CBS's real price-index API (its
+            # `percentYear` field), not BOI's own GetInflation — see
+            # economics.py's module-level comment for why.
+            return {"month": [{"date": [
+                {"year": 2026, "month": 7, "percentYear": 3.1, "currBase": {"baseDesc": "2024 ממוצע", "value": 105.1}},
+            ]}]}
         raise AssertionError(f"unexpected url {url}")
 
     monkeypatch.setattr(economics, "get_json", _fake_get_json)
@@ -48,6 +53,7 @@ def test_boi_market_data_success(monkeypatch):
     assert by_series["exchange_rate_usd"]["value"] == 3.65
     assert by_series["exchange_rate_usd"]["status"] == "ok"
     assert by_series["cpi_yoy_percent"]["value"] == 3.1
+    assert by_series["cpi_yoy_percent"]["source_system"] == "CBS-PUBLIC-API"
 
 
 def test_boi_market_data_degrades_gracefully_on_network_failure(monkeypatch):

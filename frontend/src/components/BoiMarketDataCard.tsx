@@ -72,9 +72,15 @@ export default function BoiMarketDataCard() {
                   <Typography variant="caption" color="text.secondary" display="block">
                     {SERIES_LABELS[s.series] ?? s.series}
                   </Typography>
-                  <Stack direction="row" spacing={1} alignItems="baseline">
+                  <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap" useFlexGap>
                     <Typography sx={{ fontWeight: 700 }}>{formatSeriesValue(s)}</Typography>
                     {s.status !== "ok" && <Chip size="small" color="warning" label={s.status} variant="outlined" />}
+                    {/* Each series can come from a different real source (e.g. cpi_yoy_percent
+                        from CBS, exchange rates from BOI) — shown per-row whenever it differs
+                        from the card's overall source_system footer below. */}
+                    {s.source_system !== boiData.data!.source_system && (
+                      <Chip size="small" variant="outlined" label={s.source_system} />
+                    )}
                   </Stack>
                 </Grid>
               ))}

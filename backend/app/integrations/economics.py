@@ -78,11 +78,18 @@ logger = logging.getLogger("rmis.integrations.economics")
 # per TODO_SPEC.md §12's own file mapping ("backend/app/integrations/economics.py").
 #
 # GetExchangeRate returns the current representative rate for one ILS-quoted
-# currency; GetInflation returns BOI's published year-over-year inflation
-# reading, which this module surfaces as `cpi_yoy_percent` (BOI's public API does
-# not expose a raw CPI index level the way CBS's own API does — the y/y reading is
-# what BOI itself publishes as "inflation", and it is the number a real
-# replacement-value/CPI-linked-clause review would actually look at).
+# currency — confirmed working against a live call. BOI's own GetInflation
+# endpoint, despite being documented, does NOT actually work: every call
+# to it (verified live, not just in this sandbox) returns BOI's Radware
+# bot-protection interstitial (HTTP 200, but an HTML "loader page", not
+# JSON) rather than a real reading, so it can never produce anything but
+# `status="unavailable"`. `cpi_yoy_percent` is sourced from CBS's price-index
+# API instead (see the "Real CBS" section below) — CBS's per-month payload
+# already publishes a `percentYear` field, which *is* the year-over-year CPI
+# reading BOI's endpoint was supposed to provide, so no new HTTP call is
+# needed beyond the one `fetch_index_series` already makes for the CPI index
+# level (`_fetch_cbs_series_months(_CBS_CPI_SERIES_ID)`), just a different
+# field off the same response.
 #
 # This is a live public endpoint reached from a sandboxed course-project dev
 # environment that may not have outbound internet access at all — every call
@@ -102,12 +109,16 @@ _BOI_EXCHANGE_RATE_CURRENCIES = ("USD", "EUR")
 
 def fetch_boi_market_data() -> dict:
     """Real call to the Bank of Israel's public API for the current USD/EUR
-    representative exchange rates and the latest published y/y inflation
-    (CPI) reading — see the module-level comment above for exactly what BOI
-    publishes and why. Returns one row per requested series regardless of
-    whether the call actually succeeded; a failed series is reported with
-    `status="unavailable"` and `value=None` rather than raising, so a BOI
-    outage never turns into a 500 for whoever calls this."""
+    representative exchange rates, plus the latest published y/y CPI
+    (inflation) reading sourced from CBS instead of BOI's own (non-working)
+    GetInflation endpoint — see the module-level comment above. Returns one
+    row per series regardless of whether its own call actually succeeded;
+    a failed series is reported with `status="unavailable"` and `value=None`
+    rather than raising, so one flaky series never turns into a 500 for
+    whoever calls this. The top-level `source_system` stays "BOI-PUBLIC-API"
+    since BOI is still the source for two of the three series (USD/EUR); each
+    row also carries its own `source_system` for exactly this kind of
+    mixed-source case."""
     rows = []
     for currency in _BOI_EXCHANGE_RATE_CURRENCIES:
         rows.append(_fetch_boi_series(
@@ -117,13 +128,7 @@ def fetch_boi_market_data() -> dict:
             value_keys=("currentExchangeRate", "rate", "exchangeRate", "value"),
             unit=f"ILS per {currency}",
         ))
-    rows.append(_fetch_boi_series(
-        series_name="cpi_yoy_percent",
-        url=f"{_BOI_BASE_URL}/GetInflation",
-        params=None,
-        value_keys=("currentInflation", "inflation", "value"),
-        unit="% year-over-year",
-    ))
+    rows.append(_fetch_cbs_cpi_yoy_row())
 
     available = sum(1 for r in rows if r["status"] == "ok")
     logger.info(
@@ -131,6 +136,27 @@ def fetch_boi_market_data() -> dict:
         available, len(rows),
     )
     return {"as_of": date.today().isoformat(), "series": rows, "source_system": "BOI-PUBLIC-API"}
+
+
+def _fetch_cbs_cpi_yoy_row() -> dict:
+    """Real year-over-year CPI (inflation) reading from CBS's price-index API
+    — the `cpi_yoy_percent` row `fetch_boi_market_data` reports, replacing
+    BOI's non-working GetInflation endpoint (see module-level comment).
+    Degrades to `status="unavailable"`/`value=None` if the CBS call fails or
+    the current month's `percentYear` field is missing, same shape as every
+    other series row here."""
+    months = _fetch_cbs_series_months(_CBS_CPI_SERIES_ID)
+    value = None
+    if months:
+        latest = _closest_cbs_row(months, date.today())
+        value = latest.get("percent_year")
+    return {
+        "series": "cpi_yoy_percent",
+        "value": value,
+        "unit": "% year-over-year",
+        "status": "ok" if value is not None else "unavailable",
+        "source_system": "CBS-PUBLIC-API",
+    }
 
 
 def _fetch_boi_series(*, series_name: str, url: str, params: dict | None, value_keys: tuple[str, ...], unit: str) -> dict:
@@ -228,12 +254,14 @@ def _fetch_cbs_series_months(series_id: int) -> list[dict] | None:
         year, month = entry.get("year"), entry.get("month")
         if value is None or year is None or month is None:
             continue
+        percent_year = entry.get("percentYear")
         try:
             rows.append({
                 "year": int(year),
                 "month": int(month),
                 "value": float(value),
                 "base_desc": curr_base.get("baseDesc"),
+                "percent_year": float(percent_year) if percent_year is not None else None,
             })
         except (TypeError, ValueError):
             continue
