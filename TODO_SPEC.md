@@ -71,7 +71,7 @@
 
 ---
 
-### [ ] משימה 6: צד לקוח - ממשק תקשורת וצ'אט סוכנים (Frontend Chat UI)
+### [x] משימה 6: צד לקוח - ממשק תקשורת וצ'אט סוכנים (Frontend Chat UI)
 * **מהות המשימה (איזה חלק עושים)**: פיתוח ממשק משתמש (UI) מתקדם ורספונסיבי המאפשר למשתמשים לשוחח עם ה-Orchestrator ולקבל תוצרים ב-Streaming.
 * **מיקום במערכת**: Frontend (Components & Pages).
 * **תיקיות וקבצים רלוונטיים להסתכל בהם**:
@@ -79,11 +79,12 @@
   - יצירת קובץ חדש: `frontend/src/components/AIAssistant/AIAssistant.tsx`
   - `frontend/src/layouts/MainLayout.tsx` (הוספת ה-Widget / Sidebar)
 * **שלבי ביצוע (Checklist)**:
-  - [ ] שלב 1: יצירת פונקציות קריאה לשרת ב-`client.ts` לתמיכה בצ'אט רב-שלבי (העברת `session_id`).
-  - [ ] שלב 2: עיצוב ובניית הקומפוננטה `AIAssistant.tsx` (תיבת טקסט, הצגת הודעות, אינדיקציה לכך שהסוכן "חושב" או "מפעיל כלים").
-  - [ ] שלב 3: תמיכה ב-Server-Sent Events (SSE) או קריאת זרם (Stream) כדי שהתשובה תופיע באופן הדרגתי (כמו ב-ChatGPT).
-  - [ ] שלב 4: שילוב ה-AI Assistant לתוך ה-Layout הראשי כך שיהיה נגיש מכל מסך במערכת.
+  - [x] שלב 1: יצירת פונקציות קריאה לשרת ב-`client.ts` לתמיכה בצ'אט רב-שלבי (העברת `session_id`).
+  - [x] שלב 2: עיצוב ובניית הקומפוננטה `AIAssistant.tsx` (תיבת טקסט, הצגת הודעות, אינדיקציה לכך שהסוכן "חושב" או "מפעיל כלים").
+  - [x] שלב 3: תמיכה ב-Server-Sent Events (SSE) או קריאת זרם (Stream) כדי שהתשובה תופיע באופן הדרגתי (כמו ב-ChatGPT).
+  - [x] שלב 4: שילוב ה-AI Assistant לתוך ה-Layout הראשי כך שיהיה נגיש מכל מסך במערכת.
 * **קריטריוני הצלחה (Acceptance Criteria)**: משתמש יכול לפתוח צ'אט, להקליד שאלה, ולראות את התשובה נכתבת בזמן אמת, כולל חיווי ויזואלי כאשר הסוכן משתמש בכלים (למשל: "מחפש נתוני מזג אוויר...").
+  - ✅ בוצע ב-branch feature/ai-assistant-chat-ui: נוספו `sendAgentChatMessage`/`proposeMitigationTask`/`confirmAgentAction`/`rejectAgentAction` ב-`frontend/src/api/client.ts` (מעבירים `session_id` להמשכיות שיחה). נוצר `frontend/src/components/AIAssistant/AIAssistant.tsx` (+`AIAssistantContext.tsx`, `ActionCard.tsx`) — צ'אט מרובה-סוכנים עם תג הסוכן שענה, אינדיקציית "הסוכן חושב ומפעיל כלים..." בזמן ההמתנה, וחשיפה הדרגתית ("typewriter") של התשובה בצד הלקוח לאחר קבלתה (ה-Orchestrator מחזיר JSON יחיד ולא stream אמיתי, ראו הערת התיעוד ב-`StreamedAnswer`). מכיוון של-Frontend אין `layouts/MainLayout.tsx`, הרכיב שולב ב-`frontend/src/components/Layout.tsx` הקיים (שכבר עוטף את כל המסכים ומארח את ה-widget הקודם `CopilotWidget`), שהוחלף ב-`AIAssistant` (הקובץ עצמו נשאר קיים, רק לא מורכב יותר). כוסה ב-`AIAssistant.test.tsx`.
 
 ---
 
