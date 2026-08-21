@@ -5,13 +5,15 @@
       "name": "backend",
       "runtimeExecutable": "C:/Users/shonb/risk-management-system/backend/venv/Scripts/uvicorn.exe",
       "runtimeArgs": ["app.main:app", "--reload", "--app-dir", "C:/Users/shonb/risk-management-system/backend"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": false
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "C:/Users/shonb/risk-management-system/frontend", "run", "dev", "--", "--host"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": false
     }
   ]
 }
