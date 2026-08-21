@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Numeric, SmallInteger, Unicode, UnicodeText,
@@ -10,6 +10,17 @@ from app.database import Base
 from app.services.encryption import EncryptedString, EncryptedText
 
 
+def _utcnow() -> datetime:
+    """Python-side default for "now"-style timestamp columns (created_at/updated_at/
+    timestamp/sent_at/...), returned as a naive datetime that is always UTC (never the
+    server/local timezone). All DateTime columns in this file are naive by convention
+    (SQL Server DATETIME2, no offset) — callers must pass UTC-normalized values (e.g.
+    `datetime.now(timezone.utc).replace(tzinfo=None)`, not bare `datetime.now()`) for the
+    same reason. This default only fires when a router omits the column entirely; it
+    doesn't retroactively fix a call site that explicitly passes a local-time value."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class User(Base):
     __tablename__ = "Users"
 
@@ -19,7 +30,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(Unicode(30))
     password_hash: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Region(Base):
@@ -46,14 +57,14 @@ class Property(Base):
     book_value: Mapped[float] = mapped_column(Numeric(18, 2))
     primary_manager_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
-    updated_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     risk_profile: Mapped["AssetRiskProfile"] = relationship(back_populates="property_", uselist=False)
-    incidents: Mapped[list["Incident"]] = relationship(back_populates="property_")
-    mitigation_tasks: Mapped[list["MitigationTask"]] = relationship(back_populates="property_")
+    incidents: Mapped[list["Incident"]] = relationship(back_populates="property_", passive_deletes=True)
+    mitigation_tasks: Mapped[list["MitigationTask"]] = relationship(back_populates="property_", passive_deletes=True)
     primary_manager: Mapped["User | None"] = relationship()
-    policy_assets: Mapped[list["PolicyAsset"]] = relationship(back_populates="property_")
+    policy_assets: Mapped[list["PolicyAsset"]] = relationship(back_populates="property_", passive_deletes=True)
 
 
 class AssetRiskProfile(Base):
@@ -100,7 +111,9 @@ class PolicyAsset(Base):
     __tablename__ = "Policy_Assets"
 
     policy_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Insurance_Policies.policy_id"), primary_key=True)
-    property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id"), primary_key=True)
+    property_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("Properties.property_id", ondelete="CASCADE"), primary_key=True
+    )
     # Encrypted at rest (see services/encryption.py) — same rationale as
     # Insurance_Policies.per_event_limit above: a single-property coverage term, never
     # aggregated across rows.
@@ -115,8 +128,11 @@ class Incident(Base):
 
     incident_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     incident_code: Mapped[str] = mapped_column(Unicode(20), unique=True)
-    property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id"))
+    property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id", ondelete="CASCADE"))
     reported_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
+    # When the incident actually happened, as reported by the field/property user — a
+    # domain value, not a "now" default, but must still be normalized to naive UTC by the
+    # caller before assignment (see `_utcnow` above) rather than a bare local `datetime.now()`.
     incident_timestamp: Mapped[datetime] = mapped_column(DateTime)
     hazard_type: Mapped[str] = mapped_column(Unicode(30))
     severity_level: Mapped[str] = mapped_column(Unicode(20))
@@ -126,7 +142,7 @@ class Incident(Base):
     status: Mapped[str] = mapped_column(Unicode(30))
     ai_classified: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_confidence: Mapped[float | None] = mapped_column(Numeric(4, 3), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     is_draft: Mapped[bool] = mapped_column(Boolean, default=False)
     business_interruption_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     area_or_building: Mapped[str | None] = mapped_column(Unicode(150), nullable=True)
@@ -138,18 +154,18 @@ class Incident(Base):
     resolved_address: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
 
     property_: Mapped["Property"] = relationship(back_populates="incidents")
-    media: Mapped[list["IncidentMedia"]] = relationship(back_populates="incident")
-    claims: Mapped[list["Claim"]] = relationship(back_populates="incident")
+    media: Mapped[list["IncidentMedia"]] = relationship(back_populates="incident", passive_deletes=True)
+    claims: Mapped[list["Claim"]] = relationship(back_populates="incident", passive_deletes=True)
 
 
 class IncidentMedia(Base):
     __tablename__ = "Incident_Media"
 
     media_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Incidents.incident_id"))
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Incidents.incident_id", ondelete="CASCADE"))
     file_path: Mapped[str] = mapped_column(Unicode(500))
     file_type: Mapped[str] = mapped_column(Unicode(50))
-    captured_at: Mapped[datetime] = mapped_column(DateTime)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     gps_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -161,7 +177,7 @@ class Claim(Base):
 
     claim_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     claim_number: Mapped[str] = mapped_column(Unicode(30), unique=True)
-    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Incidents.incident_id"))
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Incidents.incident_id", ondelete="CASCADE"))
     policy_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Insurance_Policies.policy_id"))
     claimed_amount: Mapped[float] = mapped_column(Numeric(18, 2))
     deductible_applied: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
@@ -171,18 +187,18 @@ class Claim(Base):
     # only, never searched/aggregated. Widened from 100 to fit ciphertext.
     adjuster_name: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
     expected_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     incident: Mapped["Incident"] = relationship(back_populates="claims")
-    payments: Mapped[list["ClaimPayment"]] = relationship(back_populates="claim")
-    reserves: Mapped[list["ClaimReserve"]] = relationship(back_populates="claim")
+    payments: Mapped[list["ClaimPayment"]] = relationship(back_populates="claim", passive_deletes=True)
+    reserves: Mapped[list["ClaimReserve"]] = relationship(back_populates="claim", passive_deletes=True)
 
 
 class ClaimPayment(Base):
     __tablename__ = "Claim_Payments"
 
     payment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id"))
+    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id", ondelete="CASCADE"))
     payment_date: Mapped[date] = mapped_column(Date)
     amount: Mapped[float] = mapped_column(Numeric(18, 2))
     # Encrypted at rest (see services/encryption.py) — deliberately not `amount`, which
@@ -198,10 +214,10 @@ class ClaimReserve(Base):
     __tablename__ = "Claim_Reserves"
 
     reserve_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id"))
+    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Claims.claim_id", ondelete="CASCADE"))
     reserve_amount: Mapped[float] = mapped_column(Numeric(18, 2))
     expected_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     claim: Mapped["Claim"] = relationship(back_populates="reserves")
 
@@ -210,14 +226,14 @@ class MitigationTask(Base):
     __tablename__ = "Mitigation_Tasks"
 
     task_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id"))
+    property_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Properties.property_id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(Unicode(200))
     cost_estimate: Mapped[float] = mapped_column(Numeric(18, 2))
     expected_annual_savings: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
     due_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(Unicode(20))
     assigned_to_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     property_: Mapped["Property"] = relationship(back_populates="mitigation_tasks")
 
@@ -236,7 +252,7 @@ class AuditLog(Base):
     # filters on entity_type/entity_id/user_id/action/timestamp).
     old_value: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     new_value: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     ip_address: Mapped[str | None] = mapped_column(Unicode(45), nullable=True)
 
 
@@ -267,7 +283,7 @@ class Document(Base):
     s3_url: Mapped[str] = mapped_column(Unicode(500))
     doc_type: Mapped[str] = mapped_column(Unicode(30))
     uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class FinancialStatement(Base):
@@ -335,4 +351,4 @@ class NotificationLog(Base):
     value: Mapped[float] = mapped_column(Numeric(18, 4))
     threshold: Mapped[float] = mapped_column(Numeric(18, 4))
     status: Mapped[str] = mapped_column(Unicode(20))
-    sent_at: Mapped[datetime] = mapped_column(DateTime)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

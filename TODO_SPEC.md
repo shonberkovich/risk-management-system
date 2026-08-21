@@ -1,5 +1,6 @@
 # 1. Database & Models (בסיס נתונים)
-- [ ] טיפול מלא במחיקות מקושרות (Cascading Deletes)
+- [x] טיפול מלא במחיקות מקושרות (Cascading Deletes)
+  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: נוספו `ondelete="CASCADE"` ל-FK-ים של Incidents/Policy_Assets/Mitigation_Tasks/Incident_Media (תלויים ב-Properties/Incidents) ושל Claims/Claim_Payments/Claim_Reserves (תלויים ב-Incidents/Claims), עם `passive_deletes=True` ביחסי ה-collection המתאימים כדי שה-DB יבצע את המחיקה במקום ה-ORM.
   - **מה צריך לממש:** הוספת הגדרות `ondelete="CASCADE"` במודלים של SQLAlchemy עבור ישויות התלויות בנכסים (כמו אירועים, פוליסות ומשימות מיטיגציה) כדי למנוע שגיאות Foreign Key במידה ומוחקים נכס.
   - **הרשאות:** שקוף למשתמש, קשור להרשאות מחיקת נכס (`ADMIN`, `RISK_MANAGER`).
   - **קובץ/תיקייה:** `backend/app/models.py`
@@ -13,7 +14,8 @@
   - **קובץ/תיקייה:** `backend/app/schemas.py` ו-`backend/app/models.py`
 
 # 2. Backend / צד שרת
-[ ] קריסות בפענוח נתונים מוצפנים מה-Seed
+[x] קריסות בפענוח נתונים מוצפנים מה-Seed
+  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: `seed.py` עכשיו מזריק את Insurance_Policies/Policy_Assets/Claims/Claim_Payments (השדות המוצפנים: per_event_limit, specific_deductible, adjuster_name, reference_number) דרך session של ה-ORM (SQLAlchemy) במקום INSERT גולמי ב-pyodbc, כך שההצפנה של EncryptedString אכן רצה בכתיבה.
   - **מה צריך לממש:** תיקון מנגנון ההזרקה של נתוני הדמו כך ששדות מוצפנים (כמו פרטי שמאי) יעברו דרך שכבת ה-ORM להצפנה מלאה, במקום שימוש ב-pyodbc גולמי ששומר טקסט חשוף ומפיל את הדוחות הפיננסיים (כמו דוח ה-Exposure).
   - **הרשאות:** פנימי למערכת (תהליך הפעלת/איתחול הסביבה).
   - **קובץ/תיקייה:** `backend/app/seed.py`
@@ -29,7 +31,8 @@
   - **מה צריך לממש:** טיפול בשגיאת חלוקה באפס בעת חישוב `Loss Ratio` (יחס נזקים) אם סך הפרמיות (Premiums) ששולמו עדיין שווה לאפס במאגר הנתונים. יש להחזיר ערך ברירת מחדל בטוח כדי לא לקרוס עם 500.
   - **הרשאות:** רלוונטי לכל מי שצופה ב-KPIs פיננסיים.
   - **קובץ/תיקייה:** `backend/app/services/kpi.py`
-- [ ] סנכרון ופערי אזורי זמן (Timezone) (באג לוגי)
+- [x] סנכרון ופערי אזורי זמן (Timezone) (באג לוגי)
+  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: נוסף helper `_utcnow()` ב-`models.py` (מחזיר datetime naive ב-UTC) והוגדר כ-`default` עבור כל עמודות ה-"created_at"/"updated_at"/"timestamp"/"sent_at"/"captured_at"/"uploaded_at", כדי שברירת המחדל ברמת המודל תמיד תהיה UTC טהור; נוספה גם הערה ליד `incident_timestamp` שמבהירה שגם הוא חייב להתקבל כ-UTC נורמלי מהקורא.
   - **מה צריך לממש:** הבטחה שכל התאריכים (כמו `incident_timestamp` ו-`created_at`) נשמרים כ-UTC טהור במסד, ומוחזרים באופן תקני ל-Frontend לצורך המרה לשעון המקומי, כדי למנוע הזזת אירועים ליום קודם/הבא סביב חצות.
   - **הרשאות:** שקוף למשתמש, משפיע על כלל העובדים.
   - **קובץ/תיקייה:** `backend/app/models.py` ו-`backend/app/schemas.py`
