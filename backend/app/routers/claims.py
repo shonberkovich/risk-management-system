@@ -1,6 +1,8 @@
-from datetime import date, datetime
+import threading
+import time
+from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,30 @@ router = APIRouter(prefix="/api/claims", tags=["claims"])
 _CLAIMS_WRITE_ROLES = ("RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN")
 
 _TERMINAL_CLAIM_STATUSES = {"SETTLED", "REJECTED"}
+
+# --- Idempotent/duplicate-safe creation (TODO_SPEC.md §2, "Race Conditions
+# ביצירת אירועים/תביעות") --------------------------------------------------
+#
+# Same pattern as routers/incidents.py's create_incident: an Idempotency-Key
+# header, if sent, short-circuits a repeat request with the same key to the
+# claim created by the first; if no header is sent, a narrow natural-key
+# duplicate check (same incident + same policy + same claimed amount,
+# created within the last few seconds) catches an accidental double
+# double-click/retry instead. Both paths run under _CREATE_LOCK so there's
+# no TOCTOU window between the duplicate check and the insert. In-process
+# only (module-level dict + threading.Lock) — correct for this course
+# project's single-worker uvicorn deployment.
+_CREATE_LOCK = threading.Lock()
+_IDEMPOTENCY_CACHE: dict[str, tuple[float, "models.Claim"]] = {}
+_IDEMPOTENCY_TTL_SECONDS = 120
+_DUPLICATE_WINDOW_SECONDS = 5
+
+
+def _purge_idempotency_cache_locked() -> None:
+    """Caller must hold _CREATE_LOCK."""
+    cutoff = time.monotonic() - _IDEMPOTENCY_TTL_SECONDS
+    for stale_key in [k for k, (ts, _) in _IDEMPOTENCY_CACHE.items() if ts < cutoff]:
+        del _IDEMPOTENCY_CACHE[stale_key]
 
 
 def _next_claim_number(db: Session) -> str:
@@ -80,34 +106,64 @@ def create_claim(
     payload: schemas.ClaimCreate,
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles(*_CLAIMS_WRITE_ROLES)),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    incident = db.get(models.Incident, payload.incident_id)
-    if not incident:
-        raise HTTPException(404, "Incident not found")
-    if incident.status == "CLOSED":
-        raise HTTPException(400, "לא ניתן לפתוח תביעה עבור אירוע סגור")
+    """Race-condition-safe against two near-simultaneous duplicate submissions
+    (double-click, retried request) — see the idempotency/duplicate-check
+    helpers above the router. The whole check-then-insert critical section
+    runs under _CREATE_LOCK so there's no window for two concurrent requests
+    to both pass the duplicate check before either has committed."""
+    with _CREATE_LOCK:
+        if idempotency_key:
+            _purge_idempotency_cache_locked()
+            cached = _IDEMPOTENCY_CACHE.get(idempotency_key)
+            if cached:
+                return cached[1]
 
-    policy = db.get(models.InsurancePolicy, payload.policy_id)
-    if not policy:
-        raise HTTPException(404, "Policy not found")
+        incident = db.get(models.Incident, payload.incident_id)
+        if not incident:
+            raise HTTPException(404, "Incident not found")
+        if incident.status == "CLOSED":
+            raise HTTPException(400, "לא ניתן לפתוח תביעה עבור אירוע סגור")
 
-    claim = models.Claim(
-        claim_number=_next_claim_number(db),
-        incident_id=payload.incident_id,
-        policy_id=payload.policy_id,
-        claimed_amount=payload.claimed_amount,
-        deductible_applied=payload.deductible_applied,
-        approved_amount=0,
-        claim_status="DRAFT",
-        adjuster_name=payload.adjuster_name,
-        expected_payment_date=payload.expected_payment_date,
-        created_at=datetime.now(),
-    )
-    db.add(claim)
-    incident.status = "CLAIM_FILED"
-    db.commit()
-    db.refresh(claim)
-    return claim
+        policy = db.get(models.InsurancePolicy, payload.policy_id)
+        if not policy:
+            raise HTTPException(404, "Policy not found")
+
+        if not idempotency_key:
+            duplicate_cutoff = datetime.now() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
+            duplicate = db.scalar(
+                select(models.Claim)
+                .where(models.Claim.incident_id == payload.incident_id)
+                .where(models.Claim.policy_id == payload.policy_id)
+                .where(models.Claim.claimed_amount == payload.claimed_amount)
+                .where(models.Claim.created_at >= duplicate_cutoff)
+                .order_by(models.Claim.created_at.desc())
+            )
+            if duplicate:
+                return duplicate
+
+        claim = models.Claim(
+            claim_number=_next_claim_number(db),
+            incident_id=payload.incident_id,
+            policy_id=payload.policy_id,
+            claimed_amount=payload.claimed_amount,
+            deductible_applied=payload.deductible_applied,
+            approved_amount=0,
+            claim_status="DRAFT",
+            adjuster_name=payload.adjuster_name,
+            expected_payment_date=payload.expected_payment_date,
+            created_at=datetime.now(),
+        )
+        db.add(claim)
+        incident.status = "CLAIM_FILED"
+        db.commit()
+        db.refresh(claim)
+
+        if idempotency_key:
+            _IDEMPOTENCY_CACHE[idempotency_key] = (time.monotonic(), claim)
+
+        return claim
 
 
 @router.patch("/{claim_id}", response_model=schemas.ClaimOut)
