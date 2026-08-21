@@ -31,6 +31,10 @@ def test_create_and_get_incident(client, make_property, make_user):
     get_resp = client.get(f"/api/incidents/{body['incident_id']}")
     assert get_resp.status_code == 200
     assert get_resp.json()["description"] == "שריפה קטנה במחסן"
+    # TODO_SPEC.md §11 item 2: resolved_address is server-derived (reverse-geocoded
+    # from reported_coordinates — see app/integrations/gis.reverse_geocode), not
+    # part of the create payload, so a freshly-created incident has none yet.
+    assert get_resp.json()["resolved_address"] is None
 
 
 def test_create_incident_requires_auth(client, make_property):

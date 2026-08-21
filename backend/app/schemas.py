@@ -112,6 +112,7 @@ class RiskProfileOut(BaseModel):
     mfl_amount: float
     has_sprinklers: bool
     notes: str | None = None
+    near_hazmat_site: bool = False
 
 
 class RiskProfileCreate(BaseModel):
@@ -126,6 +127,7 @@ class RiskProfileCreate(BaseModel):
     mfl_amount: float
     has_sprinklers: bool
     notes: str | None = None
+    near_hazmat_site: bool = False
 
 
 class RiskProfileUpdate(BaseModel):
@@ -138,6 +140,7 @@ class RiskProfileUpdate(BaseModel):
     mfl_amount: float | None = None
     has_sprinklers: bool | None = None
     notes: str | None = None
+    near_hazmat_site: bool | None = None
 
 
 class PropertyActivePolicyOut(BaseModel):
@@ -250,6 +253,7 @@ class IncidentOut(BaseModel):
     business_interruption_requested: bool
     area_or_building: str | None = None
     reported_coordinates: str | None = None
+    resolved_address: str | None = None
 
 
 class IncidentUpdate(BaseModel):
@@ -764,6 +768,93 @@ class ReplacementValueUpdateOut(BaseModel):
     baseline_date: str
     as_of: str
     recommended_for_revaluation: bool
+    source_system: str
+
+
+# --- Real external connectors (TODO_SPEC.md §12) ---
+class BoiSeriesOut(BaseModel):
+    series: str
+    value: float | None = None
+    unit: str
+    status: str
+    source_system: str
+
+
+class BoiMarketDataOut(BaseModel):
+    as_of: str
+    series: list[BoiSeriesOut]
+    source_system: str
+
+
+class HomeFrontAlertOut(BaseModel):
+    category: str
+    title: str
+    areas: list[str]
+
+
+class HomeFrontAffectedPropertyOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    region: str
+    matched_area: str
+
+
+class HomeFrontAlertsOut(BaseModel):
+    status: str
+    alerts: list[HomeFrontAlertOut]
+    source_system: str
+    affected_properties: list[HomeFrontAffectedPropertyOut] = []
+
+
+class SeismologyEventOut(BaseModel):
+    event_time: str
+    latitude: float
+    longitude: float
+    depth_km: float
+    magnitude: float
+    region: str
+
+
+class SeismologyBulletinOut(BaseModel):
+    status: str
+    events: list[SeismologyEventOut]
+    source_system: str
+
+
+class NearestPropertyToEpicenterOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    distance_km: float
+    felt_locally: bool
+
+
+class HazmatSiteOut(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    address: str | None = None
+
+
+class HazmatSitesOut(BaseModel):
+    status: str
+    sites: list[HazmatSiteOut]
+    source_system: str
+
+
+class PropertyHazmatProximityOut(BaseModel):
+    property_id: int
+    property_code: str
+    name: str
+    within_hazard_radius: bool
+    distance_km: float | None = None
+    nearest_site: HazmatSiteOut | None = None
+
+
+class ReverseGeocodeOut(BaseModel):
+    status: str
+    address: str | None = None
     source_system: str
 
 

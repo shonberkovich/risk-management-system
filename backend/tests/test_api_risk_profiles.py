@@ -120,3 +120,40 @@ def test_update_risk_profile_404_when_none_exists(client, make_user, make_proper
         headers=auth_headers(admin),
     )
     assert resp.status_code == 404
+
+
+def test_near_hazmat_site_defaults_false_and_is_settable(client, make_user, make_property):
+    """TODO_SPEC.md §11 item 1: Asset_Risk_Profiles.near_hazmat_site — defaults to
+    False when not supplied, and can be set on create and toggled on update, same
+    as the pre-existing boolean field has_sprinklers."""
+    admin = make_user(role="ADMIN")
+    headers = auth_headers(admin)
+    prop = make_property()
+
+    created = client.post(
+        f"/api/properties/{prop.property_id}/risk-profile", json=_profile_payload(), headers=headers
+    )
+    assert created.status_code == 201
+    assert created.json()["near_hazmat_site"] is False  # not supplied in _profile_payload()
+
+    updated = client.put(
+        f"/api/properties/{prop.property_id}/risk-profile",
+        json={"near_hazmat_site": True},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["near_hazmat_site"] is True
+    # Untouched fields keep their prior values.
+    assert updated.json()["has_sprinklers"] is True
+
+
+def test_near_hazmat_site_settable_at_creation(client, make_user, make_property):
+    admin = make_user(role="ADMIN")
+    prop = make_property()
+    resp = client.post(
+        f"/api/properties/{prop.property_id}/risk-profile",
+        json=_profile_payload(near_hazmat_site=True),
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["near_hazmat_site"] is True

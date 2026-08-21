@@ -31,7 +31,39 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+import pytest
+
+from app.integrations._http import IntegrationFetchError
 from tests.conftest import auth_headers
+
+
+@pytest.fixture(autouse=True)
+def _no_live_network_calls(monkeypatch):
+    """RBAC tests below hit the new §12 real-connector endpoints
+    (economics/boi-market-data, home-front/alerts, seismology/*,
+    environmental/*, gis/reverse-geocode) purely to check the 401/403/200
+    role gate, not to exercise a live external API — this test suite must
+    not depend on internet access (see TODO_SPEC.md §12's testing note).
+    Forcing every outbound call in app.integrations._http to fail fast
+    exercises each endpoint's documented graceful-degradation path (a
+    clean 200 with status="unavailable"), which is also exactly what
+    happens in a sandboxed dev environment with no outbound network —
+    a representative, not just convenient, thing to test."""
+    def _always_unavailable(*args, **kwargs):
+        raise IntegrationFetchError("network calls disabled in tests")
+
+    # Each connector module did `from app.integrations._http import get_json` (or
+    # get_text), which binds its OWN local name at import time — patching
+    # app.integrations._http.get_json alone would not reach those already-bound
+    # references, so every consuming module's local name is patched explicitly.
+    for module_name, attr in [
+        ("app.integrations.economics", "get_json"),
+        ("app.integrations.home_front", "get_json"),
+        ("app.integrations.seismology", "get_text"),
+        ("app.integrations.environmental", "get_json"),
+        ("app.integrations.gis", "get_json"),
+    ]:
+        monkeypatch.setattr(f"{module_name}.{attr}", _always_unavailable)
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +177,24 @@ def test_integrations_finance_and_gis_get_endpoints_block_field_worker(client, m
         "/api/integrations/gis/risk-layers",
         "/api/integrations/economics/index-series",
         "/api/integrations/economics/replacement-value-updates",
+        "/api/integrations/economics/boi-market-data",
+        "/api/integrations/seismology/recent-earthquakes",
+        "/api/integrations/environmental/hazmat-sites",
     ]
     for path in endpoints:
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers=auth_headers(field_worker)).status_code == 403, path
+        assert client.get(path, headers=auth_headers(admin)).status_code == 200, path
+
+    # Two GIS/economics endpoints take required query params — checked separately
+    # so the loop above stays a plain path list for the no-params majority.
+    prop = make_property()
+    param_endpoints = [
+        "/api/integrations/seismology/nearest-properties?latitude=32.08&longitude=34.78",
+        "/api/integrations/environmental/property-hazmat-proximity",
+        f"/api/integrations/environmental/property-hazmat-proximity?property_id={prop.property_id}",
+    ]
+    for path in param_endpoints:
         assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 403, path
         assert client.get(path, headers=auth_headers(admin)).status_code == 200, path
@@ -287,6 +335,25 @@ def test_integrations_weather_alerts_open_to_any_authenticated_role(client, make
     path = "/api/integrations/weather/alerts"
     assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
+
+
+def test_integrations_home_front_and_reverse_geocode_open_to_any_authenticated_role(
+    client, make_user, make_property
+):
+    """TODO_SPEC.md §12's other two `require_roles()`-with-no-args endpoints:
+    Home Front Command alerts (safety takes priority over role-gating, same
+    as weather) and OSM Nominatim reverse geocoding (explicitly meant to
+    serve field workers filing an incident report from GPS coordinates)."""
+    field_worker = make_user(role="FIELD_WORKER")
+    make_property()
+
+    endpoints = [
+        "/api/integrations/home-front/alerts",
+        "/api/integrations/gis/reverse-geocode?latitude=32.08&longitude=34.78",
+    ]
+    for path in endpoints:
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
 # ---------------------------------------------------------------------------

@@ -118,7 +118,8 @@ CREATE TABLE dbo.Asset_Risk_Profiles (
     earthquake_risk_score   TINYINT NOT NULL CHECK (earthquake_risk_score BETWEEN 1 AND 5),
     mfl_amount               DECIMAL(18,2) NOT NULL,
     has_sprinklers            BIT NOT NULL DEFAULT 0,
-    notes                     NVARCHAR(MAX) NULL
+    notes                     NVARCHAR(MAX) NULL,
+    near_hazmat_site          BIT NOT NULL DEFAULT 0    -- קרבה למפעל חומרים מסוכנים (ר' app/integrations/environmental.py)
 );
 GO
 CREATE INDEX IX_RiskProfiles_Property ON dbo.Asset_Risk_Profiles(property_id);
@@ -191,7 +192,8 @@ CREATE TABLE dbo.Incidents (
     is_draft                                       BIT NOT NULL DEFAULT 0,
     business_interruption_requested                BIT NOT NULL DEFAULT 0,
     area_or_building                                 NVARCHAR(150) NULL,   -- אזור/מבנה בתוך הנכס
-    reported_coordinates                               NVARCHAR(50) NULL  -- מיקום GPS של המדווח, "lat,lng"
+    reported_coordinates                               NVARCHAR(50) NULL,  -- מיקום GPS של המדווח, "lat,lng"
+    resolved_address                                     NVARCHAR(255) NULL  -- כתובת שפוענחה אוטומטית מ-reported_coordinates (Reverse Geocoding, ר' app/integrations/gis.py)
 );
 GO
 CREATE INDEX IX_Incidents_Property ON dbo.Incidents(property_id);

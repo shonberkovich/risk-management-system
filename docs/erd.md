@@ -57,6 +57,7 @@ erDiagram
         decimal mfl_amount
         bit has_sprinklers
         nvarchar notes
+        bit near_hazmat_site "חדש: קרבה למפעל חומ״ס"
     }
 
     Insurance_Policies {
@@ -99,6 +100,7 @@ erDiagram
         bit business_interruption_requested "חדש: בקשת כיסוי אובדן רווחים"
         nvarchar area_or_building "חדש: אזור/מבנה בתוך הנכס"
         nvarchar reported_coordinates "חדש: GPS המדווח, 'lat,lng'"
+        nvarchar resolved_address "חדש: כתובת מפוענחת (Reverse Geocoding)"
     }
 
     Incident_Media {
