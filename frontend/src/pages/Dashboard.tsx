@@ -20,6 +20,7 @@ import {
   fetchClaims,
   fetchGeographicExposureClusters,
   fetchHazardDistribution,
+  fetchHomeFrontAlerts,
   fetchIncidents,
   fetchKpis,
   fetchLossRatioTrend,
@@ -43,6 +44,11 @@ import FieldWorkerDashboard from "./FieldWorkerDashboard";
 
 const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
 
+// Home Front Command (פיקוד העורף) is a live real-time public feed (TODO_SPEC.md §14,
+// "באנר התראות חירום מרחביות") — unlike the other dashboard queries here, it needs to
+// refresh on its own without a page reload, so it polls rather than fetching once.
+const HOME_FRONT_POLL_INTERVAL_MS = 60_000;
+
 /** Routes "/" to a role-appropriate dashboard rather than gating individual widgets on
  * the executive view below: FIELD_WORKER has no server-side access to the financial
  * data (KPIs, cashflow, policies — see routers/analytics.py's _FINANCIAL_READ_ROLES)
@@ -60,6 +66,11 @@ function ExecutiveDashboard() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: fetchKpis });
   const alerts = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
   const weatherAlerts = useQuery({ queryKey: ["weather-alerts"], queryFn: () => fetchWeatherAlerts() });
+  const homeFrontAlerts = useQuery({
+    queryKey: ["home-front-alerts"],
+    queryFn: fetchHomeFrontAlerts,
+    refetchInterval: HOME_FRONT_POLL_INTERVAL_MS,
+  });
   const mapPoints = useQuery({ queryKey: ["map"], queryFn: fetchMapPoints });
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
@@ -105,7 +116,9 @@ function ExecutiveDashboard() {
         דשבורד מנהלים
       </Typography>
 
-      {alerts.data && <AlertsBanner alerts={alerts.data} weatherAlerts={weatherAlerts.data} />}
+      {alerts.data && (
+        <AlertsBanner alerts={alerts.data} weatherAlerts={weatherAlerts.data} homeFrontAlerts={homeFrontAlerts.data} />
+      )}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>

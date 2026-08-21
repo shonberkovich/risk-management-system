@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 
-import { fetchIncidents, fetchWeatherAlerts } from "../api/client";
+import { fetchHomeFrontAlerts, fetchIncidents, fetchWeatherAlerts } from "../api/client";
 import AlertsBanner from "../components/AlertsBanner";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
@@ -37,6 +37,11 @@ const INCIDENT_STATUS_COLOR: Record<string, "default" | "warning" | "success" | 
 };
 
 const RECENT_LIMIT = 12;
+
+// Same polling rationale as Dashboard.tsx's ExecutiveDashboard — a field worker on-site
+// needs a live Home Front Command (פיקוד העורף) warning as much as (if not more than) a
+// risk officer does (TODO_SPEC.md §14, "רלוונטי לכלל הדשבורדים (מנהלים ושטח כאחד)").
+const HOME_FRONT_POLL_INTERVAL_MS = 60_000;
 
 /** Reduced-scope dashboard for FIELD_WORKER (TODO_SPEC.md §5, "דשבורד מותאם לשטח") — the
  * executive Dashboard.tsx surfaces portfolio financials (TIV/MFL, cashflow, loss ratio,
@@ -69,6 +74,12 @@ export default function FieldWorkerDashboard() {
   // needs a storm/flood warning as much as (if not more than) a risk officer does
   // (TODO_SPEC.md §5, "שילוב מזג אוויר").
   const weatherAlerts = useQuery({ queryKey: ["weather-alerts"], queryFn: () => fetchWeatherAlerts() });
+  // Open to any authenticated role server-side (same as weather) — no RBAC gate needed here.
+  const homeFrontAlerts = useQuery({
+    queryKey: ["home-front-alerts"],
+    queryFn: fetchHomeFrontAlerts,
+    refetchInterval: HOME_FRONT_POLL_INTERVAL_MS,
+  });
 
   return (
     <Stack spacing={3}>
@@ -76,7 +87,9 @@ export default function FieldWorkerDashboard() {
         דשבורד שטח
       </Typography>
 
-      {weatherAlerts.data && <AlertsBanner alerts={[]} weatherAlerts={weatherAlerts.data} />}
+      {(weatherAlerts.data || homeFrontAlerts.data) && (
+        <AlertsBanner alerts={[]} weatherAlerts={weatherAlerts.data} homeFrontAlerts={homeFrontAlerts.data} />
+      )}
 
       <Card
         variant="outlined"
