@@ -938,6 +938,62 @@ export const classifyIncident = (description: string) =>
 export const askQuestion = (question: string) =>
   api.post<{ answer: string }>("/ai/ask", { question }).then((r) => r.data);
 
+// --- Agent Orchestrator chat (TODO_SPEC.md §2/§6) ---
+
+export type AgentType = "DATA_AGENT" | "COMPLIANCE_AGENT" | "EXTERNAL_DATA_AGENT";
+
+export interface AgentChatResponse {
+  session_id: string;
+  agent: AgentType;
+  reasoning: string;
+  answer: string;
+}
+
+export const sendAgentChatMessage = (message: string, sessionId?: string | null) =>
+  api
+    .post<AgentChatResponse>("/ai/agent-chat", { message, session_id: sessionId ?? null })
+    .then((r) => r.data);
+
+// --- Human-in-the-loop action proposals (TODO_SPEC.md §5/§7) ---
+
+export interface ProposedMitigationTask {
+  property_id: number;
+  title: string;
+  cost_estimate: number;
+  expected_annual_savings: number;
+  due_date: string;
+  assigned_to_user_id: number | null;
+}
+
+export interface ActionProposal {
+  action_type: "CREATE_MITIGATION_TASK_PROPOSAL";
+  property_id: number;
+  property_name: string;
+  risk_level: string;
+  reasoning: string;
+  proposed_task: ProposedMitigationTask;
+}
+
+export interface ActionProposalResponse {
+  action_id: number;
+  status: string;
+  proposal: ActionProposal;
+}
+
+export const proposeMitigationTask = (propertyId: number, sessionId?: string | null) =>
+  api
+    .post<ActionProposalResponse | null>("/ai/actions/propose-mitigation-task", {
+      property_id: propertyId,
+      session_id: sessionId ?? null,
+    })
+    .then((r) => r.data);
+
+export const confirmAgentAction = (actionId: number) =>
+  api.post<{ action_id: number; status: string }>(`/ai/actions/${actionId}/confirm`).then((r) => r.data);
+
+export const rejectAgentAction = (actionId: number) =>
+  api.post<{ action_id: number; status: string }>(`/ai/actions/${actionId}/reject`).then((r) => r.data);
+
 // Plain-text streaming response (SSE-style chunks) — axios doesn't expose a readable-stream
 // body in the browser, so this uses fetch() directly, but still attaches the same bearer
 // token as every other call so the endpoint isn't left as the one unauthenticated caller.
