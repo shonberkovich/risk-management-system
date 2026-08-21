@@ -7,7 +7,7 @@
 
 ---
 
-### [ ] משימה 1: תשתיות מסד נתונים וזיכרון לסוכנים (Database & Context Memory)
+### [x] משימה 1: תשתיות מסד נתונים וזיכרון לסוכנים (Database & Context Memory)
 * **מהות המשימה (איזה חלק עושים)**: יצירת טבלאות מודלים לשמירת היסטוריית השיחות עם הסוכנים (Sessions) ולוג פעולות שהסוכנים ביצעו, כדי לאפשר זיכרון לטווח קצר וארוך (Long/Short-term Context).
 * **מיקום במערכת**: Backend (Models & Database).
 * **תיקיות וקבצים רלוונטיים להסתכל בהם**:
@@ -16,11 +16,12 @@
   - `backend/alembic/` (יצירת מיגרציה)
   - `backend/sql/schema.sql` (סנכרון סכמה למאגר חדש)
 * **שלבי ביצוע (Checklist)**:
-  - [ ] שלב 1: הוספת מודל `Agent_Sessions` ב-`models.py` שיכלול `session_id`, `user_id`, `context_data` (JSON), ו-`created_at/updated_at`.
-  - [ ] שלב 2: הוספת מודל `Agent_Actions_Log` לתיעוד פעולות עצמאיות של הסוכן (למשל פתיחת טיוטת אירוע), מקושר ל-`Agent_Sessions`.
-  - [ ] שלב 3: הוספת Pydantic Schemas מתאימים ב-`schemas.py` עבור המודלים החדשים.
-  - [ ] שלב 4: הפקת מיגרציית Alembic (`alembic revision --autogenerate`) ועדכון ידני של `schema.sql`.
+  - [x] שלב 1: הוספת מודל `Agent_Sessions` ב-`models.py` שיכלול `session_id`, `user_id`, `context_data` (JSON), ו-`created_at/updated_at`.
+  - [x] שלב 2: הוספת מודל `Agent_Actions_Log` לתיעוד פעולות עצמאיות של הסוכן (למשל פתיחת טיוטת אירוע), מקושר ל-`Agent_Sessions`.
+  - [x] שלב 3: הוספת Pydantic Schemas מתאימים ב-`schemas.py` עבור המודלים החדשים.
+  - [x] שלב 4: הפקת מיגרציית Alembic (`alembic revision --autogenerate`) ועדכון ידני של `schema.sql`.
 * **קריטריוני הצלחה (Acceptance Criteria)**: המסד עולה בהצלחה, ניתן לשמור ולשלוף היסטוריית שיחות והקשר (Context) עבור משתמש ספציפי, ומיגרציית Alembic עוברת ללא שגיאות.
+  - ✅ בוצע ב-branch feature/agent-sessions-memory-models: נוספו מודלים `AgentSession`/`AgentActionLog` ב-`backend/app/models.py` (טבלאות `Agent_Sessions`/`Agent_Actions_Log`, `context_data`/`payload` כ-NVARCHAR(MAX) בהתאם למוסכמת ה-JSON-כטקסט הקיימת בקובץ), Pydantic Schemas תואמים ב-`backend/app/schemas.py`, מיגרציית Alembic ידנית `b7e4d1a930c8` (אין DB חי ל-autogenerate, כמו המיגרציות הקודמות), וסנכרון `backend/sql/schema.sql` (כולל DROP TABLE בסדר FK-safe).
 
 ---
 
