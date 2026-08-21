@@ -198,6 +198,13 @@ export default function IncidentReport() {
     | { offline: true; hadExistingDraftId: boolean };
 
   const saveDraftMutation = useMutation({
+    // TanStack Query v5 defaults useMutation to networkMode: "online", which *pauses*
+    // the mutation (never calls mutationFn at all) whenever navigator.onLine is false —
+    // that silently short-circuits the manual isNetworkFailure try/catch below, which is
+    // the only thing that routes a failed save into the offline queue (enqueueIncidentReport
+    // / enqueueDraftUpdate). "always" makes mutationFn run unconditionally so the real
+    // fetch attempt happens and the existing catch logic gets a chance to see it fail.
+    networkMode: "always",
     mutationFn: async (): Promise<SaveDraftResult> => {
       const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
       const draftUpdatePayload: IncidentUpdate = {
@@ -270,6 +277,11 @@ export default function IncidentReport() {
   type SubmitResult = { offline: false; incident: Incident } | { offline: true };
 
   const submitMutation = useMutation({
+    // Same "always" networkMode reasoning as saveDraftMutation above — without it, a
+    // real offline submit would be paused by TanStack Query before mutationFn's own
+    // isNetworkFailure catch ever runs, so it would never reach enqueueDraftSubmit /
+    // enqueueIncidentReport.
+    networkMode: "always",
     mutationFn: async (): Promise<SubmitResult> => {
       const reportedCoordinates = geo.coords ? `${geo.coords.latitude},${geo.coords.longitude}` : null;
       const draftUpdatePayload: IncidentUpdate = {
