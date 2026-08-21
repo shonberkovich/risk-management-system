@@ -21,18 +21,20 @@
   - **מה צריך לממש:** תיקון מנגנון ההזרקה של נתוני הדמו כך ששדות מוצפנים (כמו פרטי שמאי) יעברו דרך שכבת ה-ORM להצפנה מלאה, במקום שימוש ב-pyodbc גולמי ששומר טקסט חשוף ומפיל את הדוחות הפיננסיים (כמו דוח ה-Exposure).
   - **הרשאות:** פנימי למערכת (תהליך הפעלת/איתחול הסביבה).
   - **קובץ/תיקייה:** `backend/app/seed.py`
-- [ ] חסימת Rate Limit גלובלית שגויה
+- [x] חסימת Rate Limit גלובלית שגויה
   - **מה צריך לממש:** תיקון מנגנון ה-Rate Limit של שירות ה-AI כך שיזהה משתמשים לפי כתובת אמיתית (`X-Forwarded-For`) או לפי מזהה משתמש בטוקן ה-JWT, למניעת חסימת כלל הארגון כאשר כולם תחת אותו רשת/פרוקסי.
   - **הרשאות:** פנימי למערכת, רלוונטי לכל משתמשי ה-AI.
   - **קובץ/תיקייה:** `backend/app/services/rate_limit.py` או `backend/app/routers/ai.py`
+  - ✅ בוצע ב-branch feature/loss-ratio-safe-div-and-ai-rate-limit-fix: מנגנון ה-Rate Limit מזהה כעת את המשתמש לפי מזהה מפוענח מתוך טוקן ה-JWT (`Authorization: Bearer`), ורק אם אין טוקן תקף נופל חזרה לכתובת ה-IP האמיתית מתוך `X-Forwarded-For` (ה-IP הראשון ברשימה), ורק אם גם זה חסר — ל-`request.client.host`. כך משתמש/כתובת בודדים כבר לא חוסמים את כלל המשתמשים האחרים תחת אותו פרוקסי.
 - [ ] Race Conditions ביצירת אירועים/תביעות
   - **מה צריך לממש:** יישום מנגנון אידמפוטנטיות (Idempotency Key) או שימוש בנעילה למניעת פתיחת רשומות כפולות (תביעות כפולות לאותו אירוע בדיוק) במידה ויש שתי לחיצות/בקשות מהירות במקביל.
   - **הרשאות:** רלוונטי לבעלי הרשאות יצירה (`RISK_MANAGER`, `FIELD_WORKER` וכו').
   - **קובץ/תיקייה:** `backend/app/routers/claims.py` ו-`backend/app/routers/incidents.py`
-- [ ] חלוקה באפס בחישובי מדדים (באג לוגי)
+- [x] חלוקה באפס בחישובי מדדים (באג לוגי)
   - **מה צריך לממש:** טיפול בשגיאת חלוקה באפס בעת חישוב `Loss Ratio` (יחס נזקים) אם סך הפרמיות (Premiums) ששולמו עדיין שווה לאפס במאגר הנתונים. יש להחזיר ערך ברירת מחדל בטוח כדי לא לקרוס עם 500.
   - **הרשאות:** רלוונטי לכל מי שצופה ב-KPIs פיננסיים.
   - **קובץ/תיקייה:** `backend/app/services/kpi.py`
+  - ✅ בוצע ב-branch feature/loss-ratio-safe-div-and-ai-rate-limit-fix: אומתה ותועדה ההגנה הקיימת ב-`calculate_loss_ratio` ו-`calculate_loss_ratio_trend` — כאשר סך הפרמיות (`total_premium`) הוא אפס, מוחזר יחס 0.0 (בהתאם לדפוס "ברירת מחדל בטוחה" הנהוג במודול הזה) במקום לקרוס עם ZeroDivisionError/500. מכוסה בבדיקה הקיימת test_calculate_loss_ratio_zero_premium_does_not_divide_by_zero.
 - [x] סנכרון ופערי אזורי זמן (Timezone) (באג לוגי)
   ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: נוסף helper `_utcnow()` ב-`models.py` (מחזיר datetime naive ב-UTC) והוגדר כ-`default` עבור כל עמודות ה-"created_at"/"updated_at"/"timestamp"/"sent_at"/"captured_at"/"uploaded_at", כדי שברירת המחדל ברמת המודל תמיד תהיה UTC טהור; נוספה גם הערה ליד `incident_timestamp` שמבהירה שגם הוא חייב להתקבל כ-UTC נורמלי מהקורא.
   - **מה צריך לממש:** הבטחה שכל התאריכים (כמו `incident_timestamp` ו-`created_at`) נשמרים כ-UTC טהור במסד, ומוחזרים באופן תקני ל-Frontend לצורך המרה לשעון המקומי, כדי למנוע הזזת אירועים ליום קודם/הבא סביב חצות.

@@ -176,7 +176,12 @@ def calculate_exposure_by_region(db: Session) -> list[dict]:
 
 
 def calculate_loss_ratio(db: Session, year: int | None = None) -> tuple[float, float, float]:
-    """Returns (loss_ratio, total_claimed_ytd, total_annual_premium)."""
+    """Returns (loss_ratio, total_claimed_ytd, total_annual_premium).
+
+    Safe-division: with no active policies (or all $0 premium), total_premium is 0 —
+    falls back to a ratio of 0.0 rather than raising ZeroDivisionError, matching the same
+    "no data -> 0.0" convention used by calculate_loss_ratio_trend below. See
+    test_calculate_loss_ratio_zero_premium_does_not_divide_by_zero in test_kpi.py."""
     year = year or date.today().year
     policies = db.scalars(select(models.InsurancePolicy)).all()
     total_premium = float(sum(p.annual_premium for p in policies))
