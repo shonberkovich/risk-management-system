@@ -35,12 +35,14 @@ resurfaces on every call until someone updates the underlying survey.
 """
 import hashlib
 import logging
+import time
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.integrations._http import IntegrationFetchError, get_json
 
 logger = logging.getLogger("rmis.integrations.gis")
 
@@ -137,3 +139,71 @@ def fetch_risk_layers(db: Session, property_ids: list[int] | None = None) -> lis
         len(rows), mismatches,
     )
     return rows
+
+
+# --- Real OSM Nominatim reverse geocoding — TODO_SPEC.md §12 -----------------
+# Everything above this line (fetch_risk_layers) stays the pre-existing
+# SIMULATED flood/climate-layer connector — see module docstring for why.
+# What follows is new: a REAL call to OpenStreetMap's Nominatim reverse-
+# geocoding service, per TODO_SPEC.md §12's explicit note that Nominatim
+# "explicitly needs no key" — the one connector in this whole package where a
+# free/public API's own usage policy is simple enough to just follow
+# directly (https://operations.osmfoundation.org/policies/nominatim/):
+# identify the client with a descriptive User-Agent (see _http.py's
+# USER_AGENT) and don't exceed ~1 request/second. `_min_interval_seconds`
+# below enforces that second part process-wide with a simple
+# last-call-timestamp guard — adequate for a single-instance course-project
+# backend; a real production deployment fielding concurrent requests across
+# multiple workers would need a shared rate limiter (e.g. Redis-backed)
+# instead of this in-process one.
+_NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+
+# Nominatim's usage policy asks for at most ~1 request/second from a single
+# client. Tracked at module scope (not per-call) so repeated calls within the
+# same process backing off correctly even across different property lookups.
+_min_interval_seconds = 1.0
+_last_call_monotonic: float | None = None
+
+
+def _respect_nominatim_rate_limit() -> None:
+    global _last_call_monotonic
+    now = time.monotonic()
+    if _last_call_monotonic is not None:
+        elapsed = now - _last_call_monotonic
+        if elapsed < _min_interval_seconds:
+            time.sleep(_min_interval_seconds - elapsed)
+    _last_call_monotonic = time.monotonic()
+
+
+def reverse_geocode(latitude: float, longitude: float) -> dict:
+    """Real call to OSM Nominatim's reverse-geocoding endpoint: converts a
+    GPS coordinate pair into a street address. Requests Hebrew results
+    (`accept-language=he`) since RMIS properties/incidents are Israel-based,
+    falling back to whatever language Nominatim has data in if Hebrew isn't
+    available for that point. Returns `{"status": "ok", "address": "..."}`
+    on success or `{"status": "unavailable", "address": None}` if the
+    service couldn't be reached or returned nothing usable — never raises,
+    so a reverse-geocoding failure can never turn an incident report into a
+    500 (see app/integrations/_http.py's module docstring for the same
+    convention applied consistently across this batch)."""
+    _respect_nominatim_rate_limit()
+    try:
+        payload = get_json(
+            _NOMINATIM_REVERSE_URL,
+            params={
+                "format": "jsonv2",
+                "lat": f"{latitude:.6f}",
+                "lon": f"{longitude:.6f}",
+                "accept-language": "he",
+                "zoom": 18,
+            },
+        )
+    except IntegrationFetchError as exc:
+        logger.warning("[OSM NOMINATIM] reverse geocode failed for (%s, %s): %s", latitude, longitude, exc)
+        return {"status": "unavailable", "address": None, "source_system": "OSM-NOMINATIM"}
+
+    address = payload.get("display_name") if isinstance(payload, dict) else None
+    if not address:
+        return {"status": "unavailable", "address": None, "source_system": "OSM-NOMINATIM"}
+
+    return {"status": "ok", "address": address, "source_system": "OSM-NOMINATIM"}

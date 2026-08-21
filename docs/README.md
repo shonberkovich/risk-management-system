@@ -26,8 +26,9 @@
 │  — see §5 for the full list                                     │
 │  ~15 services: kpi / cashflow / retention / simulation /        │
 │  financials / compliance / notifications / storage / auth /     │
-│  encryption / llm (Anthropic) + integrations/ (erp, gis,        │
-│  weather, economics)                                             │
+│  encryption / llm (Anthropic) + integrations/ (erp, weather —    │
+│  מסומלים; gis, economics — חלקית אמיתיים; home_front,            │
+│  seismology, environmental — אמיתיים, §9)                        │
 └───────────────────────┬─────────────────────────────────────────┘
                          │ pyodbc (ODBC Driver 17)
 ┌───────────────────────▼─────────────────────────────────────────┐
@@ -106,7 +107,7 @@
 | `retention.py` (`/api/retention`) | מחשבון "לספוג או לתבוע" (השתתפות עצמית) | קריאה פתוחה |
 | `financials.py` (`/api/financials`) | מגמות רב-שנתי + דוח רגולטורי (Solvency-style) + הזנת דוחות כספיים (`Financial_Statements`) | RISK_MANAGER/CFO/ADMIN |
 | `compliance.py` (`/api/compliance`) | דוח תאימות ISO 31000 | RISK_MANAGER/RISK_OFFICER/CFO/ADMIN |
-| `integrations.py` (`/api/integrations`) | ERP/GIS/מזג-אוויר/מדדים כלכליים (כולם מסומלים — ראו §8) | תלוי endpoint |
+| `integrations.py` (`/api/integrations`) | ERP/מזג-אוויר (מסומלים); GIS (שכבות סיכון — מסומל, reverse geocoding — **אמיתי**, OSM Nominatim); מדדים כלכליים (מדד בנייה — מסומל, שערי חליפין/אינפלציה — **אמיתי**, BOI PublicApi); התראות פיקוד העורף, רעידות אדמה (המכון הגיאולוגי), מפעלי חומ"ס (data.gov.il) — **כולם אמיתיים** (ר' §9) | תלוי endpoint |
 | `notifications.py` (`/api/notifications`) | ניתוב התראות Email/SMS/Push (מסומל) | RISK_MANAGER/CFO/ADMIN |
 | `audit.py` (`/api/audit-log`) | קריאה מיומן הביקורת, ADMIN-בלבד גם לקריאה | ADMIN (גם קריאה) |
 | `users.py` (`/api/users`) | רשימה פתוחה (UI pickers) + יצירה/עריכה/שינוי תפקיד/השבתה (`is_active`, נאכף מיידית גם על טוקן קיים) | ADMIN לכתיבה |
@@ -125,7 +126,9 @@ risk-management-system/
 │   │   ├── routers/         # 20 routers — ראו §6 לרשימה המלאה
 │   │   ├── services/        # kpi, cashflow, retention, simulation, financials,
 │   │   │                    # compliance, notifications, storage, auth, encryption, llm
-│   │   ├── integrations/    # erp.py, gis.py, weather.py, economics.py (מסומלים, §9)
+│   │   ├── integrations/    # erp.py, weather.py — מסומלים; gis.py, economics.py —
+│   │   │                    #   בסיסם מסומל + נוסף אליהם חיבור אמיתי (Nominatim / BOI);
+│   │   │                    #   home_front.py, seismology.py, environmental.py — אמיתיים (§9)
 │   │   ├── middleware/      # audit.py — AuditLogMiddleware
 │   │   ├── dependencies/    # permissions.py — get_current_user / require_roles
 │   │   └── seed.py          # נתוני דמו (Python/pyodbc — לא sqlcmd, ר' §10)
@@ -175,7 +178,7 @@ npm run dev
 
 רוב הפריטים שתועדו כאן בגרסאות קודמות של המסמך מומשו בפועל לאורך [TODO_SPEC.md](../TODO_SPEC.md) (RBAC, Audit Log, הצפנה, VaR, ERP/GIS, offline sync, PDF export, העלאת מדיה אמיתית — כולם קיימים כעת). מה שנשאר מחוץ להיקף בכוונה, כי הוא מעבר להיקף דמו לקורס:
 
-- **כל אינטגרציית `backend/app/integrations/*` (ERP, GIS/Govmap, מזג-אוויר, מדדים כלכליים) מסומלת (`simulate=True`)** — אין credentials/API keys אמיתיים לספקים חיצוניים אלה בסביבה זו; כל מודול כתוב כך שקל להחליף בקריאת HTTP אמיתית ביום שיהיו פרטי חיבור.
+- **`backend/app/integrations/erp.py` ו-`weather.py` נשארות מסומלות במלואן** — אין credentials/API אמיתי ל-ERP (SAP/Priority) או לספק מזג-אוויר מסחרי בסביבה זו; כל מודול כתוב כך שקל להחליף בקריאת HTTP אמיתית ביום שיהיו פרטי חיבור. **עדכון (TODO_SPEC.md §12):** חמישה חיבורים אחרים **כן** בוצעו כקריאות HTTP אמיתיות לשירותים ציבוריים/חינמיים שאינם דורשים מפתח — `gis.py`'s `reverse_geocode` (OSM Nominatim), `economics.py`'s `fetch_boi_market_data` (Bank of Israel PublicApi — שערי חליפין ואינפלציה; מדד עלויות הבנייה המקורי ב-`fetch_index_series` נשאר מסומל), ושלושה מודולים חדשים לגמרי: `home_front.py` (התראות פיקוד העורף), `seismology.py` (המכון הגיאולוגי), `environmental.py` (מפעלי חומ"ס מ-data.gov.il). כל חמשת אלה עוטפים כל קריאה יוצאת ב-`app/integrations/_http.py` המשותף — timeout קצר, ותרגום כל כשל רשת/JSON ל-degradation נקי (`status="unavailable"`) במקום 500, כדי שסביבת פיתוח ללא גישה לאינטרנט (כמו סביבת ה-sandbox שבה פותח שינוי זה) לא תפיל את השרת. בדיקות ה-pytest של חמשת אלה ממוקות (`monkeypatch`) ואינן תלויות בגישה חיה לאינטרנט.
 - **שליחה בפועל של Email/SMS/Push** (`services/notifications.py::dispatch_notifications`) — מדמה שליחה (רושמת ל-log, `status="simulated"`), אין ספק חיצוני מוגדר.
 - **אחסון קבצים אמיתי בענן** (`services/storage.py`) — שומר לתיקייה מקומית `backend/media_storage/` ומחתים URL-ים בעצמו, במקום S3/Blob אמיתי (אין credentials בסביבה).
 - **SSO/OAuth2/SAML אמיתי** (`routers/auth.py` sso endpoints) — שלד בלבד, מחזיר `501` כברירת מחדל (`SSO_ENABLED=false`), אין IdP זמין לבדיקה.

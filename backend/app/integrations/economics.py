@@ -40,8 +40,108 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.integrations._http import IntegrationFetchError, get_json
 
 logger = logging.getLogger("rmis.integrations.economics")
+
+# --- Real Bank of Israel (BOI) public API — TODO_SPEC.md §12 -----------------
+# Everything above this line (fetch_index_series / fetch_replacement_value_updates)
+# stays the pre-existing SIMULATED construction-cost index — see module docstring
+# for why replacement-value revaluation deliberately uses a construction-input
+# index rather than general CPI. What follows is new: a REAL call to the Bank of
+# Israel's public "PublicApi" (https://boi.org.il/PublicApi/...), a genuinely free,
+# keyless JSON API BOI publishes for exchange rates and the Consumer Price Index —
+# unlike the other four connectors in this package, this one already had a
+# simulated sibling in this same file, so it's added here rather than a new module,
+# per TODO_SPEC.md §12's own file mapping ("backend/app/integrations/economics.py").
+#
+# GetExchangeRate returns the current representative rate for one ILS-quoted
+# currency; GetInflation returns BOI's published year-over-year inflation
+# reading, which this module surfaces as `cpi_yoy_percent` (BOI's public API does
+# not expose a raw CPI index level the way CBS's own API does — the y/y reading is
+# what BOI itself publishes as "inflation", and it is the number a real
+# replacement-value/CPI-linked-clause review would actually look at).
+#
+# This is a live public endpoint reached from a sandboxed course-project dev
+# environment that may not have outbound internet access at all — every call
+# below is wrapped so a timeout/DNS failure/unexpected response shape degrades to
+# a `status="unavailable"` row instead of ever letting an unreachable BOI service
+# 500 this app (same convention as `app/integrations/_http.py`'s module docstring
+# describes, and the same "AI features degrade gracefully without a key" spirit
+# CLAUDE.md documents for routers/ai.py — the difference here is there's no key to
+# check for; the endpoint itself is what might be unavailable).
+_BOI_BASE_URL = "https://boi.org.il/PublicApi"
+
+# BOI's currency parameter for GetExchangeRate — ISO 4217 codes, USD/EUR being the
+# two a replacement-value review in Israel would actually care about (a shekel-
+# denominated policy revalued against import-heavy construction costs).
+_BOI_EXCHANGE_RATE_CURRENCIES = ("USD", "EUR")
+
+
+def fetch_boi_market_data() -> dict:
+    """Real call to the Bank of Israel's public API for the current USD/EUR
+    representative exchange rates and the latest published y/y inflation
+    (CPI) reading — see the module-level comment above for exactly what BOI
+    publishes and why. Returns one row per requested series regardless of
+    whether the call actually succeeded; a failed series is reported with
+    `status="unavailable"` and `value=None` rather than raising, so a BOI
+    outage never turns into a 500 for whoever calls this."""
+    rows = []
+    for currency in _BOI_EXCHANGE_RATE_CURRENCIES:
+        rows.append(_fetch_boi_series(
+            series_name=f"exchange_rate_{currency.lower()}",
+            url=f"{_BOI_BASE_URL}/GetExchangeRate",
+            params={"key": currency},
+            value_keys=("currentExchangeRate", "rate", "exchangeRate", "value"),
+            unit=f"ILS per {currency}",
+        ))
+    rows.append(_fetch_boi_series(
+        series_name="cpi_yoy_percent",
+        url=f"{_BOI_BASE_URL}/GetInflation",
+        params=None,
+        value_keys=("currentInflation", "inflation", "value"),
+        unit="% year-over-year",
+    ))
+
+    available = sum(1 for r in rows if r["status"] == "ok")
+    logger.info(
+        "[BOI PUBLIC API] fetched %d/%d series successfully",
+        available, len(rows),
+    )
+    return {"as_of": date.today().isoformat(), "series": rows, "source_system": "BOI-PUBLIC-API"}
+
+
+def _fetch_boi_series(*, series_name: str, url: str, params: dict | None, value_keys: tuple[str, ...], unit: str) -> dict:
+    """Fetches one BOI PublicApi series and normalizes it to a fixed row shape.
+    BOI's response field name isn't pinned down in a formal schema this
+    course project has a contract with, so `value_keys` is checked in order
+    and the first present key wins — if the payload shape ever changes
+    upstream, this degrades to `status="unavailable"` rather than raising."""
+    try:
+        payload = get_json(url, params=params)
+        value = None
+        for key in value_keys:
+            if isinstance(payload, dict) and key in payload and payload[key] is not None:
+                value = float(payload[key])
+                break
+        if value is None:
+            raise IntegrationFetchError(f"none of {value_keys} present in BOI response for {series_name}")
+        return {
+            "series": series_name,
+            "value": value,
+            "unit": unit,
+            "status": "ok",
+            "source_system": "BOI-PUBLIC-API",
+        }
+    except (IntegrationFetchError, TypeError, ValueError) as exc:
+        logger.warning("[BOI PUBLIC API] %s unavailable: %s", series_name, exc)
+        return {
+            "series": series_name,
+            "value": None,
+            "unit": unit,
+            "status": "unavailable",
+            "source_system": "BOI-PUBLIC-API",
+        }
 
 # Base period the simulated index series is anchored to (index = 100.0 at
 # this month). Arbitrary but fixed, so growth is always measured from the
