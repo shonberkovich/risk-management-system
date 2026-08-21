@@ -5,10 +5,22 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import settings
+from app.dependencies.permissions import require_roles
 from app.services import llm
 from app.services.rate_limit import enforce_ai_rate_limit
 
-router = APIRouter(prefix="/api/ai", tags=["ai"], dependencies=[Depends(enforce_ai_rate_limit)])
+# require_roles() with no args = authenticated, any role — classify-incident is used by
+# FIELD_WORKER while filing a report, ask/executive-summary by managers on the dashboard,
+# so this isn't role-restricted, just login-gated (see dependencies/permissions.py
+# docstring). Previously this router only had the IP-based rate limit and no auth
+# dependency at all, contradicting docs/README.md §6 which already described it as
+# "authenticated" — the frontend (api/client.ts) was already sending the bearer token on
+# every call in anticipation of this; only the backend enforcement was missing.
+router = APIRouter(
+    prefix="/api/ai",
+    tags=["ai"],
+    dependencies=[Depends(enforce_ai_rate_limit), Depends(require_roles())],
+)
 
 
 class ClassifyRequest(BaseModel):

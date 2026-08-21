@@ -57,13 +57,13 @@
 | **simulation** | כתיבה | — | — | — | — | — | — | — | — | אין endpoint כתיבה |
 | **retention** | קריאה (GET recommendation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `retention.py` — **אין כלל `require_roles`/`get_current_user`**, פתוח לגמרי |
 | **retention** | כתיבה | — | — | — | — | — | — | — | — | אין endpoint כתיבה |
-| **ai** — classify-incident / executive-summary / ask | קריאה+כתיבה | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `ai.py` — **אין כלל `require_roles`/`get_current_user`**; רק `enforce_ai_rate_limit` (מגבלת קצב לפי IP) |
+| **ai** — classify-incident / executive-summary / ask | קריאה+כתיבה | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `ai.py` — `Depends(require_roles())` (מחייב התחברות, כל תפקיד) + `enforce_ai_rate_limit` (מגבלת קצב לפי IP) |
 
 ---
 
-## תגלית מרכזית: `ai.py` פתוח לגמרי, לא "authenticated" כפי שתועד
+## תוקן: `ai.py` היה פתוח לגמרי, לא "authenticated" כפי שתועד
 
-`docs/README.md` §6 מתעד את `ai.py` כ-`authenticated` ב-RBAC. בדיקה ישירה של `backend/app/routers/ai.py` מראה **אין אף `Depends(require_roles(...))` או `Depends(get_current_user)`** על שלושת ה-endpoints (`classify-incident`, `executive-summary`, `ask`) — ה-`router` היחיד תלוי הוא `Depends(enforce_ai_rate_limit)` (הגבלת קצב לפי כתובת IP, `services/rate_limit.py`), שאינו בדיקת זהות/תפקיד. בפועל **כל קורא, כולל לא-מחובר, יכול לקרוא לשלושת יכולות ה-AI**, בכפוף למכסת הקצב. מסמך זה תיעד את המצב בפועל (שורה "ai" בטבלה למעלה), ולא את מה שתועד ב-README — מומלץ לעדכן את README או להוסיף `Depends(require_roles())` בפועל ל-`ai.py` בעבודה עתידית אם רוצים לסגור את הפער.
+`docs/README.md` §6 תיעד מאז ומתמיד את `ai.py` כ-`authenticated` ב-RBAC, אך עד לאחרונה `backend/app/routers/ai.py` לא אכף זאת בפועל — לא היה שם אף `Depends(require_roles(...))` או `Depends(get_current_user)` על שלושת ה-endpoints (`classify-incident`, `executive-summary`, `ask`), רק `Depends(enforce_ai_rate_limit)` (הגבלת קצב לפי כתובת IP, `services/rate_limit.py`), שאינו בדיקת זהות/תפקיד. תוקן ב-branch `feature/ai-endpoints-require-auth`: נוסף `Depends(require_roles())` (ללא ארגומנטים = מחייב התחברות בלבד, לא מוגבל לתפקיד ספציפי — תואם לכך שגם FIELD_WORKER וגם מנהלים משתמשים ביכולות האלה בפועל) ל-`router` כולו. הפרונטאנד (`api/client.ts`) כבר שלח את טוקן ה-Bearer בכל קריאה מראש (ראו ההערה שם), כך שהתיקון לא דרש שינוי צד-לקוח. נוספו טסטים ב-`backend/tests/test_api_ai_auth.py`.
 
 ## סטייה שנייה: `financials` ו-`analytics`-הפיננסי גודרים גם קריאה, לא רק כתיבה
 
