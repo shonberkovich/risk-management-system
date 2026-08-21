@@ -29,6 +29,7 @@ import {
   postErpClaimReceipts,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import BoiMarketDataCard from "../components/BoiMarketDataCard";
 import { formatDate, formatDateTime, formatIls, formatIlsCompact, formatPercent } from "../format";
 
 const ERP_ROLES = ["RISK_MANAGER", "CFO", "ADMIN"];
@@ -310,6 +311,8 @@ export default function Integrations() {
           )}
         </CardContent>
       </Card>
+
+      {canReadEconomics && <BoiMarketDataCard />}
 
       {canReadEconomics && (
         <Card variant="outlined">
