@@ -41,17 +41,18 @@
 
 ---
 
-### [ ] משימה 4: פיתוח סוכן נתונים חיצוניים (External Data Agent)
+### [x] משימה 4: פיתוח סוכן נתונים חיצוניים (External Data Agent)
 * **מהות המשימה (איזה חלק עושים)**: סוכן מיוחד שיודע לגשת לאינטגרציות חיצוניות ולנתח נתוני מאקרו (מזג אוויר, רעידות אדמה, סביבה, מדדים).
 * **מיקום במערכת**: Backend (Services).
 * **תיקיות וקבצים רלוונטיים להסתכל בהם**:
   - `backend/app/integrations/*` (קריאה בלבד)
   - יצירת קובץ חדש: `backend/app/services/agents/data_agent.py`
 * **שלבי ביצוע (Checklist)**:
-  - [ ] שלב 1: רישום הכלים (Tools) מתוך מודולי האינטגרציות עבור סוכן זה (Govmap, BOI, GSI וכו').
-  - [ ] שלב 2: הגדרת System Prompt לסוכן כאנליסט סיכוני מאקרו.
-  - [ ] שלב 3: כתיבת הפונקציה המבצעת שתקבל הוראה מה-Orchestrator, תפעיל כלים, ותחזיר סיכום מילולי מעובד.
+  - [x] שלב 1: רישום הכלים (Tools) מתוך מודולי האינטגרציות עבור סוכן זה (Govmap, BOI, GSI וכו').
+  - [x] שלב 2: הגדרת System Prompt לסוכן כאנליסט סיכוני מאקרו.
+  - [x] שלב 3: כתיבת הפונקציה המבצעת שתקבל הוראה מה-Orchestrator, תפעיל כלים, ותחזיר סיכום מילולי מעובד.
 * **קריטריוני הצלחה (Acceptance Criteria)**: הסוכן מסוגל לאסוף נתוני מזג אוויר וסייסמולוגיה עדכניים, להבין אותם, ולתת תחזית סיכונים קריאה וברורה בטקסט.
+  - ✅ בוצע ב-branch feature/external-data-agent: נוסף `backend/app/services/agents/data_agent.py` עם כלים (`@beta_tool`) שעוטפים את `app/integrations/{weather,seismology,gis,economics}.py` הקיימים (התרעות מזג אוויר, בולטין רעידות אדמה של GSI + חשיפת נכסים לאפיצנטר, שכבת אזורי הצפה/אקלים, מדדי מאקרו של בנק ישראל), System Prompt של אנליסט סיכוני מאקרו, ופונקציית `run_external_data_agent()` המפעילה `client.beta.messages.tool_runner`. הסוכן נרשם אוטומטית כ-`EXTERNAL_DATA_AGENT` ב-`ai_orchestrator.AGENT_REGISTRY` (דרך `register_agent()`, מיובא ב-`routers/ai.py`).
 
 ---
 
