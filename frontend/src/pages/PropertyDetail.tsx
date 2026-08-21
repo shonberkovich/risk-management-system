@@ -5,6 +5,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import EditIcon from "@mui/icons-material/Edit";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import PublicIcon from "@mui/icons-material/Public";
+import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import ShieldIcon from "@mui/icons-material/Shield";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
@@ -36,6 +37,7 @@ import {
   fetchDocumentSignedUrl,
   fetchDocumentsForEntity,
   fetchProperty,
+  fetchPropertyHazmatProximity,
   fetchReplacementValueUpdates,
   uploadDocument,
   type DocumentFile,
@@ -56,6 +58,10 @@ const PROPERTY_WRITE_ROLES = ["RISK_MANAGER", "PROPERTY_MANAGER", "ADMIN"];
 // from FIELD_WORKER (TODO_SPEC.md §14, "תצוגה מוסתרת ל-FIELD_WORKER"), not as the
 // actual enforcement (the endpoint itself 403s a FIELD_WORKER request regardless).
 const ECONOMICS_VIEW_ROLES = ["RISK_MANAGER", "CFO", "ADMIN"];
+// Same role set backend/app/routers/integrations.py enforces server-side for the GIS
+// endpoints (_GIS_ROLES) — mirrored here to hide the hazmat-proximity block from
+// roles that would get a 403 anyway (TODO_SPEC.md §3).
+const HAZMAT_VIEW_ROLES = ["RISK_MANAGER", "RISK_OFFICER", "ADMIN"];
 
 function RiskScoreRow({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   const color = value >= 4 ? "error.main" : value >= 3 ? "warning.main" : "success.main";
@@ -118,6 +124,7 @@ export default function PropertyDetail() {
   const { openWithProperty } = useAIAssistant();
   const canWrite = !!user && PROPERTY_WRITE_ROLES.includes(user.role);
   const canViewEconomics = !!user && ECONOMICS_VIEW_ROLES.includes(user.role);
+  const canViewHazmat = !!user && HAZMAT_VIEW_ROLES.includes(user.role);
 
   const [editOpen, setEditOpen] = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
@@ -146,6 +153,15 @@ export default function PropertyDetail() {
     queryKey: ["replacement-value-update", propertyId],
     queryFn: () => fetchReplacementValueUpdates(propertyId),
     enabled: !Number.isNaN(propertyId) && canViewEconomics,
+    select: (rows) => rows[0] ?? null,
+  });
+
+  // Real data.gov.il hazmat/dangerous-materials proximity check (TODO_SPEC.md §3) —
+  // only fetched for roles allowed to see it server-side anyway (_GIS_ROLES).
+  const hazmatProximity = useQuery({
+    queryKey: ["property-hazmat-proximity", propertyId],
+    queryFn: () => fetchPropertyHazmatProximity(propertyId),
+    enabled: !Number.isNaN(propertyId) && canViewHazmat,
     select: (rows) => rows[0] ?? null,
   });
 
@@ -212,6 +228,15 @@ export default function PropertyDetail() {
               {!p.is_active && " · מושבת"}
             </Typography>
           </Box>
+          {hazmatProximity.data?.within_hazard_radius && (
+            <Chip
+              size="small"
+              color="error"
+              icon={<ReportProblemIcon />}
+              label="בטווח סכנה ממפעל מסוכן"
+              sx={{ fontWeight: 700 }}
+            />
+          )}
         </Stack>
         <Stack direction="row" spacing={1}>
           <Tooltip title="פותח את עוזר ה-AI עם ההקשר של הנכס הזה כדי לנתח סיכון ותאימות">
@@ -470,6 +495,56 @@ export default function PropertyDetail() {
           </Card>
         </Grid>
       </Grid>
+
+      {canViewHazmat && (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+              <ReportProblemIcon fontSize="small" sx={{ verticalAlign: "middle", marginInlineEnd: 0.5 }} />
+              קרבה למפעלים וחומרים מסוכנים (data.gov.il)
+            </Typography>
+            {hazmatProximity.isLoading ? (
+              <CircularProgress size={20} />
+            ) : hazmatProximity.data?.nearest_site ? (
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    מפעל קרוב ביותר
+                  </Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{hazmatProximity.data.nearest_site.name}</Typography>
+                  {hazmatProximity.data.nearest_site.address && (
+                    <Typography variant="caption" color="text.secondary">
+                      {hazmatProximity.data.nearest_site.address}
+                    </Typography>
+                  )}
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    מרחק
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    {hazmatProximity.data.distance_km != null ? `${hazmatProximity.data.distance_km.toFixed(2)} ק"מ` : "—"}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    סטטוס
+                  </Typography>
+                  {hazmatProximity.data.within_hazard_radius ? (
+                    <Chip size="small" color="error" icon={<ReportProblemIcon />} label="בתוך רדיוס הסכנה" />
+                  ) : (
+                    <Chip size="small" color="success" variant="outlined" label="מחוץ לרדיוס הסכנה" />
+                  )}
+                </Grid>
+              </Grid>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                לא נמצאו מפעלים או אתרי חומרים מסוכנים בקרבת הנכס.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card variant="outlined">
         <CardContent>

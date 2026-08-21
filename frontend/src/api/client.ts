@@ -1243,3 +1243,26 @@ export const reverseGeocode = (latitude: number, longitude: number) =>
   api
     .get<ReverseGeocodeResult>("/integrations/gis/reverse-geocode", { params: { latitude, longitude } })
     .then((r) => r.data);
+
+export interface HazmatSite {
+  name: string;
+  latitude: number;
+  longitude: number;
+  address: string | null;
+}
+
+export interface PropertyHazmatProximity {
+  property_id: number;
+  property_code: string;
+  name: string;
+  within_hazard_radius: boolean;
+  distance_km: number | null;
+  nearest_site: HazmatSite | null;
+}
+
+export const fetchPropertyHazmatProximity = (propertyId?: number) =>
+  api
+    .get<PropertyHazmatProximity[]>("/integrations/environmental/property-hazmat-proximity", {
+      params: propertyId != null ? { property_id: propertyId } : undefined,
+    })
+    .then((r) => r.data);
