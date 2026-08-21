@@ -1,72 +1,96 @@
-# 1. Database & Models (בסיס נתונים)
-- [x] טיפול מלא במחיקות מקושרות (Cascading Deletes)
-  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: נוספו `ondelete="CASCADE"` ל-FK-ים של Incidents/Policy_Assets/Mitigation_Tasks/Incident_Media (תלויים ב-Properties/Incidents) ושל Claims/Claim_Payments/Claim_Reserves (תלויים ב-Incidents/Claims), עם `passive_deletes=True` ביחסי ה-collection המתאימים כדי שה-DB יבצע את המחיקה במקום ה-ORM.
-  - **מה צריך לממש:** הוספת הגדרות `ondelete="CASCADE"` במודלים של SQLAlchemy עבור ישויות התלויות בנכסים (כמו אירועים, פוליסות ומשימות מיטיגציה) כדי למנוע שגיאות Foreign Key במידה ומוחקים נכס.
-  - **הרשאות:** שקוף למשתמש, קשור להרשאות מחיקת נכס (`ADMIN`, `RISK_MANAGER`).
-  - **קובץ/תיקייה:** `backend/app/models.py`
-- [x] מניעת תאריכים עתידיים בדיווחים (באג לוגי)
-  - **מה צריך לממש:** הוספת ולידציה מובנית (ברמת Pydantic ואכיפה ב-DB) שחוסמת דיווח על תאריך התרחשות אירוע נזק (`incident_timestamp`) עתידי ביחס לזמן השרת.
-  - **הרשאות:** חל על כל התפקידים המדווחים (כולל `FIELD_WORKER`).
-  - **קובץ/תיקייה:** `backend/app/schemas.py`
-  - ✅ בוצע ב-branch feature/pydantic-date-amount-validation: נוספה פונקציית ולידציה משותפת (`_reject_future_timestamp`) עם `field_validator` על `incident_timestamp` ב-`IncidentCreate` ו-`IncidentUpdate`, שחוסמת תאריך עתידי ביחס לזמן השרת ב-UTC.
-- [x] חסימת ערכים כספיים שליליים (באג לוגי)
-  - **מה צריך לממש:** ולידציה המונעת הזנת ערכים שליליים בסכומי אומדן נזק (`initial_estimated_loss`), תביעות (`claimed_amount`), השתתפות עצמית, או רזרבות.
-  - **הרשאות:** חל על כל התפקידים המורשים להזין נתונים פיננסיים ותפעוליים.
-  - **קובץ/תיקייה:** `backend/app/schemas.py` ו-`backend/app/models.py`
-  - ✅ בוצע ב-branch feature/pydantic-date-amount-validation: נוסף `Field(ge=0, ...)` על שדות כספיים ב-`backend/app/schemas.py` — `initial_estimated_loss` (IncidentCreate/Update), `claimed_amount`/`deductible_applied` (ClaimCreate), `approved_amount` (ClaimUpdate), `reserve_amount` (ClaimReserveCreate/Update), `deductible_default` (PolicyCreate/Update) ו-`specific_deductible` (PolicyAssetCreate), החוסם ערכים שליליים ב-422 (models.py לא נגע).
+# תוכנית עבודה מקיפה: ארכיטקטורת סוכני AI (AI Agents Architecture)
 
-# 2. Backend / צד שרת
-[x] קריסות בפענוח נתונים מוצפנים מה-Seed
-  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: `seed.py` עכשיו מזריק את Insurance_Policies/Policy_Assets/Claims/Claim_Payments (השדות המוצפנים: per_event_limit, specific_deductible, adjuster_name, reference_number) דרך session של ה-ORM (SQLAlchemy) במקום INSERT גולמי ב-pyodbc, כך שההצפנה של EncryptedString אכן רצה בכתיבה.
-  - **מה צריך לממש:** תיקון מנגנון ההזרקה של נתוני הדמו כך ששדות מוצפנים (כמו פרטי שמאי) יעברו דרך שכבת ה-ORM להצפנה מלאה, במקום שימוש ב-pyodbc גולמי ששומר טקסט חשוף ומפיל את הדוחות הפיננסיים (כמו דוח ה-Exposure).
-  - **הרשאות:** פנימי למערכת (תהליך הפעלת/איתחול הסביבה).
-  - **קובץ/תיקייה:** `backend/app/seed.py`
-- [x] חסימת Rate Limit גלובלית שגויה
-  - **מה צריך לממש:** תיקון מנגנון ה-Rate Limit של שירות ה-AI כך שיזהה משתמשים לפי כתובת אמיתית (`X-Forwarded-For`) או לפי מזהה משתמש בטוקן ה-JWT, למניעת חסימת כלל הארגון כאשר כולם תחת אותו רשת/פרוקסי.
-  - **הרשאות:** פנימי למערכת, רלוונטי לכל משתמשי ה-AI.
-  - **קובץ/תיקייה:** `backend/app/services/rate_limit.py` או `backend/app/routers/ai.py`
-  - ✅ בוצע ב-branch feature/loss-ratio-safe-div-and-ai-rate-limit-fix: מנגנון ה-Rate Limit מזהה כעת את המשתמש לפי מזהה מפוענח מתוך טוקן ה-JWT (`Authorization: Bearer`), ורק אם אין טוקן תקף נופל חזרה לכתובת ה-IP האמיתית מתוך `X-Forwarded-For` (ה-IP הראשון ברשימה), ורק אם גם זה חסר — ל-`request.client.host`. כך משתמש/כתובת בודדים כבר לא חוסמים את כלל המשתמשים האחרים תחת אותו פרוקסי.
-- [x] Race Conditions ביצירת אירועים/תביעות
-  - **מה צריך לממש:** יישום מנגנון אידמפוטנטיות (Idempotency Key) או שימוש בנעילה למניעת פתיחת רשומות כפולות (תביעות כפולות לאותו אירוע בדיוק) במידה ויש שתי לחיצות/בקשות מהירות במקביל.
-  - **הרשאות:** רלוונטי לבעלי הרשאות יצירה (`RISK_MANAGER`, `FIELD_WORKER` וכו').
-  - **קובץ/תיקייה:** `backend/app/routers/claims.py` ו-`backend/app/routers/incidents.py`
-  ✅ בוצע ב-branch feature/idempotent-claims-incidents-creation: נוספה תמיכה בכותרת `Idempotency-Key` (עם מטמון תהליך בזיכרון בעל TTL) ב-`POST /api/incidents` וב-`POST /api/claims`, ובנוסף בדיקת כפילות לפי מפתח טבעי (נכס+סוג אירוע/מזהה אירוע+פוליסה, בחלון של כמה שניות) כאשר לא נשלחת כותרת. כל בדיקת הכפילות וההכנסה לטבלה רצות תחת נעילת `threading.Lock` אחת כדי לסגור את חלון ה-TOCTOU בין הבדיקה להכנסה.
-- [x] חלוקה באפס בחישובי מדדים (באג לוגי)
-  - **מה צריך לממש:** טיפול בשגיאת חלוקה באפס בעת חישוב `Loss Ratio` (יחס נזקים) אם סך הפרמיות (Premiums) ששולמו עדיין שווה לאפס במאגר הנתונים. יש להחזיר ערך ברירת מחדל בטוח כדי לא לקרוס עם 500.
-  - **הרשאות:** רלוונטי לכל מי שצופה ב-KPIs פיננסיים.
-  - **קובץ/תיקייה:** `backend/app/services/kpi.py`
-  - ✅ בוצע ב-branch feature/loss-ratio-safe-div-and-ai-rate-limit-fix: אומתה ותועדה ההגנה הקיימת ב-`calculate_loss_ratio` ו-`calculate_loss_ratio_trend` — כאשר סך הפרמיות (`total_premium`) הוא אפס, מוחזר יחס 0.0 (בהתאם לדפוס "ברירת מחדל בטוחה" הנהוג במודול הזה) במקום לקרוס עם ZeroDivisionError/500. מכוסה בבדיקה הקיימת test_calculate_loss_ratio_zero_premium_does_not_divide_by_zero.
-- [x] סנכרון ופערי אזורי זמן (Timezone) (באג לוגי)
-  ✅ בוצע ב-branch feature/cascading-deletes-utc-timestamps-seed-encryption: נוסף helper `_utcnow()` ב-`models.py` (מחזיר datetime naive ב-UTC) והוגדר כ-`default` עבור כל עמודות ה-"created_at"/"updated_at"/"timestamp"/"sent_at"/"captured_at"/"uploaded_at", כדי שברירת המחדל ברמת המודל תמיד תהיה UTC טהור; נוספה גם הערה ליד `incident_timestamp` שמבהירה שגם הוא חייב להתקבל כ-UTC נורמלי מהקורא.
-  - **מה צריך לממש:** הבטחה שכל התאריכים (כמו `incident_timestamp` ו-`created_at`) נשמרים כ-UTC טהור במסד, ומוחזרים באופן תקני ל-Frontend לצורך המרה לשעון המקומי, כדי למנוע הזזת אירועים ליום קודם/הבא סביב חצות.
-  - **הרשאות:** שקוף למשתמש, משפיע על כלל העובדים.
-  - **קובץ/תיקייה:** `backend/app/models.py` ו-`backend/app/schemas.py`
+מסמך זה מכיל את כל המשימות הנדרשות לפיתוח ושילוב מערך סוכני ה-AI במערכת, מקצה לקצה (מסד נתונים, צד שרת וצד לקוח).
 
-# 3. Integrations / אינטגרציות (שירותים ציבוריים חינמיים)
-- [x] אובדן סנכרון תקלות בנפילת ERP מדומה
-  - **מה צריך לממש:** הוספת מנגנון כשל רך או תור (Retry/Queue) פנימי לפונקציה שפותחת כרטיס תחזוקה ב-ERP בעת דיווח אירוע קריטי, כך שהבקשה לא תלך לאיבוד במקרה של ניתוק זמני בלוגיקת הסימולציה.
-  - **הרשאות:** פנימי למערכת (מופעל תחת Trigger אוטומטי).
-  - **קובץ/תיקייה:** `backend/app/integrations/erp.py` ו-`backend/app/routers/incidents.py`
-  - ✅ בוצע ב-branch feature/integrations-retry-queue-and-safe-parsing: `open_maintenance_ticket` ב-`erp.py` עוטפת את קריאת הפתיחה ב-retry עם backoff אקספוננציאלי (עד 3 ניסיונות), ואם כל הניסיונות נכשלים היא לא זורקת חריגה — מתעדת שגיאה ברמת ERROR ומכניסה את הכרטיס לתור פנימי בזיכרון (`_pending_tickets`), עם `retry_pending_tickets()`/`get_pending_tickets()` לניסיון חוזר מאוחר יותר.
-- [x] שגיאות Parsing בנתוני שירותים ציבוריים (באג לוגי)
-  - **מה צריך לממש:** הגנה מפני קריסות `ValueError` וגישה לשדות חסרים (Missing Keys/Nulls) בעת ניתוח קובצי ה-JSON/טקסט שחוזרים משירותים שאינם דורשים הרשמה (בנק ישראל, פיקוד העורף, gov.il). יש לדאוג ל-Fallback ערכי גם כששדה ספציפי משתנה או חסר במקור.
-  - **הרשאות:** שקוף למשתמש.
-  - **קובץ/תיקייה:** קבצי האינטגרציות תחת `backend/app/integrations/` ו-`_http.py`
-  - ✅ בוצע ב-branch feature/integrations-retry-queue-and-safe-parsing: חוזק `environmental.py` (data.gov.il) מול מפתחות JSON שקיימים אך עם ערך `null` (לא רק חסרים) — `_find_datastore_resource_id`/`fetch_hazmat_sites` עברו ל-`or {}`/`or []` בכל שלב בשרשרת ולא רק `.get(key, default)`, ו-`_extract_site` מוגנת מפני שורה שאינה dict. שאר קבצי האינטגרציות (economics/BOI, home_front/פיקוד העורף, seismology/GSI, gis/Nominatim) נבדקו ונמצאו כבר עטופים כראוי ב-`.get()`/try-except עם ערכי ברירת מחדל.
+**הפרומפט להעתקה לפיתוח כל משימה (יש להדביק לפני כל סעיף שמעבירים ל-AI):**
+> "עליך לממש את המשימה הבאה במערכת ה-RMIS. קרא היטב את תבנית המשימה וודא שאתה פועל בדיוק לפי השלבים המפורטים. אל תשנה קוד בקבצים שאינם מופיעים תחת 'תיקיות וקבצים רלוונטיים להסתכל בהם' אלא אם זה נדרש אדריכלית על מנת למנוע שבירת קוד, ובמקרה כזה הסבר מדוע השינוי חיוני. בסיום, וודא שכל סעיף מסומן ב-'[x]' לאחר שהושלם ונבדק."
 
-# 4. Frontend / ממשק משתמש
-- [x] קפיאת מוטציות (Mutations) בהיעדר רשת
-  - **מה צריך לממש:** הגדרת `networkMode: 'always'` במוטציות הקשורות למסמכים ולמדיה כדי שה-Mutation תמיד ירוץ וייפול פנימה לתור ה-Offline המקומי, במקום להיתקע במצב Pending נצחי ב-TanStack v5 בעת אובדן רשת.
-  - **הרשאות:** זמין לכל משתמש קצה (בדגש על `FIELD_WORKER`).
-  - **קובץ/תיקייה:** `frontend/src/components/MediaUploader.tsx` ו-`frontend/src/offline/syncQueue.ts`
-  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: `saveDraftMutation`/`submitMutation` ב-`IncidentReport.tsx` (המוטציות בפועל בזרימת המדיה/הטיוטות — `MediaUploader.tsx` עצמו לא מריץ מוטציות, רק אוסף קבצים מקומית) מוגדרות עם `networkMode: 'always'`, וה-`onError`/catch שלהן נופל לתור `enqueueIncidentReport`/`enqueueDraftUpdate`/`enqueueDraftSubmit`/`enqueueMediaUpload` ב-`syncQueue.ts`.
-- [x] חפיפת Popups וניווט רפאים במפה (Risk Map)
-  - **מה צריך לממש:** ניהול נכון של חלונות המידע ב-React Leaflet, כך שלחיצות מהירות לא ישאירו שאריות ב-DOM שיגרמו ללחיצה על "תיק נכס" לנווט לנכס הלא נכון מהלחיצה הקודמת.
-  - **הרשאות:** בעלי הרשאת צפייה במפה (`RISK_MANAGER`, `ADMIN`, `CFO`).
-  - **קובץ/תיקייה:** `frontend/src/components/RiskMap.tsx`
-  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: נוסף state יחיד (`selectedPropertyId`) שעוקב אחר סמן הנכס שנבחר, סגירת ה-Popup הפתוח דרך `mapRef.current.closePopup()` לפני פתיחת חדש, וכפתור "מעבר לתיק הנכס" קורא את מזהה הנכס מה-state הנוכחי במקום מ-closure שעלול להיות מיושן.
-- [x] ולידציית טווחי תאריכים בבחירת פוליסות (באג לוגי)
-  - **מה צריך לממש:** אכיפה ב-UI שתאריך סיום (`end_date`) של פוליסה או דוח חייב להיות מאוחר מתאריך ההתחלה (`start_date`), כולל חסימה ויזואלית בפקד לוח השנה.
-  - **הרשאות:** כלל המשתמשים המזינים פוליסות ומפיקים דוחות.
-  - **קובץ/תיקייה:** `frontend/src/components/PolicyDialog.tsx` וקומפוננטות רלוונטיות נוספות
-  - ✅ בוצע ב-branch feature/frontend-offline-mutations-map-popups-policy-dates: נוספה ולידציית `end_date > start_date` עם הודעת שגיאה מוצגת inline (`helperText`/`error` ב-`TextField`), `min` על שדה תאריך הסיום שחוסם בפקד לוח השנה בחירת תאריך על/לפני תאריך ההתחלה, וחסימת שליחת הטופס כל עוד הטווח לא תקין (`canSubmit`).
+---
+
+### [ ] משימה 1: תשתיות מסד נתונים וזיכרון לסוכנים (Database & Context Memory)
+* **מהות המשימה (איזה חלק עושים)**: יצירת טבלאות מודלים לשמירת היסטוריית השיחות עם הסוכנים (Sessions) ולוג פעולות שהסוכנים ביצעו, כדי לאפשר זיכרון לטווח קצר וארוך (Long/Short-term Context).
+* **מיקום במערכת**: Backend (Models & Database).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `backend/app/models.py`
+  - `backend/app/schemas.py`
+  - `backend/alembic/` (יצירת מיגרציה)
+  - `backend/sql/schema.sql` (סנכרון סכמה למאגר חדש)
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: הוספת מודל `Agent_Sessions` ב-`models.py` שיכלול `session_id`, `user_id`, `context_data` (JSON), ו-`created_at/updated_at`.
+  - [ ] שלב 2: הוספת מודל `Agent_Actions_Log` לתיעוד פעולות עצמאיות של הסוכן (למשל פתיחת טיוטת אירוע), מקושר ל-`Agent_Sessions`.
+  - [ ] שלב 3: הוספת Pydantic Schemas מתאימים ב-`schemas.py` עבור המודלים החדשים.
+  - [ ] שלב 4: הפקת מיגרציית Alembic (`alembic revision --autogenerate`) ועדכון ידני של `schema.sql`.
+* **קריטריוני הצלחה (Acceptance Criteria)**: המסד עולה בהצלחה, ניתן לשמור ולשלוף היסטוריית שיחות והקשר (Context) עבור משתמש ספציפי, ומיגרציית Alembic עוברת ללא שגיאות.
+
+---
+
+### [ ] משימה 2: הנתב הראשי - Agent Orchestrator
+* **מהות המשימה (איזה חלק עושים)**: בניית מנגנון הניתוב הלוגי שיקבל בקשות ממשתמשים או מטריגרים במערכת, יבין את הכוונה (Intent) וינתב לסוכן הרלוונטי (Orchestration).
+* **מיקום במערכת**: Backend (Services).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `backend/app/services/llm.py`
+  - יצירת קובץ חדש: `backend/app/services/ai_orchestrator.py`
+  - `backend/app/routers/ai.py`
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: יצירת מחלקת `AgentOrchestrator` ב-`ai_orchestrator.py` המנהלת את ה-State של הבקשה.
+  - [ ] שלב 2: שילוב Anthropic Structured Outputs כדי לנתח את הבקשה ולהחזיר JSON שמגדיר איזה סוכן צריך לפעול (למשל: `DATA_AGENT`, `COMPLIANCE_AGENT`).
+  - [ ] שלב 3: הרחבת התקשורת ב-`routers/ai.py` שתעבוד מול ה-Orchestrator במקום ישירות מול פונקציות בודדות.
+* **קריטריוני הצלחה (Acceptance Criteria)**: שליחת פקודה טקסטואלית דרך ה-API מחזירה החלטת ניתוב נכונה (לדוגמה, השאלה "מה הסטטוס של תקן ISO בנכס 1?" תנותב לסוכן ה-Compliance).
+
+---
+
+### [ ] משימה 4: פיתוח סוכן נתונים חיצוניים (External Data Agent)
+* **מהות המשימה (איזה חלק עושים)**: סוכן מיוחד שיודע לגשת לאינטגרציות חיצוניות ולנתח נתוני מאקרו (מזג אוויר, רעידות אדמה, סביבה, מדדים).
+* **מיקום במערכת**: Backend (Services).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `backend/app/integrations/*` (קריאה בלבד)
+  - יצירת קובץ חדש: `backend/app/services/agents/data_agent.py`
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: רישום הכלים (Tools) מתוך מודולי האינטגרציות עבור סוכן זה (Govmap, BOI, GSI וכו').
+  - [ ] שלב 2: הגדרת System Prompt לסוכן כאנליסט סיכוני מאקרו.
+  - [ ] שלב 3: כתיבת הפונקציה המבצעת שתקבל הוראה מה-Orchestrator, תפעיל כלים, ותחזיר סיכום מילולי מעובד.
+* **קריטריוני הצלחה (Acceptance Criteria)**: הסוכן מסוגל לאסוף נתוני מזג אוויר וסייסמולוגיה עדכניים, להבין אותם, ולתת תחזית סיכונים קריאה וברורה בטקסט.
+
+---
+
+### [ ] משימה 5: פיתוח סוכן אופרטיבי ותאימות (Action & Compliance Agent)
+* **מהות המשימה (איזה חלק עושים)**: סוכן בעל הרשאות לביצוע פעולות (פתיחת טיוטות) וניתוח תאימות מול התקנים והדוחות הקיימים. Human-in-the-loop.
+* **מיקום במערכת**: Backend (Services).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `backend/app/services/compliance.py`
+  - יצירת קובץ חדש: `backend/app/services/agents/action_agent.py`
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: הנגשת כלי המערכת הפנימיים (Tools) כמו יצירת טיוטת `Incident`, יצירת משימת `Mitigation_Task` וקריאת דוחות `compliance`.
+  - [ ] שלב 2: הגדרת System Prompt לסוכן כקצין ציות וסיכונים (Risk Officer).
+  - [ ] שלב 3: כתיבת מנגנון בו הסוכן ממליץ על פעולה (ומחזיר אותה כ-JSON), אך אינו מבצע קומיט סופי עד לאישור משתמש (פרט ליצירת "טיוטות").
+* **קריטריוני הצלחה (Acceptance Criteria)**: כאשר המערכת מזהה נכס שחורג מתאימות, הסוכן מפיק המלצה ליצירת משימת מיטיגציה ובונה את ה-Payload המתאים להכנה לאישור משתמש.
+
+---
+
+### [ ] משימה 6: צד לקוח - ממשק תקשורת וצ'אט סוכנים (Frontend Chat UI)
+* **מהות המשימה (איזה חלק עושים)**: פיתוח ממשק משתמש (UI) מתקדם ורספונסיבי המאפשר למשתמשים לשוחח עם ה-Orchestrator ולקבל תוצרים ב-Streaming.
+* **מיקום במערכת**: Frontend (Components & Pages).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `frontend/src/api/client.ts` (חיבור ל-Endpoints החדשים)
+  - יצירת קובץ חדש: `frontend/src/components/AIAssistant/AIAssistant.tsx`
+  - `frontend/src/layouts/MainLayout.tsx` (הוספת ה-Widget / Sidebar)
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: יצירת פונקציות קריאה לשרת ב-`client.ts` לתמיכה בצ'אט רב-שלבי (העברת `session_id`).
+  - [ ] שלב 2: עיצוב ובניית הקומפוננטה `AIAssistant.tsx` (תיבת טקסט, הצגת הודעות, אינדיקציה לכך שהסוכן "חושב" או "מפעיל כלים").
+  - [ ] שלב 3: תמיכה ב-Server-Sent Events (SSE) או קריאת זרם (Stream) כדי שהתשובה תופיע באופן הדרגתי (כמו ב-ChatGPT).
+  - [ ] שלב 4: שילוב ה-AI Assistant לתוך ה-Layout הראשי כך שיהיה נגיש מכל מסך במערכת.
+* **קריטריוני הצלחה (Acceptance Criteria)**: משתמש יכול לפתוח צ'אט, להקליד שאלה, ולראות את התשובה נכתבת בזמן אמת, כולל חיווי ויזואלי כאשר הסוכן משתמש בכלים (למשל: "מחפש נתוני מזג אוויר...").
+
+---
+
+### [ ] משימה 7: צד לקוח - מנגנון Human-in-the-loop ו"כפתורי קסם" (Contextual AI)
+* **מהות המשימה (איזה חלק עושים)**: הוספת UI לאישור פעולות שהסוכן הציע (כמו פתיחת טיוטה), והוספת פעולות AI מהירות במסכים ספציפיים.
+* **מיקום במערכת**: Frontend (Components).
+* **תיקיות וקבצים רלוונטיים להסתכל בהם**:
+  - `frontend/src/components/AIAssistant/AIAssistant.tsx` (הרחבה לכרטיסיות פעולה)
+  - `frontend/src/pages/PropertyDetails.tsx` (או מסכי נכסים אחרים)
+* **שלבי ביצוע (Checklist)**:
+  - [ ] שלב 1: פיתוח "כרטיס פעולה" (Action Card) בתוך ממשק הצ'אט שמופיע כאשר הסוכן מציע פעולה (לדוגמה: "האם ליצור משימת הפחתת סיכונים? [אשר] / [בטל]").
+  - [ ] שלב 2: כפתור אישור שמפעיל את בקשת ה-Mutation ב-React Query שמבצעת את הפעולה בפועל.
+  - [ ] שלב 3: במסך פרטי נכס, הוספת כפתור "נתח סיכונים באמצעות AI" שיפתח את הצ'אט ויזריק באופן אוטומטי את ההקשר (Context) של מזהה הנכס הנוכחי.
+* **קריטריוני הצלחה (Acceptance Criteria)**: הסוכן שולח הצעה לפתיחת משימה; מוצג למשתמש כרטיס עם כפתור אישור; הלחיצה יוצרת משימה בפועל ומרעננת את מסך המשימות. לחיצה מתוך תיק נכס מעבירה לסוכן את הקשר הנכס המדויק מבלי שהמשתמש יצטרך לציין את מזהה הנכס.
