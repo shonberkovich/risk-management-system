@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, selectinload
 from app import models, schemas
 from app.config import settings
 from app.database import get_db
-from app.dependencies.permissions import require_roles
+from app.dependencies.permissions import get_current_user, require_roles
 from app.integrations import erp, gis, seismology
+from app.services import email as email_service
 from app.services import notifications
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -273,6 +274,22 @@ def get_incident_drilldown(incident_id: int, db: Session = Depends(get_db)):
         "claims": claims,
         "documents": documents,
     }
+
+
+@router.get("/{incident_id}/emails", response_model=list[schemas.EntityLinkedEmailOut])
+def list_incident_emails(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 11" step 3/4 — email threads linked to this
+    incident (POST /api/emails/{id}/link), scoped to threads the *current
+    user* can actually see (see services/email.list_linked_threads_for_entity
+    — entity linking is never a way to bypass mailbox-recipient privacy)."""
+    if db.get(models.Incident, incident_id) is None:
+        raise HTTPException(404, "Incident not found")
+    links = email_service.list_linked_threads_for_entity(db, "INCIDENT", incident_id, current_user.user_id)
+    return [email_service.to_entity_linked_email_out(link) for link in links]
 
 
 @router.post("", response_model=schemas.IncidentOut, status_code=201)

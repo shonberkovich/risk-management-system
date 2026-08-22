@@ -37,6 +37,9 @@ vi.mock("../api/client", () => ({
   fetchDocumentsForEntity: fetchDocumentsForEntityMock,
   fetchProperty: fetchPropertyMock,
   fetchReplacementValueUpdates: fetchReplacementValueUpdatesMock,
+  // Task 11: PropertyDetail's "תקשורת" section always fetches linked email
+  // threads for the property, regardless of role.
+  fetchEntityEmails: vi.fn().mockResolvedValue([]),
   uploadDocument: vi.fn(),
   sendAgentChatMessage: sendAgentChatMessageMock,
   proposeMitigationTask: proposeMitigationTaskMock,

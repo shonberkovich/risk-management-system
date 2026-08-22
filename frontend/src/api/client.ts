@@ -1354,3 +1354,48 @@ export const uploadEmailAttachments = (emailId: number, files: File[]) => {
 // download_url/storage_key/expires_at) is identical for every entity type.
 export const fetchEmailAttachmentSignedUrl = (attachmentId: number) =>
   api.get<SignedUrl>(`/emails/attachments/${attachmentId}/signed-url`).then((r) => r.data);
+
+// --- Contextual entity linking (TODO_SPEC.md "משימה 11", mirrors backend/app/schemas.py's
+// EntityEmail* schemas — see routers/emails.py's link_email_to_entity / routers/incidents.py
+// (claims.py/properties.py)'s list_*_emails module docstrings for the endpoint contracts) ---
+
+// Deliberately narrower than DocumentEntityType above (no "POLICY") — mirrors
+// schemas.EntityEmailEntityType / models.EntityEmail's docstring.
+export type EntityEmailEntityType = "INCIDENT" | "CLAIM" | "PROPERTY";
+
+export interface EntityEmailLink {
+  id: number;
+  email_id: number; // always the thread's root email_id
+  entity_type: EntityEmailEntityType;
+  entity_id: number;
+  linked_by: number;
+  linked_at: string;
+  auto_linked: boolean;
+}
+
+/** One row of GET /api/{incidents|claims|properties}/{id}/emails — a linked
+ * thread's summary plus the link's own metadata. Click through to /emails
+ * (with `email_id`) to read the actual thread. */
+export interface EntityLinkedEmail {
+  email_id: number;
+  subject: string;
+  created_at: string;
+  sender: User;
+  linked_by: User;
+  linked_at: string;
+  auto_linked: boolean;
+}
+
+export const linkEmailToEntity = (emailId: number, entityType: EntityEmailEntityType, entityId: number) =>
+  api
+    .post<EntityEmailLink>(`/emails/${emailId}/link`, { entity_type: entityType, entity_id: entityId })
+    .then((r) => r.data);
+
+const ENTITY_EMAILS_PATH: Record<EntityEmailEntityType, string> = {
+  INCIDENT: "incidents",
+  CLAIM: "claims",
+  PROPERTY: "properties",
+};
+
+export const fetchEntityEmails = (entityType: EntityEmailEntityType, entityId: number) =>
+  api.get<EntityLinkedEmail[]>(`/${ENTITY_EMAILS_PATH[entityType]}/${entityId}/emails`).then((r) => r.data);

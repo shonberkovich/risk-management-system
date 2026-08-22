@@ -31,6 +31,7 @@ import {
   type EmailListItem,
 } from "../api/client";
 import EmailComposeModal from "../components/EmailComposeModal";
+import EmailEntityLinkControl from "../components/EmailEntityLinkControl";
 import EmailSidebar from "../components/EmailSidebar";
 import { formatDateTime } from "../format";
 
@@ -125,6 +126,7 @@ function EmailThreadView({ emailId }: { emailId: number }) {
 
   return (
     <Stack spacing={2}>
+      <EmailEntityLinkControl emailId={thread.data.root.email_id} />
       {thread.data.messages.map((message) => (
         <EmailMessageCard key={message.email_id} message={message} />
       ))}

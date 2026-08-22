@@ -4,6 +4,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
 import EditIcon from "@mui/icons-material/Edit";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
+import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import PublicIcon from "@mui/icons-material/Public";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import ShieldIcon from "@mui/icons-material/Shield";
@@ -36,17 +37,19 @@ import {
   deleteDocument,
   fetchDocumentSignedUrl,
   fetchDocumentsForEntity,
+  fetchEntityEmails,
   fetchProperty,
   fetchPropertyHazmatProximity,
   fetchReplacementValueUpdates,
   uploadDocument,
   type DocumentFile,
+  type EntityLinkedEmail,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useAIAssistant } from "../components/AIAssistant/AIAssistantContext";
 import PropertyDialog from "../components/PropertyDialog";
 import RiskSurveyDialog from "../components/RiskSurveyDialog";
-import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatIls, formatIlsCompact } from "../format";
+import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatDateTime, formatIls, formatIlsCompact } from "../format";
 
 const DOC_TYPE_OPTIONS = Object.keys(DOCUMENT_TYPE_LABELS);
 // Same ADMIN/RISK_MANAGER/PROPERTY_MANAGER write-role set backend/app/routers/properties.py
@@ -118,6 +121,24 @@ function DocumentRow({ doc, onDelete, canWrite }: { doc: DocumentFile; onDelete:
   );
 }
 
+function EntityEmailRow({ email }: { email: EntityLinkedEmail }) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center">
+      <MailOutlineIcon fontSize="small" color="action" />
+      <Typography variant="body2" sx={{ flex: 1 }}>
+        {email.subject}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        {email.sender.full_name} · {formatDateTime(email.created_at)}
+      </Typography>
+      {email.auto_linked && <Chip size="small" variant="outlined" label="קושר אוטומטית" />}
+      <Link href="/emails" variant="caption">
+        פתיחה בתיבת הדואר
+      </Link>
+    </Stack>
+  );
+}
+
 /** Full property drill-down (TODO_SPEC.md §5, "ניהול נכסים ותיק נכס") — the active
  * policy, documents, and risk survey for one property, plus edit/deactivate actions.
  * Risk-survey create/update is handled by RiskSurveyDialog.tsx (TODO_SPEC.md's next item),
@@ -150,6 +171,16 @@ export default function PropertyDetail() {
   const documents = useQuery({
     queryKey: ["documents", "entity", "PROPERTY", propertyId],
     queryFn: () => fetchDocumentsForEntity("PROPERTY", propertyId),
+    enabled: !Number.isNaN(propertyId),
+  });
+
+  // TODO_SPEC.md "משימה 11" step 4 — "תקשורת" section: email threads linked to
+  // this property via POST /api/emails/{id}/link, scoped server-side to
+  // threads the current user can actually see (see
+  // services/email.list_linked_threads_for_entity's docstring).
+  const entityEmails = useQuery({
+    queryKey: ["entity-emails", "PROPERTY", propertyId],
+    queryFn: () => fetchEntityEmails("PROPERTY", propertyId),
     enabled: !Number.isNaN(propertyId),
   });
 
@@ -609,6 +640,28 @@ export default function PropertyDetail() {
           ) : (
             <Typography variant="body2" color="text.secondary">
               לא צורפו מסמכים לנכס זה עדיין.
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+            <MailOutlineIcon fontSize="small" sx={{ verticalAlign: "middle", marginInlineEnd: 0.5 }} />
+            תקשורת ({entityEmails.data?.length ?? 0})
+          </Typography>
+          {entityEmails.isLoading ? (
+            <CircularProgress size={20} />
+          ) : (entityEmails.data ?? []).length > 0 ? (
+            <Stack spacing={0.75}>
+              {(entityEmails.data ?? []).map((e) => (
+                <EntityEmailRow key={e.email_id} email={e} />
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              לא קושרו תכתובות דוא"ל לנכס זה עדיין. ניתן לקשר שרשור מייל לנכס מתוך תיבת הדואר.
             </Typography>
           )}
         </CardContent>

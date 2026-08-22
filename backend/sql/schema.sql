@@ -16,6 +16,7 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Entity_Emails', 'U') IS NOT NULL DROP TABLE dbo.Entity_Emails;
 IF OBJECT_ID('dbo.Email_Attachments', 'U') IS NOT NULL DROP TABLE dbo.Email_Attachments;
 IF OBJECT_ID('dbo.Email_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Email_Recipients;
 IF OBJECT_ID('dbo.Emails', 'U') IS NOT NULL DROP TABLE dbo.Emails;
@@ -522,4 +523,30 @@ CREATE TABLE dbo.Email_Attachments (
 );
 GO
 CREATE INDEX IX_EmailAttachments_Email ON dbo.Email_Attachments(email_id);
+GO
+
+-- ============================================================================
+-- Entity_Emails — contextual link between an email thread and an
+-- Incident/Claim/Property (TODO_SPEC.md "משימה 11"). email_id always stores
+-- the THREAD ROOT's email_id (never an individual reply's id) — see the
+-- EntityEmail model's docstring in app/models.py for the full rationale.
+-- auto_linked distinguishes a link created by the optional subject-line
+-- auto-detector (step 5) from one a user created via POST
+-- /api/emails/{id}/link.
+-- ============================================================================
+IF OBJECT_ID('dbo.Entity_Emails', 'U') IS NOT NULL DROP TABLE dbo.Entity_Emails;
+GO
+CREATE TABLE dbo.Entity_Emails (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    email_id        BIGINT NOT NULL REFERENCES dbo.Emails(email_id),
+    entity_type     NVARCHAR(20) NOT NULL
+        CHECK (entity_type IN ('INCIDENT','CLAIM','PROPERTY')),
+    entity_id       BIGINT NOT NULL,
+    linked_by       BIGINT NOT NULL REFERENCES dbo.Users(user_id),
+    linked_at       DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    auto_linked     BIT NOT NULL DEFAULT 0,
+    CONSTRAINT UQ_EntityEmails_EmailEntity UNIQUE (email_id, entity_type, entity_id)
+);
+GO
+CREATE INDEX IX_EntityEmails_Entity ON dbo.Entity_Emails(entity_type, entity_id);
 GO
