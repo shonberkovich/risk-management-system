@@ -1,5 +1,6 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -17,10 +18,13 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Popover from "@mui/material/Popover";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -28,6 +32,7 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
@@ -39,6 +44,7 @@ import {
   fetchEmailAttachmentSignedUrl,
   fetchEmailThread,
   fetchEmails,
+  fetchEmailTracking,
   fetchLabels,
   fetchScheduledEmails,
   markEmailRead,
@@ -123,6 +129,87 @@ function AttachmentChip({ attachmentId, fileName }: { attachmentId: number; file
   );
 }
 
+/** TODO_SPEC.md "משימה 19" steps 3-5 — the double-checkmark read-receipt icon,
+ * shown only on a message the *current user sent* with a receipt requested
+ * (`message.read_receipt_requested`). Fetches GET /{id}/tracking (sender-only
+ * on the backend — see routers/emails.py's `get_email_tracking`) to learn
+ * each recipient's `read_at`.
+ *
+ * The icon is colored (primary) once *every* recipient has read the message,
+ * and stays grey/disabled otherwise — mirroring WhatsApp's own group-chat
+ * convention for its blue double-check: a mixed "some read, some not" state
+ * is a real, worth-distinguishing intermediate, not the same as "everyone's
+ * seen it" (for a single recipient this collapses to the obvious "read" vs
+ * "not read yet").
+ *
+ * Hovering shows a `Tooltip` (step 4) with the exact read time for a single
+ * recipient, or a short "X מתוך Y נמענים קראו" summary for several — clicking
+ * always opens a `Popover` (step 5) listing every recipient's own status/time,
+ * regardless of recipient count, so the full breakdown is never more than one
+ * click away. */
+function ReadReceiptIndicator({ message }: { message: Email }) {
+  const { user: me } = useAuth();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const enabled = me != null && message.sender.user_id === me.user_id && message.read_receipt_requested;
+
+  const tracking = useQuery({
+    queryKey: ["email-tracking", message.email_id],
+    queryFn: () => fetchEmailTracking(message.email_id),
+    enabled,
+  });
+
+  if (!enabled) return null;
+
+  const recipients = tracking.data?.recipients ?? [];
+  const readCount = recipients.filter((r) => r.read_at !== null).length;
+  const allRead = recipients.length > 0 && readCount === recipients.length;
+
+  const tooltipTitle =
+    recipients.length === 0
+      ? "טוען נתוני קריאה..."
+      : recipients.length === 1
+        ? recipients[0].read_at
+          ? `נקרא ב-${formatDateTime(recipients[0].read_at)}`
+          : "טרם נקרא"
+        : `${readCount} מתוך ${recipients.length} נמענים קראו`;
+
+  return (
+    <>
+      <Tooltip title={tooltipTitle}>
+        <IconButton
+          size="small"
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          aria-label="סטטוס אישור קריאה"
+          data-testid={`read-receipt-icon-${message.email_id}`}
+          // Plain data attribute (not a CSS-class assertion) so tests can check the
+          // read/unread visual state without depending on MUI's internal class names.
+          data-all-read={allRead}
+        >
+          <DoneAllIcon fontSize="small" color={allRead ? "primary" : "disabled"} />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={anchorEl !== null}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        transformOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <List dense sx={{ minWidth: 220 }} data-testid={`read-receipt-list-${message.email_id}`}>
+          {recipients.map((r) => (
+            <ListItem key={`${r.recipient_type}-${r.user.user_id}`}>
+              <ListItemText
+                primary={r.user.full_name}
+                secondary={r.read_at ? `נקרא ב-${formatDateTime(r.read_at)}` : "טרם נקרא"}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Popover>
+    </>
+  );
+}
+
 function EmailMessageCard({ message }: { message: Email }) {
   const toNames = message.recipients.filter((r) => r.recipient_type === "TO").map((r) => r.user.full_name);
   const ccNames = message.recipients.filter((r) => r.recipient_type === "CC").map((r) => r.user.full_name);
@@ -131,9 +218,12 @@ function EmailMessageCard({ message }: { message: Email }) {
     <Card variant="outlined">
       <CardContent>
         <Stack spacing={0.5} sx={{ mb: 1.5 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {message.subject}
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              {message.subject}
+            </Typography>
+            <ReadReceiptIndicator message={message} />
+          </Stack>
           <Typography variant="body2" color="text.secondary">
             מאת: {message.sender.full_name} · {formatDateTime(message.created_at)}
           </Typography>

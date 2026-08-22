@@ -1275,13 +1275,19 @@ class EmailCreate(BaseModel):
     intermediate reply — see the Email model's docstring in models.py), so the Task 3
     service must resolve `in_reply_to` to *that* email's thread root (its own
     thread_id if set, else its own email_id) before writing the new Email row's
-    thread_id. Leaving `in_reply_to` unset starts a new thread."""
+    thread_id. Leaving `in_reply_to` unset starts a new thread.
+
+    `read_receipt_requested` (TODO_SPEC.md "משימה 19" step 2) is the compose-time
+    "בקש אישור קריאה" checkbox. Defaults False (opt-in); see models.Email's
+    docstring for why this only gates the Sent-folder receipt *UI* and not
+    whether `EmailRecipient.read_at` itself gets tracked (it always does)."""
     to: list[int]
     cc: list[int] = []
     bcc: list[int] = []
     subject: str
     body_html: str
     in_reply_to: int | None = None
+    read_receipt_requested: bool = False
 
 
 class EmailAttachmentOut(BaseModel):
@@ -1298,12 +1304,23 @@ class EmailAttachmentOut(BaseModel):
 class EmailRecipientOut(BaseModel):
     """One delivery record for display alongside an email: who it went to (with
     name/role via UserOut), as which kind of recipient, and that copy's read/folder
-    state."""
+    state.
+
+    `read_at` (TODO_SPEC.md "משימה 19") is the first-read timestamp — see
+    models.EmailRecipient's docstring. Present on this shared schema so a
+    recipient's own row can echo back their own read state, but
+    routers/emails.py's `_to_email_out` redacts it to None on every *other*
+    recipient's row unless the viewer is the email's sender — same
+    non-disclosure posture as the BCC filtering right next to it
+    (`_visible_recipients`): a TO/CC participant must not be able to see
+    when their fellow recipients opened the message, only the sender can
+    (via this field or the dedicated GET /{id}/tracking endpoint)."""
     model_config = ConfigDict(from_attributes=True)
     user: UserOut
     recipient_type: EmailRecipientType
     is_read: bool
     folder: EmailFolder
+    read_at: datetime | None = None
 
 
 class EmailOut(BaseModel):
@@ -1321,6 +1338,10 @@ class EmailOut(BaseModel):
     # models.EmailLabel's docstring: always resolved off the thread root,
     # regardless of which specific message in the thread `email_id` above is).
     labels: list[LabelOut] = []
+    # TODO_SPEC.md "משימה 19" step 2 — echoes whether the sender requested a
+    # read receipt on this message; the frontend only renders the
+    # double-checkmark receipt icon (steps 3-5) when this is True.
+    read_receipt_requested: bool = False
 
 
 class EmailThreadOut(BaseModel):
@@ -1339,6 +1360,33 @@ class MarkAsRead(BaseModel):
     defaulted) since this schema exists specifically to set the flag one way or the
     other — unread-again included, not just "mark read"."""
     is_read: bool
+
+
+class EmailTrackingRecipientOut(BaseModel):
+    """One row of GET /api/emails/{id}/tracking (TODO_SPEC.md "משימה 19" step
+    3/5): a single recipient's read status. `read_at` NULL means "hasn't
+    opened it yet" — the frontend's recipient-breakdown popover (step 5)
+    splits on exactly that to build its "read" vs. "not yet" lists."""
+    model_config = ConfigDict(from_attributes=True)
+    user: UserOut
+    recipient_type: EmailRecipientType
+    read_at: datetime | None = None
+
+
+class EmailTrackingOut(BaseModel):
+    """Response body for GET /api/emails/{id}/tracking — sender-only (see
+    routers/emails.py's `_require_sender`/module docstring: 404, not 403, for
+    "not yours or doesn't exist", same non-disclosure convention as every
+    other per-email endpoint in that router). `read_receipt_requested` echoes
+    the sending choice (TODO_SPEC.md step 2) so the frontend can decide
+    whether to surface this data at all — `EmailRecipient.read_at` itself is
+    tracked unconditionally (see models.EmailRecipient's docstring), so this
+    endpoint always returns real per-recipient data even for a message that
+    didn't request a receipt; the *UI* is what treats
+    `read_receipt_requested=False` as "don't show the receipt icon"."""
+    email_id: int
+    read_receipt_requested: bool
+    recipients: list[EmailTrackingRecipientOut]
 
 
 class MoveToFolder(BaseModel):

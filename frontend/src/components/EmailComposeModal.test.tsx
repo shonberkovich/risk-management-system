@@ -174,6 +174,81 @@ describe("EmailComposeModal", () => {
     expect(within(pending).getByText(/photo\.png/)).toBeInTheDocument();
   });
 
+  // -------------------------------------------------------------------------
+  // Read receipts (TODO_SPEC.md "משימה 19" step 2)
+  // -------------------------------------------------------------------------
+  describe("read receipt checkbox", () => {
+    it("is unchecked by default and omits read_receipt_requested from the send payload when left unchecked", async () => {
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      sendEmailMock.mockResolvedValue({ email_id: 1 });
+      renderModal();
+
+      expect(screen.getByTestId("read-receipt-checkbox")).not.toBeChecked();
+
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "נושא");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ read_receipt_requested: false }));
+    });
+
+    it("checking 'בקש אישור קריאה' sends read_receipt_requested: true", async () => {
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      sendEmailMock.mockResolvedValue({ email_id: 1 });
+      renderModal();
+
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "נושא");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+      await ue.click(screen.getByTestId("read-receipt-checkbox"));
+      expect(screen.getByTestId("read-receipt-checkbox")).toBeChecked();
+
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ read_receipt_requested: true }));
+    });
+
+    it("resets to unchecked on a fresh compose after being checked previously", async () => {
+      function Wrapper() {
+        const [open, setOpen] = useState(true);
+        return (
+          <>
+            <button onClick={() => setOpen(true)}>reopen</button>
+            <EmailComposeModal open={open} onClose={() => setOpen(false)} onReopen={() => setOpen(true)} />
+          </>
+        );
+      }
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <Wrapper />
+        </QueryClientProvider>,
+      );
+
+      await userEvent.click(await screen.findByTestId("read-receipt-checkbox"));
+      expect(screen.getByTestId("read-receipt-checkbox")).toBeChecked();
+
+      // Cancel (a plain cancel, not undo-send) and reopen fresh — the checkbox
+      // must not silently stay checked into an unrelated new draft.
+      await userEvent.click(screen.getByRole("button", { name: "ביטול" }));
+      await waitForElementToBeRemoved(() => screen.queryByText("מייל חדש"));
+      await userEvent.click(screen.getByRole("button", { name: "reopen" }));
+
+      expect(await screen.findByTestId("read-receipt-checkbox")).not.toBeChecked();
+    });
+  });
+
   it("pre-fills recipients/subject/body when opened in reply mode via initialTo/initialSubject/initialBody", async () => {
     renderModal({ initialTo: [2], initialSubject: "Re: תביעה מס' 5", initialBody: "טיוטת תשובה", inReplyTo: 7 });
 

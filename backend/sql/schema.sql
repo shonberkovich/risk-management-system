@@ -500,7 +500,8 @@ CREATE TABLE dbo.Emails (
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
     status          NVARCHAR(20) NOT NULL DEFAULT 'SENT',  -- SENT or SCHEDULED (TODO_SPEC.md §13)
     scheduled_for        DATETIME2 NULL,       -- future send time for status='SCHEDULED' rows; NULL otherwise (§13)
-    scheduled_recipients NVARCHAR(MAX) NULL    -- JSON {"to":[...],"cc":[...],"bcc":[...]} until it actually sends (§13); see app/models.py's Email docstring
+    scheduled_recipients NVARCHAR(MAX) NULL,   -- JSON {"to":[...],"cc":[...],"bcc":[...]} until it actually sends (§13); see app/models.py's Email docstring
+    read_receipt_requested BIT NOT NULL DEFAULT 0  -- §19: gates the Sent-folder receipt UI only, not tracking itself (see app/models.py's Email docstring)
 );
 GO
 CREATE INDEX IX_Emails_Sender ON dbo.Emails(sender_id);
@@ -518,7 +519,8 @@ CREATE TABLE dbo.Email_Recipients (
         CHECK (recipient_type IN ('TO','CC','BCC')),
     is_read         BIT NOT NULL DEFAULT 0,
     folder          NVARCHAR(20) NOT NULL DEFAULT 'INBOX'
-        CHECK (folder IN ('INBOX','SENT','ARCHIVE','TRASH','SPAM'))   -- SENT: sender's own copy (see task 3 step 3), not in the spec's literal folder list
+        CHECK (folder IN ('INBOX','SENT','ARCHIVE','TRASH','SPAM')),   -- SENT: sender's own copy (see task 3 step 3), not in the spec's literal folder list
+    read_at         DATETIME2 NULL   -- §19: set once, the first time is_read flips True; never cleared on unread (see app/models.py's EmailRecipient docstring)
 );
 GO
 CREATE INDEX IX_EmailRecipients_Email ON dbo.Email_Recipients(email_id);

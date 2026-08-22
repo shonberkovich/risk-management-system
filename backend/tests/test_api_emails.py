@@ -138,6 +138,117 @@ def test_move_folder_not_yours_returns_404(client, make_user):
     assert resp.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# Read receipts (TODO_SPEC.md "משימה 19")
+# ---------------------------------------------------------------------------
+
+
+def test_send_email_with_read_receipt_requested(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    payload = {
+        "to": [to_user.user_id],
+        "subject": "עם אישור קריאה",
+        "body_html": "<p>x</p>",
+        "read_receipt_requested": True,
+    }
+    resp = client.post("/api/emails", json=payload, headers=auth_headers(sender))
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["read_receipt_requested"] is True
+
+
+def test_send_email_without_read_receipt_defaults_false(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    resp = _send(client, auth_headers(sender), to=[to_user.user_id])
+    assert resp.status_code == 201
+    assert resp.json()["read_receipt_requested"] is False
+
+
+def test_tracking_endpoint_shows_per_recipient_status(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    cc_user = make_user(role="CFO")
+    sender_headers = auth_headers(sender)
+
+    email_id = _send(
+        client, sender_headers, to=[to_user.user_id], cc=[cc_user.user_id]
+    ).json()["email_id"]
+
+    # Before anyone opens it: nobody has a read_at yet.
+    resp = client.get(f"/api/emails/{email_id}/tracking", headers=sender_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["email_id"] == email_id
+    assert {r["user"]["user_id"] for r in body["recipients"]} == {to_user.user_id, cc_user.user_id}
+    assert all(r["read_at"] is None for r in body["recipients"])
+
+    # The TO recipient opens the thread (GET /{id} marks-as-read happens via
+    # the frontend's own mark-read call, not implicitly on GET — mirror that
+    # explicitly here).
+    to_headers = auth_headers(to_user)
+    client.get(f"/api/emails/{email_id}", headers=to_headers)
+    client.patch(f"/api/emails/{email_id}/read", json={"is_read": True}, headers=to_headers)
+
+    resp2 = client.get(f"/api/emails/{email_id}/tracking", headers=sender_headers)
+    by_user = {r["user"]["user_id"]: r for r in resp2.json()["recipients"]}
+    assert by_user[to_user.user_id]["read_at"] is not None
+    assert by_user[cc_user.user_id]["read_at"] is None
+
+
+def test_tracking_endpoint_sender_only_returns_404_for_others(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    bystander = make_user(role="CFO")
+    email_id = _send(client, auth_headers(sender), to=[to_user.user_id]).json()["email_id"]
+
+    # Not even the recipient themselves can see the tracking breakdown.
+    resp = client.get(f"/api/emails/{email_id}/tracking", headers=auth_headers(to_user))
+    assert resp.status_code == 404
+
+    resp2 = client.get(f"/api/emails/{email_id}/tracking", headers=auth_headers(bystander))
+    assert resp2.status_code == 404
+
+
+def test_tracking_endpoint_requires_auth(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    email_id = _send(client, auth_headers(sender), to=[to_user.user_id]).json()["email_id"]
+
+    resp = client.get(f"/api/emails/{email_id}/tracking")
+    assert resp.status_code == 401
+
+
+def test_tracking_endpoint_nonexistent_email_returns_404(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    resp = client.get("/api/emails/999999/tracking", headers=auth_headers(sender))
+    assert resp.status_code == 404
+
+
+def test_recipient_read_at_redacted_from_non_sender_view(client, make_user):
+    """TODO_SPEC.md "משימה 19" — a TO/CC recipient must not learn when a fellow
+    recipient opened the message via the ordinary thread view; only the
+    sender sees every row's real read_at (here, or via /tracking)."""
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    cc_user = make_user(role="CFO")
+    email_id = _send(client, auth_headers(sender), to=[to_user.user_id], cc=[cc_user.user_id]).json()["email_id"]
+
+    to_headers = auth_headers(to_user)
+    client.patch(f"/api/emails/{email_id}/read", json={"is_read": True}, headers=to_headers)
+
+    # cc_user views the thread: their own row shows nothing (never read it),
+    # and the TO recipient's row must be redacted, not showing the real time.
+    cc_view = client.get(f"/api/emails/{email_id}", headers=auth_headers(cc_user)).json()
+    recipients = {r["user"]["user_id"]: r for r in cc_view["messages"][0]["recipients"]}
+    assert recipients[to_user.user_id]["read_at"] is None
+
+    # The sender, however, sees the real read_at.
+    sender_view = client.get(f"/api/emails/{email_id}", headers=auth_headers(sender)).json()
+    sender_recipients = {r["user"]["user_id"]: r for r in sender_view["messages"][0]["recipients"]}
+    assert sender_recipients[to_user.user_id]["read_at"] is not None
+
+
 def test_get_nonexistent_email_returns_404(client, make_user):
     user = make_user(role="RISK_MANAGER")
     resp = client.get("/api/emails/999999", headers=auth_headers(user))

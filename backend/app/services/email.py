@@ -295,6 +295,7 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate, status: str =
         body_html=sanitize_body_html(email_in.body_html),
         thread_id=thread_id,
         status=status,
+        read_receipt_requested=email_in.read_receipt_requested,
     )
     db.add(email)
     db.flush()  # assigns email.email_id so the recipient rows below can reference it
@@ -565,12 +566,49 @@ def trash_email(db: Session, email_id: int, user_id: int) -> models.EmailRecipie
 def mark_as_read(db: Session, email_id: int, user_id: int, is_read: bool) -> models.EmailRecipient:
     """Sets `user_id`'s copy of `email_id` read/unread. `is_read` is required
     (not just "mark read") — mirrors schemas.MarkAsRead, which supports marking a
-    message unread again too."""
+    message unread again too.
+
+    TODO_SPEC.md "משימה 19" step 1: `read_at` is stamped the *first* time this
+    row transitions to `is_read=True` — `row.read_at is None` is exactly that
+    "never read before" condition, since it starts NULL and is never reset once
+    set. Toggling back to unread (`is_read=False`) intentionally leaves
+    `read_at` untouched: a read receipt records the first open, matching real
+    email clients — the sender should still know it *was* opened at that
+    original time even if the recipient later marks it unread again."""
     row = _get_recipient_row(db, email_id, user_id)
     row.is_read = is_read
+    if is_read and row.read_at is None:
+        row.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(row)
     return row
+
+
+def get_tracking(db: Session, email_id: int, sender_id: int) -> list[models.EmailRecipient]:
+    """TODO_SPEC.md "משימה 19" step 3 — per-recipient read status for a message
+    `sender_id` sent: who has read it and when, who hasn't yet. Sender-only by
+    construction (raises the same bare `ValueError` every other sender-scoped
+    service function in this module raises — e.g. `cancel_scheduled_email` —
+    for the router to turn into a 404, same non-disclosure convention as
+    `_get_recipient_row`/module docstring: "not yours or doesn't exist" must
+    look identical to a caller outside the email's mailbox).
+
+    Excludes the sender's own folder="SENT" copy — that row is always
+    is_read=True/read_at=None (see `_fan_out_recipients`) and isn't a
+    "recipient" for tracking purposes; showing it in the breakdown would just
+    be noise (the sender obviously "read" their own outgoing message).
+    Filtered on `folder != "SENT"` rather than `user_id != sender_id`: a
+    sender who addressed themselves as a real TO/CC/BCC recipient gets a
+    second, genuine folder="INBOX" row for that (see `SENDER_COPY_RECIPIENT_TYPE`'s
+    docstring — recipient_type alone can't tell the two rows apart, since the
+    auto-generated SENT copy reuses "TO"), and that row *should* still show up
+    here. Returns every real TO/CC/BCC recipient's row regardless of
+    `read_at`, sender's call on how to render "not yet opened" (a NULL
+    read_at) vs. "opened at <read_at>"."""
+    email = db.get(models.Email, email_id)
+    if email is None or email.sender_id != sender_id:
+        raise ValueError("not found")
+    return [r for r in email.recipients if r.folder != "SENT"]
 
 
 def list_emails_for_user(

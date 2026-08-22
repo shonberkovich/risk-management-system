@@ -1315,6 +1315,13 @@ export interface EmailRecipient {
   recipient_type: EmailRecipientType;
   is_read: boolean;
   folder: EmailFolder;
+  /** TODO_SPEC.md "משימה 19" — first-read timestamp, or null if not read yet.
+   * The backend redacts this to null on every recipient row except the
+   * viewer's own unless the viewer is the email's sender (see
+   * routers/emails.py's `_to_email_out` docstring) — so on a thread you sent,
+   * every recipient's real `read_at` is visible here; on a thread you merely
+   * received, only your own row's `read_at` is. */
+  read_at: string | null;
 }
 
 /** TODO_SPEC.md "משימה 16" — a user-owned tag/custom folder. Mirrors
@@ -1339,6 +1346,11 @@ export interface Email {
    * thread root regardless of which message this is — see
    * models.EmailLabel's docstring on the backend). */
   labels: Label[];
+  /** TODO_SPEC.md "משימה 19" step 2 — whether the sender checked "בקש אישור
+   * קריאה" when sending this message. Gates the receipt UI only (the
+   * double-checkmark icon / tooltip / recipient-breakdown popover) — the
+   * backend tracks `read_at` on every recipient regardless of this flag. */
+  read_receipt_requested: boolean;
 }
 
 export interface EmailThread {
@@ -1369,6 +1381,9 @@ export interface EmailCreate {
   subject: string;
   body_html: string;
   in_reply_to?: number | null;
+  /** TODO_SPEC.md "משימה 19" step 2 — the compose-time "בקש אישור קריאה"
+   * checkbox. Omitted (backend defaults to false) when unchecked. */
+  read_receipt_requested?: boolean;
 }
 
 /** `q` (TODO_SPEC.md "משימה 10" step 4) is an optional free-text search over
@@ -1403,6 +1418,26 @@ export const uploadEmailAttachments = (emailId: number, files: File[]) => {
 // download_url/storage_key/expires_at) is identical for every entity type.
 export const fetchEmailAttachmentSignedUrl = (attachmentId: number) =>
   api.get<SignedUrl>(`/emails/attachments/${attachmentId}/signed-url`).then((r) => r.data);
+
+// --- Read receipts (TODO_SPEC.md "משימה 19", mirrors backend/app/schemas.py's
+// EmailTrackingOut/EmailTrackingRecipientOut). GET /{id}/tracking is
+// sender-only — routers/emails.py 404s (not 403) for any other caller, same
+// non-disclosure convention as every other per-email endpoint. ---
+
+export interface EmailTrackingRecipient {
+  user: User;
+  recipient_type: EmailRecipientType;
+  read_at: string | null;
+}
+
+export interface EmailTracking {
+  email_id: number;
+  read_receipt_requested: boolean;
+  recipients: EmailTrackingRecipient[];
+}
+
+export const fetchEmailTracking = (emailId: number) =>
+  api.get<EmailTracking>(`/emails/${emailId}/tracking`).then((r) => r.data);
 
 // --- AI thread summarize/suggest-reply (TODO_SPEC.md "משימה 15", mirrors
 // backend/app/routers/emails.py's EmailSummaryOut/EmailReplySuggestionOut).

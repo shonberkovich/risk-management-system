@@ -263,9 +263,21 @@ def _to_email_out(db: Session, email: models.Email, viewer_id: int) -> schemas.E
     re-sanitization of body_html (Task 10 step 2 — see services/email.py's
     sanitize_body_html docstring for why this runs on both the write path and
     here, on every read), plus (Task 16) every Label tagged on this message's
-    thread."""
+    thread.
+
+    TODO_SPEC.md "משימה 19" read-receipt redaction: only the sender sees every
+    recipient's `read_at`. A non-sender viewer only sees `read_at` on their
+    *own* row (echoing back "you read this at ...", harmless) — every other
+    recipient's row is redacted to None, same non-disclosure posture as the
+    BCC filtering right above (`_visible_recipients`): a TO/CC participant
+    must not learn when a fellow recipient opened the message, only the
+    sender can (here or via GET /{email_id}/tracking)."""
     out = schemas.EmailOut.model_validate(email)
     out.recipients = [schemas.EmailRecipientOut.model_validate(r) for r in _visible_recipients(email, viewer_id)]
+    if viewer_id != email.sender_id:
+        for r_out, r in zip(out.recipients, _visible_recipients(email, viewer_id)):
+            if r.user_id != viewer_id:
+                r_out.read_at = None
     out.body_html = email_service.sanitize_body_html(out.body_html)
     out.labels = [schemas.LabelOut.model_validate(l) for l in email_service.get_labels_for_email(db, _thread_root_id(email))]
     return out
@@ -441,6 +453,31 @@ def mark_email_read(
 ):
     _require_recipient_row(db, email_id, current_user.user_id)
     return email_service.mark_as_read(db, email_id, current_user.user_id, payload.is_read)
+
+
+@router.get("/{email_id}/tracking", response_model=schemas.EmailTrackingOut)
+def get_email_tracking(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 19" step 3 — the spec's own literal path. Sender-only:
+    `email_service.get_tracking` raises `ValueError("not found")` for both "no
+    such email" and "exists but the caller isn't its sender", which this
+    router turns into the same 404 either way — matching every other
+    per-email endpoint's non-disclosure convention (see module docstring; a
+    non-sender can't tell "this email doesn't exist" from "this email exists
+    but I can't see its receipts")."""
+    try:
+        recipients = email_service.get_tracking(db, email_id, current_user.user_id)
+    except ValueError as exc:
+        raise HTTPException(404, "Email not found") from exc
+    email = db.get(models.Email, email_id)
+    return schemas.EmailTrackingOut(
+        email_id=email_id,
+        read_receipt_requested=email.read_receipt_requested,
+        recipients=[schemas.EmailTrackingRecipientOut.model_validate(r) for r in recipients],
+    )
 
 
 @router.patch("/{email_id}/folder", response_model=schemas.EmailRecipientOut)

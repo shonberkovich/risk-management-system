@@ -480,6 +480,18 @@ class Email(Base):
     status: Mapped[str] = mapped_column(Unicode(20), default="SENT")
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     scheduled_recipients: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    # TODO_SPEC.md "משימה 19" step 2: the compose-time "בקש אישור קריאה" checkbox.
+    # `EmailRecipient.read_at` is tracked unconditionally for every email (see its
+    # docstring) — this column doesn't gate *whether* a read timestamp gets
+    # recorded, only whether the Sent-folder UI is allowed to surface it: GET
+    # /api/emails/{id}/tracking is still sender-only regardless, but the frontend
+    # only renders the double-checkmark receipt affordance (Task 19 steps 3-5) on
+    # a message where the sender actually asked for it. Defaults False so every
+    # email sent before this feature (and any sender who leaves the box unchecked)
+    # keeps tracking data recorded but invisible, matching the spec's framing of
+    # this as the *sender opting in* to seeing receipts, not opting into tracking
+    # itself.
+    read_receipt_requested: Mapped[bool] = mapped_column(Boolean, default=False)
 
     sender: Mapped["User"] = relationship()
     thread_root: Mapped["Email | None"] = relationship(remote_side="Email.email_id", back_populates="replies")
@@ -492,7 +504,23 @@ class EmailRecipient(Base):
     """One (email, user) delivery record — one row per recipient per folder copy,
     including the sender's own SENT-folder copy (TODO_SPEC.md task 3 step 3;
     "SENT" isn't in task 2's literal folder list but is needed so a sender sees
-    their own outgoing mail)."""
+    their own outgoing mail).
+
+    `read_at` (TODO_SPEC.md "משימה 19" step 1) is the read-receipt timestamp:
+    set the *first* time this row's `is_read` transitions to True
+    (`services/email.mark_as_read`), left untouched on every subsequent
+    read/unread toggle — a receipt records the first open, matching real
+    email clients (opening a message twice, or marking it unread again,
+    doesn't erase "you already know I read this on <date>"). Always tracked
+    unconditionally, for every recipient of every email, regardless of
+    whether the sender asked for a receipt: it's a single cheap timestamp
+    write on a row that's already being updated for `is_read` anyway, and
+    keeping it unconditional means a sender who forgot to check the box (or
+    a thread that started before this feature existed) still has the real
+    data sitting in the DB if the UI is ever asked to show it. What's
+    opt-in is only the *display* of that data — see `Email.
+    read_receipt_requested` below — never the tracking itself. NULL means
+    "not read yet" (row never transitioned to is_read=True)."""
     __tablename__ = "Email_Recipients"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -501,6 +529,7 @@ class EmailRecipient(Base):
     recipient_type: Mapped[str] = mapped_column(Unicode(10))
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     folder: Mapped[str] = mapped_column(Unicode(20), default="INBOX")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     email: Mapped["Email"] = relationship(back_populates="recipients")
     user: Mapped["User"] = relationship()

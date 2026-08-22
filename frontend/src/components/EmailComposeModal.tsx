@@ -7,12 +7,14 @@ import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
@@ -224,6 +226,14 @@ export default function EmailComposeModal({
   const [body, setBody] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
+  // TODO_SPEC.md "משימה 19" step 2 — the "בקש אישור קריאה" checkbox. Note this
+  // is scoped to the normal "שליחה" send flow only, not "שלח במועד אחר": the
+  // spec's own worked example is compose-time, and scheduled emails create
+  // their Email row through a separate service path (services/email.py's
+  // schedule_email) that doesn't currently accept this field — left as a
+  // deliberate simplification rather than threading a new column through a
+  // second send path this task doesn't call for.
+  const [readReceiptRequested, setReadReceiptRequested] = useState(false);
 
   // --- Undo-send (TODO_SPEC.md "משימה 13") ---
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -269,6 +279,7 @@ export default function EmailComposeModal({
     setBcc([]);
     setPendingFiles([]);
     setIsDragActive(false);
+    setReadReceiptRequested(false);
     setScheduleState({ stage: "idle" });
     setScheduleAnchor(null);
     setScheduledForValue("");
@@ -325,6 +336,7 @@ export default function EmailComposeModal({
     setSubject("");
     setBody("");
     setPendingFiles([]);
+    setReadReceiptRequested(false);
     setScheduleState({ stage: "idle" });
     setTemplateMenuAnchor(null);
     setScheduleAnchor(null);
@@ -372,6 +384,7 @@ export default function EmailComposeModal({
       subject: subject.trim(),
       body_html: plainTextToHtml(body),
       in_reply_to: inReplyTo ?? undefined,
+      read_receipt_requested: readReceiptRequested,
     };
     const files = pendingFiles;
 
@@ -531,6 +544,23 @@ export default function EmailComposeModal({
               disabled={scheduling}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+            />
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={readReceiptRequested}
+                  onChange={(e) => setReadReceiptRequested(e.target.checked)}
+                  disabled={scheduling}
+                  // MUI's Checkbox renders its own wrapper span around the native
+                  // <input type="checkbox"> — a plain `data-testid` on the component
+                  // lands on that wrapper, not the input itself, which is what
+                  // testing-library's `.toBeChecked()` needs. `inputProps` forwards
+                  // straight onto the native element.
+                  inputProps={{ "data-testid": "read-receipt-checkbox" }}
+                />
+              }
+              label="בקש אישור קריאה"
             />
 
             <Box
