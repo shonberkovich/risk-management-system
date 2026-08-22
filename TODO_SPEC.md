@@ -53,7 +53,7 @@ API בשרת: GET /api/sse/stream
 ✅ בוצע ב-branch `feature/email-sse`: `services/sse_manager.py` (ConnectionManager עם תור asyncio לכל חיבור, תומך בכמה טאבים לאותו משתמש), `routers/sse.py` (`GET /api/sse/stream`, אימות JWT מ-query param כי EventSource לא שולח headers, heartbeat כל 20 שניות, ניקוי בכל מסלול יציאה ב-finally). `send_email` ב-services/email.py משדר `new_email` לכל נמען. הסוויטה המלאה ירוקה (448 עברו).
 
 ==================================================
-[ ] משימה 5: יצירת ה-API (Routers) של המיילים
+[x] משימה 5: יצירת ה-API (Routers) של המיילים
 
 מהות המשימה: חשיפת פעולות ה-CRUD של מערכת המיילים כ-REST API מאובטח.
 מיקום במערכת: Backend (app/routers/emails.py)
@@ -64,7 +64,7 @@ API בשרת: GET /api/emails, POST /api/emails
  שלב 3: `POST /api/emails` - קבלת `EmailCreate` ושליחתו באמצעות ה-Service.
  שלב 4: `PATCH /api/emails/{id}/read` - שינוי סטטוס קריאה.
  שלב 5: `PATCH /api/emails/{id}/folder` - העברת מייל בין תיקיות (לארכיון, אשפה).
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-api`: נוצר `routers/emails.py` עם 5 ה-endpoints. `GET /{id}` מחזיר תמיד `EmailThreadOut` (גם למייל בודד), מסונן להודעות שהמשתמש הנוכחי נמען/שולח בהן בלבד. 404 (לא 403) למייל שלא שייך למשתמש. נוספה `EmailListItemOut` קלה לרשימה. תוקן גם באג קיים מ-משימה 2 (`MoveToFolder` כלל שדה `created_at` מיותר). 461 טסטים עברו.
 
 ==================================================
 [ ] משימה 6: ניהול קבצים מצורפים והורדתם (Attachments)
