@@ -1342,6 +1342,11 @@ class EmailOut(BaseModel):
     # read receipt on this message; the frontend only renders the
     # double-checkmark receipt icon (steps 3-5) when this is True.
     read_receipt_requested: bool = False
+    # TODO_SPEC.md "משימה 20" step 3 — True only for a message created by
+    # services/notifications.py's dispatch->internal-email bridge (see
+    # models.Email.is_system_email's docstring). The frontend renders a small
+    # "התראת מערכת" chip on a message where this is True.
+    is_system_email: bool = False
 
 
 class EmailThreadOut(BaseModel):
@@ -1414,6 +1419,8 @@ class EmailListItemOut(BaseModel):
     folder: EmailFolder
     # TODO_SPEC.md "משימה 16" — same thread-root-resolved label list as EmailOut.labels.
     labels: list[LabelOut] = []
+    # TODO_SPEC.md "משימה 20" step 3 — same system-email marker as EmailOut.is_system_email.
+    is_system_email: bool = False
 
 
 # ---------------------------------------------------------------------------

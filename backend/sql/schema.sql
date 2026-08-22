@@ -501,7 +501,8 @@ CREATE TABLE dbo.Emails (
     status          NVARCHAR(20) NOT NULL DEFAULT 'SENT',  -- SENT or SCHEDULED (TODO_SPEC.md §13)
     scheduled_for        DATETIME2 NULL,       -- future send time for status='SCHEDULED' rows; NULL otherwise (§13)
     scheduled_recipients NVARCHAR(MAX) NULL,   -- JSON {"to":[...],"cc":[...],"bcc":[...]} until it actually sends (§13); see app/models.py's Email docstring
-    read_receipt_requested BIT NOT NULL DEFAULT 0  -- §19: gates the Sent-folder receipt UI only, not tracking itself (see app/models.py's Email docstring)
+    read_receipt_requested BIT NOT NULL DEFAULT 0,  -- §19: gates the Sent-folder receipt UI only, not tracking itself (see app/models.py's Email docstring)
+    is_system_email BIT NOT NULL DEFAULT 0  -- §20: set only by services/notifications.py's dispatch->internal-email bridge (see app/models.py's Email docstring)
 );
 GO
 CREATE INDEX IX_Emails_Sender ON dbo.Emails(sender_id);
