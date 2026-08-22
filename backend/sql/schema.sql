@@ -16,6 +16,8 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Email_Labels', 'U') IS NOT NULL DROP TABLE dbo.Email_Labels;
+IF OBJECT_ID('dbo.Labels', 'U') IS NOT NULL DROP TABLE dbo.Labels;
 IF OBJECT_ID('dbo.Email_Templates', 'U') IS NOT NULL DROP TABLE dbo.Email_Templates;
 IF OBJECT_ID('dbo.Entity_Emails', 'U') IS NOT NULL DROP TABLE dbo.Entity_Emails;
 IF OBJECT_ID('dbo.Email_Attachments', 'U') IS NOT NULL DROP TABLE dbo.Email_Attachments;
@@ -572,4 +574,39 @@ CREATE TABLE dbo.Email_Templates (
     created_by          BIGINT NULL REFERENCES dbo.Users(user_id),
     created_at          DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
+GO
+
+-- ============================================================================
+-- Labels / Email_Labels — user-owned tags for organizing email threads
+-- (TODO_SPEC.md "משימה 16", "תמיכה בריבוי תיבות ויצירת תיקיות מותאמות
+-- אישית"). Orthogonal to Email_Recipients.folder (a label doesn't replace a
+-- folder value — an email can be INBOX *and* tagged "urgent"). Email_Labels.
+-- email_id always stores the THREAD ROOT's email_id (never an individual
+-- reply's id), same design as Entity_Emails.email_id — see app/models.py's
+-- Label/EmailLabel docstrings for the full rationale.
+-- ============================================================================
+IF OBJECT_ID('dbo.Labels', 'U') IS NOT NULL DROP TABLE dbo.Labels;
+GO
+CREATE TABLE dbo.Labels (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+    name            NVARCHAR(100) NOT NULL,
+    color           NVARCHAR(20) NOT NULL
+);
+GO
+CREATE INDEX IX_Labels_User ON dbo.Labels(user_id);
+GO
+
+IF OBJECT_ID('dbo.Email_Labels', 'U') IS NOT NULL DROP TABLE dbo.Email_Labels;
+GO
+CREATE TABLE dbo.Email_Labels (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    email_id        BIGINT NOT NULL REFERENCES dbo.Emails(email_id) ON DELETE CASCADE,
+    label_id        BIGINT NOT NULL REFERENCES dbo.Labels(id) ON DELETE CASCADE,
+    CONSTRAINT UQ_EmailLabels_EmailLabel UNIQUE (email_id, label_id)
+);
+GO
+CREATE INDEX IX_EmailLabels_Email ON dbo.Email_Labels(email_id);
+GO
+CREATE INDEX IX_EmailLabels_Label ON dbo.Email_Labels(label_id);
 GO

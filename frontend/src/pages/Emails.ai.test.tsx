@@ -32,6 +32,7 @@ const {
   summarizeEmailThreadMock,
   suggestEmailReplyMock,
   useAuthMock,
+  fetchLabelsMock,
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
@@ -51,6 +52,8 @@ const {
   summarizeEmailThreadMock: vi.fn(),
   suggestEmailReplyMock: vi.fn(),
   useAuthMock: vi.fn(),
+  // TODO_SPEC.md "משימה 16": EmailSidebar fetches the labels list unconditionally.
+  fetchLabelsMock: vi.fn(),
 }));
 
 vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
@@ -73,6 +76,7 @@ vi.mock("../api/client", () => ({
   cancelScheduledEmail: cancelScheduledEmailMock,
   summarizeEmailThread: summarizeEmailThreadMock,
   suggestEmailReply: suggestEmailReplyMock,
+  fetchLabels: fetchLabelsMock,
 }));
 
 import Emails from "./Emails";
@@ -88,6 +92,7 @@ const INBOX_ITEM = {
   thread_id: null,
   is_read: true,
   folder: "INBOX",
+  labels: [],
 };
 
 const THREAD_MESSAGE = {
@@ -100,6 +105,7 @@ const THREAD_MESSAGE = {
   sender: SENDER,
   recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", is_read: true, folder: "INBOX" }],
   attachments: [],
+  labels: [],
 };
 const THREAD = { root: THREAD_MESSAGE, messages: [THREAD_MESSAGE] };
 
@@ -127,6 +133,7 @@ describe("Emails — Task 15 AI features", () => {
     fetchScheduledEmailsMock.mockResolvedValue([]);
     fetchUsersMock.mockResolvedValue([SENDER, RECIPIENT_USER]);
     useAuthMock.mockReturnValue({ user: { ...RECIPIENT_USER, signature: null } });
+    fetchLabelsMock.mockResolvedValue([]);
   });
   afterEach(() => vi.restoreAllMocks());
 

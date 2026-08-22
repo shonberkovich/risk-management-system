@@ -97,6 +97,16 @@ ownership check to order against) so a non-participant always gets a 404
 regardless of whether ANTHROPIC_API_KEY happens to be configured — the
 API-key check alone must never become a way to distinguish "you're not on
 this thread" from "AI isn't configured right now".
+
+Task 16 ("תמיכה בריבוי תיבות ויצירת תיקיות מותאמות אישית") adds
+POST/DELETE /{email_id}/tags[/...] — tagging a thread with one of the
+caller's own Labels (CRUD for the labels themselves lives in
+routers/labels.py's /api/folders, the spec's own literal path; see that
+module's docstring). Both endpoints reuse `_require_recipient_row` (you must
+already see the thread to tag it) plus a parallel `_require_own_label`
+ownership check (a label_id that exists but isn't yours 404s, same
+non-disclosure posture). GET /api/emails also grows an optional `label_id`
+filter that composes with `folder`/`q` rather than replacing them.
 """
 from __future__ import annotations
 
@@ -207,7 +217,17 @@ def _thread_messages_for_ai(db: Session, thread_root_id: int, viewer_id: int) ->
     ]
 
 
-def _to_list_item(row: models.EmailRecipient) -> schemas.EmailListItemOut:
+def _thread_root_id(email: models.Email) -> int:
+    """The thread-root email_id `email` belongs to — its own thread_id if it's a
+    reply, else its own email_id (see models.Email's docstring). Every Task 16
+    label lookup keys off this, matching models.EmailLabel's thread-root
+    design (same helper shape as this router's other inline
+    `email.thread_id if ... else email.email_id` occurrences, factored out
+    here since label lookups now need it in three places)."""
+    return email.thread_id if email.thread_id is not None else email.email_id
+
+
+def _to_list_item(db: Session, row: models.EmailRecipient) -> schemas.EmailListItemOut:
     email = row.email
     return schemas.EmailListItemOut(
         email_id=email.email_id,
@@ -217,6 +237,7 @@ def _to_list_item(row: models.EmailRecipient) -> schemas.EmailListItemOut:
         thread_id=email.thread_id,
         is_read=row.is_read,
         folder=row.folder,
+        labels=[schemas.LabelOut.model_validate(l) for l in email_service.get_labels_for_email(db, _thread_root_id(email))],
     )
 
 
@@ -236,15 +257,17 @@ def _visible_recipients(email: models.Email, viewer_id: int) -> list[models.Emai
     return [r for r in email.recipients if r.recipient_type != "BCC" or r.user_id == viewer_id]
 
 
-def _to_email_out(email: models.Email, viewer_id: int) -> schemas.EmailOut:
+def _to_email_out(db: Session, email: models.Email, viewer_id: int) -> schemas.EmailOut:
     """Builds the outward-facing EmailOut for `email` as seen by `viewer_id`:
     BCC-filtered recipients (see _visible_recipients) plus a defense-in-depth
     re-sanitization of body_html (Task 10 step 2 — see services/email.py's
     sanitize_body_html docstring for why this runs on both the write path and
-    here, on every read)."""
+    here, on every read), plus (Task 16) every Label tagged on this message's
+    thread."""
     out = schemas.EmailOut.model_validate(email)
     out.recipients = [schemas.EmailRecipientOut.model_validate(r) for r in _visible_recipients(email, viewer_id)]
     out.body_html = email_service.sanitize_body_html(out.body_html)
+    out.labels = [schemas.LabelOut.model_validate(l) for l in email_service.get_labels_for_email(db, _thread_root_id(email))]
     return out
 
 
@@ -280,11 +303,21 @@ def list_emails(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     q: str | None = Query(None, description="חיפוש חופשי בנושא, בגוף ההודעה או בשם השולח"),
+    label_id: int | None = Query(None, description="סינון לפי תגית (TODO_SPEC.md \"משימה 16\" שלב 5) — משולב עם folder/q, לא מחליף אותם"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    rows = email_service.list_emails_for_user(db, current_user.user_id, folder, skip=skip, limit=limit, q=q)
-    return [_to_list_item(row) for row in rows]
+    if label_id is not None:
+        # Same ownership check every other label-touching endpoint makes (see
+        # routers/labels.py's module docstring): a label_id that exists but
+        # isn't yours 404s, never silently returns someone else's tagged mail.
+        label = db.get(models.Label, label_id)
+        if label is None or label.user_id != current_user.user_id:
+            raise HTTPException(404, "Label not found")
+    rows = email_service.list_emails_for_user(
+        db, current_user.user_id, folder, skip=skip, limit=limit, q=q, label_id=label_id
+    )
+    return [_to_list_item(db, row) for row in rows]
 
 
 @router.post("/schedule", response_model=schemas.EmailScheduleOut, status_code=201)
@@ -377,7 +410,7 @@ def get_email(
     messages = [m for m in all_messages if m.email_id in visible_ids]
     root = next((m for m in messages if m.thread_id is None), messages[0])
 
-    messages_out = [_to_email_out(m, current_user.user_id) for m in messages]
+    messages_out = [_to_email_out(db, m, current_user.user_id) for m in messages]
     root_out = next(m for m in messages_out if m.email_id == root.email_id)
     return schemas.EmailThreadOut(root=root_out, messages=messages_out)
 
@@ -396,7 +429,7 @@ def send_email(
         email = email_service.send_email(db, current_user.user_id, payload)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return _to_email_out(email, current_user.user_id)
+    return _to_email_out(db, email, current_user.user_id)
 
 
 @router.patch("/{email_id}/read", response_model=schemas.EmailRecipientOut)
@@ -516,6 +549,62 @@ def link_email_to_entity(
     return email_service.link_email_to_entity(
         db, root_id, payload.entity_type, payload.entity_id, linked_by=current_user.user_id
     )
+
+
+def _require_own_label(db: Session, label_id: int, user_id: int) -> models.Label:
+    """Shared ownership check for the two tag endpoints below — same 404-not-403
+    non-disclosure convention as routers/labels.py (see that module's
+    docstring): a label_id that exists but belongs to someone else must be
+    indistinguishable from one that doesn't exist at all."""
+    label = db.get(models.Label, label_id)
+    if label is None or label.user_id != user_id:
+        raise HTTPException(404, "Label not found")
+    return label
+
+
+@router.post("/{email_id}/tags", response_model=schemas.EmailLabelOut, status_code=201)
+def add_label_to_email(
+    email_id: int,
+    payload: schemas.EmailLabelCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 16" step 4 — the spec's own literal path. Tags the
+    *thread* containing `email_id` with one of the caller's own labels (see
+    models.EmailLabel's docstring for why the tag is keyed on the thread's
+    root email_id, not necessarily the specific message id given in the URL —
+    mirrors POST /{email_id}/link's own resolution for Entity_Emails). Same
+    sender-or-recipient mailbox scoping every other per-email endpoint in this
+    router uses: you must already be able to see this email to tag its
+    thread."""
+    _require_recipient_row(db, email_id, current_user.user_id)
+    email = db.get(models.Email, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+    _require_own_label(db, payload.label_id, current_user.user_id)
+
+    link = email_service.add_label_to_email(db, _thread_root_id(email), payload.label_id)
+    return schemas.EmailLabelOut(id=link.id, email_id=link.email_id, label=schemas.LabelOut.model_validate(link.label))
+
+
+@router.delete("/{email_id}/tags/{label_id}", status_code=204)
+def remove_label_from_email(
+    email_id: int,
+    label_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 16" step 4 — removes one of the caller's own labels
+    from the thread containing `email_id`. Same scoping as the POST above; a
+    no-op (still 204) if the thread wasn't tagged with this label to begin
+    with (see services/email.remove_label_from_email)."""
+    _require_recipient_row(db, email_id, current_user.user_id)
+    email = db.get(models.Email, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+    _require_own_label(db, label_id, current_user.user_id)
+
+    email_service.remove_label_from_email(db, _thread_root_id(email), label_id)
 
 
 @router.post("/{email_id}/summarize", response_model=EmailSummaryOut)

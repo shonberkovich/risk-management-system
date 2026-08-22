@@ -590,3 +590,89 @@ class EmailTemplate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     created_by_user: Mapped["User | None"] = relationship()
+
+
+class Label(Base):
+    """A user-defined tag/custom folder for organizing email threads
+    (TODO_SPEC.md "משימה 16": "תמיכה בריבוי תיבות ויצירת תיקיות מותאמות
+    אישית (Custom Folders/Labels)"). Despite the spec's own "Custom_Folders"
+    naming and its POST /api/folders endpoint path (kept literally — see
+    routers/labels.py), this is deliberately NOT another value in
+    EmailRecipient.folder's fixed INBOX/ARCHIVE/TRASH/SPAM/SENT set: a folder
+    there is *exclusive* (one mailbox copy lives in exactly one folder at a
+    time), while what this task actually asks for — "המשתמש יוכל ליצור
+    תגיות... ולתייג מיילים (למשל: 'תביעות דחופות', 'אישור מנהל')", and step
+    2's explicit "לאפשר למייל אחד להיות מתויג במספר תגיות במקביל" — is
+    Gmail-style *labels*: several at once on the same message, orthogonal to
+    whichever folder that message also sits in (GET /api/emails's `label_id`
+    param composes with `folder`, it doesn't replace it — "show me INBOX
+    emails tagged urgent"). Modeling that as more folder values would cap an
+    email at one tag, which breaks multi-label tagging outright; a separate
+    table plus a join table (EmailLabel) is the shape that actually supports
+    "many labels per email".
+
+    `user_id` scopes every label to the user who created it (step 1: "כדי
+    שלכל משתמש יהיו תגיות משלו") — two users can each keep their own "דחוף"
+    label with a different color, and neither can see or use the other's
+    (routers/labels.py enforces this the same way Task 5's mailbox-ownership
+    checks do: a label_id that exists but isn't yours 404s, not 403 — same
+    non-disclosure posture as routers/emails.py's `_require_recipient_row`).
+    `color` is a free-text hex string (e.g. "#e53935") rather than an enum —
+    the frontend offers a small fixed swatch row (EmailSidebar.tsx), but
+    nothing here enforces that exact set server-side; it's stored and echoed
+    back as a plain CSS color value."""
+    __tablename__ = "Labels"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Users.user_id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(Unicode(100))
+    color: Mapped[str] = mapped_column(Unicode(20))
+
+    user: Mapped["User"] = relationship()
+
+
+class EmailLabel(Base):
+    """Join table letting one email thread carry several Labels at once
+    (TODO_SPEC.md "משימה 16" step 2). `email_id` always stores the THREAD
+    ROOT's email_id — the same design choice, made for the same reason, as
+    `models.EntityEmail` (TODO_SPEC.md "משימה 11"): this task's own worked
+    examples ('תביעות דחופות', 'אישור מנהל') read as whole-conversation tags,
+    not single-message ones, and every message in a thread already shares
+    one root by construction (see `Email`'s docstring) — so storing the root
+    once means "is this thread tagged X" is a single equality check instead
+    of a fan-out over every message, a label applied from *any* message in a
+    thread (root or reply) tags the thread as a whole, and GET /api/emails's
+    label_id filter (step 5) never has to first resolve which specific
+    message in a multi-message thread happens to carry the tag. This
+    mirrors EntityEmail's own tie-breaker precisely because the two features
+    are the same shape: a lightweight tag/link table keyed off a thread, not
+    an individual message — and this task's own instructions name exactly
+    that precedent as a reasonable tie-breaker.
+
+    (The alternative — key off the specific message id, closer to how a
+    real mail client actually applies labels per-message — is a legitimate
+    reading of "real email UX" and was considered; it would let one reply in
+    a thread carry a tag its sibling replies don't, which neither this
+    codebase's EntityEmail precedent nor this task's own worked examples
+    call for, and it would force every reader of this table to resolve
+    thread membership itself before it could even answer "is this thread
+    tagged" — the same complexity Task 11 rejected, for the identical
+    reason.)
+
+    `(email_id, label_id)` is unique — attaching an already-attached label to
+    the same thread again is a harmless no-op (see
+    services/email.add_label_to_email's idempotency), not a duplicate row.
+    Both FKs cascade: deleting a Label removes every thread's tag with it,
+    and deleting an Email (e.g. an unsent, cancelled Task 13 scheduled
+    message) removes any tag links pointing at it."""
+    __tablename__ = "Email_Labels"
+    __table_args__ = (
+        UniqueConstraint("email_id", "label_id", name="uq_email_labels_email_label"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Emails.email_id", ondelete="CASCADE"))
+    label_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Labels.id", ondelete="CASCADE"))
+
+    email: Mapped["Email"] = relationship()
+    label: Mapped["Label"] = relationship()

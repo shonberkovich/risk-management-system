@@ -1296,6 +1296,14 @@ export interface EmailRecipient {
   folder: EmailFolder;
 }
 
+/** TODO_SPEC.md "משימה 16" — a user-owned tag/custom folder. Mirrors
+ * backend/app/schemas.py's LabelOut. */
+export interface Label {
+  id: number;
+  name: string;
+  color: string;
+}
+
 export interface Email {
   email_id: number;
   subject: string;
@@ -1306,6 +1314,10 @@ export interface Email {
   sender: User;
   recipients: EmailRecipient[];
   attachments: EmailAttachment[];
+  /** Every Label tagged on this message's *thread* (always resolved off the
+   * thread root regardless of which message this is — see
+   * models.EmailLabel's docstring on the backend). */
+  labels: Label[];
 }
 
 export interface EmailThread {
@@ -1325,6 +1337,8 @@ export interface EmailListItem {
   thread_id: number | null;
   is_read: boolean;
   folder: EmailFolder;
+  /** TODO_SPEC.md "משימה 16" — same thread-resolved label list as `Email.labels`. */
+  labels: Label[];
 }
 
 export interface EmailCreate {
@@ -1339,9 +1353,14 @@ export interface EmailCreate {
 /** `q` (TODO_SPEC.md "משימה 10" step 4) is an optional free-text search over
  * subject/body/sender-name, mirrored from GET /api/emails' own `q` query param
  * (routers/emails.py) — omitted entirely (not sent as an empty string) when blank,
- * same convention `params` already gets from axios dropping `undefined` values. */
-export const fetchEmails = (folder: EmailFolder = "INBOX", skip = 0, limit = 50, q?: string) =>
-  api.get<EmailListItem[]>("/emails", { params: { folder, skip, limit, q: q || undefined } }).then((r) => r.data);
+ * same convention `params` already gets from axios dropping `undefined` values.
+ * `labelId` (TODO_SPEC.md "משימה 16" step 5) narrows the same folder/search-scoped
+ * list further — it composes with `folder`/`q`, never replaces them (see
+ * services/email.list_emails_for_user's docstring on the backend). */
+export const fetchEmails = (folder: EmailFolder = "INBOX", skip = 0, limit = 50, q?: string, labelId?: number | null) =>
+  api
+    .get<EmailListItem[]>("/emails", { params: { folder, skip, limit, q: q || undefined, label_id: labelId ?? undefined } })
+    .then((r) => r.data);
 export const fetchEmailThread = (emailId: number) =>
   api.get<EmailThread>(`/emails/${emailId}`).then((r) => r.data);
 export const sendEmail = (payload: EmailCreate) =>
@@ -1507,3 +1526,31 @@ export const createEmailTemplate = (payload: EmailTemplateCreate) =>
 export const updateEmailTemplate = (id: number, payload: EmailTemplateUpdate) =>
   api.patch<EmailTemplate>(`/email-templates/${id}`, payload).then((r) => r.data);
 export const deleteEmailTemplate = (id: number) => api.delete(`/email-templates/${id}`).then(() => undefined);
+
+// --- Custom Folders / Labels (TODO_SPEC.md "משימה 16", mirrors backend/app/schemas.py's
+// Label*/EmailLabel* schemas — see routers/labels.py's and routers/emails.py's module
+// docstrings for the endpoint contracts. `Label` itself is declared above, alongside
+// `Email`/`EmailListItem`, since both embed `labels: Label[]`.) ---
+
+export interface LabelCreate {
+  name: string;
+  color: string;
+}
+
+// GET/POST/DELETE /api/folders — the spec's own literal path (routers/labels.py),
+// scoped server-side to the signed-in user's own labels.
+export const fetchLabels = () => api.get<Label[]>("/folders").then((r) => r.data);
+export const createLabel = (payload: LabelCreate) => api.post<Label>("/folders", payload).then((r) => r.data);
+export const deleteLabel = (id: number) => api.delete(`/folders/${id}`).then(() => undefined);
+
+/** Response for POST /emails/{id}/tags — mirrors schemas.EmailLabelOut. */
+export interface EmailLabelLink {
+  id: number;
+  email_id: number; // always the thread's root email_id
+  label: Label;
+}
+
+export const addLabelToEmail = (emailId: number, labelId: number) =>
+  api.post<EmailLabelLink>(`/emails/${emailId}/tags`, { label_id: labelId }).then((r) => r.data);
+export const removeLabelFromEmail = (emailId: number, labelId: number) =>
+  api.delete(`/emails/${emailId}/tags/${labelId}`).then(() => undefined);

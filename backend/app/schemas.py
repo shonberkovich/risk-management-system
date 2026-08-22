@@ -1138,6 +1138,45 @@ EmailFolder = Literal["INBOX", "ARCHIVE", "TRASH", "SPAM", "SENT"]
 # task adds e.g. a real DRAFT status.
 
 
+# ---------------------------------------------------------------------------
+# Custom Folders / Labels (TODO_SPEC.md "משימה 16" — schemas for the Label /
+# EmailLabel models in models.py). Defined here, ahead of EmailOut /
+# EmailListItemOut below, so those can embed `labels: list[LabelOut]`
+# directly without a forward reference.
+# ---------------------------------------------------------------------------
+
+
+class LabelOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    color: str
+
+
+class LabelCreate(BaseModel):
+    """Body for POST /api/folders (Task 16 steps 1/3) — the spec's own literal
+    path for what this codebase treats as a per-user label, not another
+    EmailRecipient.folder value; see models.Label's docstring."""
+    name: str
+    color: str
+
+
+class EmailLabelCreate(BaseModel):
+    """Body for POST /api/emails/{id}/tags (Task 16 step 4)."""
+    label_id: int
+
+
+class EmailLabelOut(BaseModel):
+    """Response for POST /api/emails/{id}/tags: the created (or, if already
+    attached — see services.email.add_label_to_email's idempotency —
+    existing) tag link, plus the label's own name/color so the frontend can
+    render the chip without a second round-trip."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email_id: int  # always the thread's root email_id — see models.EmailLabel's docstring
+    label: LabelOut
+
+
 class EmailCreate(BaseModel):
     """Payload for POST /api/emails (Task 5). `to`/`cc`/`bcc` are recipient user_id
     lists; the Task 3 service turns each into an Email_Recipients row with
@@ -1191,6 +1230,10 @@ class EmailOut(BaseModel):
     sender: UserOut
     recipients: list[EmailRecipientOut] = []
     attachments: list[EmailAttachmentOut] = []
+    # TODO_SPEC.md "משימה 16" — every Label tagged on this message's thread (see
+    # models.EmailLabel's docstring: always resolved off the thread root,
+    # regardless of which specific message in the thread `email_id` above is).
+    labels: list[LabelOut] = []
 
 
 class EmailThreadOut(BaseModel):
@@ -1234,6 +1277,8 @@ class EmailListItemOut(BaseModel):
     thread_id: int | None = None
     is_read: bool
     folder: EmailFolder
+    # TODO_SPEC.md "משימה 16" — same thread-root-resolved label list as EmailOut.labels.
+    labels: list[LabelOut] = []
 
 
 # ---------------------------------------------------------------------------
