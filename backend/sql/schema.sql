@@ -16,6 +16,7 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Email_Rules', 'U') IS NOT NULL DROP TABLE dbo.Email_Rules;
 IF OBJECT_ID('dbo.Email_Labels', 'U') IS NOT NULL DROP TABLE dbo.Email_Labels;
 IF OBJECT_ID('dbo.Labels', 'U') IS NOT NULL DROP TABLE dbo.Labels;
 IF OBJECT_ID('dbo.Email_Templates', 'U') IS NOT NULL DROP TABLE dbo.Email_Templates;
@@ -609,4 +610,28 @@ GO
 CREATE INDEX IX_EmailLabels_Email ON dbo.Email_Labels(email_id);
 GO
 CREATE INDEX IX_EmailLabels_Label ON dbo.Email_Labels(label_id);
+GO
+
+-- ============================================================================
+-- Email_Rules — user-owned "if [condition(s)] then [action(s)]" auto-filters
+-- (TODO_SPEC.md "משימה 17", "כללי סינון אוטומטיים (Email Rules/Filters)").
+-- conditions/actions are JSON-serialized text (SQL Server LocalDB has no native
+-- JSON/array column type) — same NVARCHAR(MAX)-as-JSON convention as
+-- Agent_Sessions.context_data / Emails.scheduled_recipients. See
+-- app/models.py's EmailRule docstring and app/services/email_rules.py for the
+-- exact conditions/actions shapes.
+-- ============================================================================
+IF OBJECT_ID('dbo.Email_Rules', 'U') IS NOT NULL DROP TABLE dbo.Email_Rules;
+GO
+CREATE TABLE dbo.Email_Rules (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+    name            NVARCHAR(200) NOT NULL,
+    conditions      NVARCHAR(MAX) NOT NULL,
+    actions         NVARCHAR(MAX) NOT NULL,
+    is_active       BIT NOT NULL DEFAULT 1,
+    created_at      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+CREATE INDEX IX_EmailRules_User ON dbo.Email_Rules(user_id);
 GO

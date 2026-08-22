@@ -14,6 +14,12 @@ one lookup: if the referenced email already has a `thread_id`, that's the
 root; otherwise the referenced email *is* the root. This is what
 `_resolve_thread_root_id` below does, and it's why replying to a reply still
 lands in the same thread as replying to the root.
+
+Rules engine hook (TODO_SPEC.md "משימה 17"): `_fan_out_recipients` below is
+where a recipient's own Email_Rules are evaluated and applied, right after
+that recipient's Email_Recipients row is created and before it's ever
+committed — see `services/email_rules.py`'s module docstring for the full
+design.
 """
 from __future__ import annotations
 
@@ -27,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.schemas import EmailCreate, EmailScheduleCreate, EntityLinkedEmailOut
-from app.services import sse_manager, storage
+from app.services import email_rules, sse_manager, storage
 
 # TODO_SPEC.md "משימה 10" step 2 — XSS defense for Email.body_html. A small, fixed
 # subset of formatting tags (mirrors what EmailComposeModal.tsx's own
@@ -95,16 +101,29 @@ def _fan_out_recipients(
     inline, factored out (Task 13) so `process_due_scheduled_emails` can reuse
     it verbatim: a scheduled email that finally sends must end up with the
     same Email_Recipients shape as one sent immediately, not a parallel
-    implementation that could drift from it."""
+    implementation that could drift from it.
+
+    TODO_SPEC.md "משימה 17" step 2: right after each TO/CC/BCC recipient's own
+    row is created (never for the sender's own SENT copy below — a rule is
+    about *incoming* mail, not a reflection of your own outgoing message),
+    that recipient's own active rules are evaluated and applied in-place
+    against the same row and the same session/transaction — see
+    `services/email_rules.evaluate_rules_for_recipient`'s docstring for why
+    this lives in the shared fan-out helper (so both send_email and a
+    scheduled send that finally fires get identical rules treatment) and for
+    the performance characteristics (one query per recipient, no per-rule
+    N+1)."""
     for recipient_type, user_ids in (("TO", to), ("CC", cc), ("BCC", bcc)):
         for user_id in user_ids:
-            db.add(models.EmailRecipient(
+            recipient_row = models.EmailRecipient(
                 email_id=email.email_id,
                 user_id=user_id,
                 recipient_type=recipient_type,
                 folder="INBOX",
                 is_read=False,
-            ))
+            )
+            db.add(recipient_row)
+            email_rules.evaluate_rules_for_recipient(db, user_id, email, recipient_row)
 
     # The sender's own copy: it's their outgoing mail, not something unread waiting
     # for them, so is_read=True and it lives in SENT rather than INBOX.

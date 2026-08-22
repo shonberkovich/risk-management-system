@@ -676,3 +676,49 @@ class EmailLabel(Base):
 
     email: Mapped["Email"] = relationship()
     label: Mapped["Label"] = relationship()
+
+
+class EmailRule(Base):
+    """A user-defined "if [condition(s)] then [action(s)]" auto-filter, evaluated
+    against a user's own incoming mail as it's delivered (TODO_SPEC.md "משימה 17":
+    "כללי סינון אוטומטיים (Email Rules/Filters)" — the worked example is "if the
+    subject contains 'urgent', star it and add a red label"). `user_id` scopes
+    every rule to the user who created it, same per-user-ownership posture as
+    `Label` (Task 16) — rules are only ever evaluated against *that* user's own
+    incoming copy of a message (`services/email_rules.evaluate_rules_for_recipient`
+    is called once per TO/CC/BCC recipient, with that recipient's own `user_id`),
+    never cross-applied to another recipient's copy of the same email.
+
+    `conditions`/`actions` are JSON-serialized text — SQL Server LocalDB has no
+    native JSON/array column type, so this reuses the exact same NVARCHAR(MAX)-
+    as-JSON-text convention already established by `Agent_Sessions.context_data`
+    and `Email.scheduled_recipients` (see those docstrings) rather than inventing
+    a fourth JSON-in-text pattern in this file. Deliberately a small, explicit,
+    non-generic schema rather than a full expression language (see
+    `services/email_rules.py`'s module docstring for the exact shapes):
+    `conditions` is a list of `{"field": "subject"|"sender"|"body", "operator":
+    "contains"|"equals", "value": "..."}` objects, ANDed together (every
+    condition in the list must match for the rule to fire); `actions` is a list
+    of `{"type": "add_label"|"move_to_folder"|"mark_as_read", "value": "..."}`
+    objects, all applied when the rule matches. `services/email_rules.py` owns
+    (de)serializing both — this model just stores the raw text, same division of
+    labor `Email.scheduled_recipients`/`services/email.py`'s
+    (de)serialize_scheduled_recipients already use.
+
+    `is_active` (default True) lets a user disable a rule without deleting it —
+    `evaluate_rules_for_recipient` only ever loads `is_active=True` rows.
+    Rules have no separate priority column: they're evaluated in `id` order
+    (creation order), an acceptable tie-breaker per this task's own modest
+    ask — a user with few, simple rules doesn't need a full priority/ordering
+    UI on top of "oldest rule first"."""
+    __tablename__ = "Email_Rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Users.user_id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(Unicode(200))
+    conditions: Mapped[str] = mapped_column(UnicodeText)
+    actions: Mapped[str] = mapped_column(UnicodeText)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    user: Mapped["User"] = relationship()
