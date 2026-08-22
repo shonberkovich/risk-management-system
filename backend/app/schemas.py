@@ -1213,3 +1213,48 @@ class EmailListItemOut(BaseModel):
     thread_id: int | None = None
     is_read: bool
     folder: EmailFolder
+
+
+# ---------------------------------------------------------------------------
+# Contextual entity linking (TODO_SPEC.md "משימה 11" — schemas for the
+# EntityEmail model added above)
+# ---------------------------------------------------------------------------
+
+# Mirrors models.EntityEmail.entity_type — deliberately narrower than
+# DocumentEntityType above (no "POLICY"; see that model's docstring for why).
+EntityEmailEntityType = Literal["INCIDENT", "CLAIM", "PROPERTY"]
+
+
+class EntityEmailLinkCreate(BaseModel):
+    """Body for POST /api/emails/{id}/link (Task 11 step 2)."""
+    entity_type: EntityEmailEntityType
+    entity_id: int
+
+
+class EntityEmailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email_id: int  # always the thread's root email_id — see models.EntityEmail's docstring
+    entity_type: EntityEmailEntityType
+    entity_id: int
+    linked_by: int
+    linked_at: datetime
+    auto_linked: bool
+
+
+class EntityLinkedEmailOut(BaseModel):
+    """One row of GET /api/{incidents|claims|properties}/{id}/emails (Task 11
+    step 3) — a light summary of a linked thread (its root message's
+    subject/sender/created_at) plus the link's own metadata, not the full
+    thread body (mirrors EmailListItemOut's own "a list needs less than a
+    full read" rationale above) — the frontend opens /emails and selects
+    `email_id` to read the actual thread rather than rendering it inline
+    here."""
+    model_config = ConfigDict(from_attributes=True)
+    email_id: int
+    subject: str
+    created_at: datetime
+    sender: UserOut
+    linked_by: UserOut
+    linked_at: datetime
+    auto_linked: bool

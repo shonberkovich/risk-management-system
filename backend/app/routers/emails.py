@@ -80,6 +80,15 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 
 _MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024  # 25 MB per file — same ceiling as media.py/documents.py uploads
 
+# Same mapping shape as routers/documents.py's _ENTITY_MODELS, deliberately
+# narrower (no POLICY — see schemas.EntityEmailEntityType / models.EntityEmail's
+# docstring for why this task's entity set is INCIDENT/CLAIM/PROPERTY only).
+_ENTITY_LINK_MODELS: dict[str, type] = {
+    "INCIDENT": models.Incident,
+    "CLAIM": models.Claim,
+    "PROPERTY": models.Property,
+}
+
 
 def _require_recipient_row(db: Session, email_id: int, user_id: int) -> models.EmailRecipient:
     """The router-level counterpart to services.email._get_recipient_row: same
@@ -294,3 +303,38 @@ def get_attachment_signed_url(
             f"&expires={signed['expires_at']}&token={signed['token']}"
         ),
     }
+
+
+@router.post("/{email_id}/link", response_model=schemas.EntityEmailOut, status_code=201)
+def link_email_to_entity(
+    email_id: int,
+    payload: schemas.EntityEmailLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 11" step 2 — links the *thread* containing
+    `email_id` to a business entity (see models.EntityEmail's docstring for
+    why the link is keyed on the thread's root email_id, not necessarily the
+    specific message id given in the URL — `email_id` here can be any
+    message in the thread, root or reply). Same sender-or-recipient scoping
+    every other per-email endpoint in this router uses
+    (`_require_recipient_row`, see module docstring): you must already be
+    able to see this email to link its thread to something. `entity_type` is
+    validated against the fixed INCIDENT/CLAIM/PROPERTY set by
+    schemas.EntityEmailEntityType itself (FastAPI 422s anything else before
+    this function body even runs); `entity_id` is checked to actually exist
+    (404 if not) the same way routers/documents.py's upload/list endpoints
+    validate their own entity_id."""
+    _require_recipient_row(db, email_id, current_user.user_id)
+    email = db.get(models.Email, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+
+    entity_model = _ENTITY_LINK_MODELS[payload.entity_type]
+    if db.get(entity_model, payload.entity_id) is None:
+        raise HTTPException(404, f"{payload.entity_type} {payload.entity_id} not found")
+
+    root_id = email.thread_id if email.thread_id is not None else email.email_id
+    return email_service.link_email_to_entity(
+        db, root_id, payload.entity_type, payload.entity_id, linked_by=current_user.user_id
+    )

@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies.permissions import require_roles
+from app.dependencies.permissions import get_current_user, require_roles
+from app.services import email as email_service
 
 router = APIRouter(prefix="/api/properties", tags=["properties"])
 
@@ -71,6 +72,21 @@ def get_property(property_id: int, db: Session = Depends(get_db)):
     if not prop:
         raise HTTPException(404, "Property not found")
     return _to_property_out(prop)
+
+
+@router.get("/{property_id}/emails", response_model=list[schemas.EntityLinkedEmailOut])
+def list_property_emails(
+    property_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 11" step 3/4 — see routers/incidents.py's
+    list_incident_emails for the full rationale; identical shape, scoped to
+    PROPERTY instead of INCIDENT."""
+    if db.get(models.Property, property_id) is None:
+        raise HTTPException(404, "Property not found")
+    links = email_service.list_linked_threads_for_entity(db, "PROPERTY", property_id, current_user.user_id)
+    return [email_service.to_entity_linked_email_out(link) for link in links]
 
 
 def _load_with_relations(db: Session, property_id: int) -> models.Property | None:

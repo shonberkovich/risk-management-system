@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies.permissions import require_roles
+from app.dependencies.permissions import get_current_user, require_roles
+from app.services import email as email_service
 
 router = APIRouter(prefix="/api/claims", tags=["claims"])
 
@@ -99,6 +100,21 @@ def get_claim(claim_id: int, db: Session = Depends(get_db)):
     if not claim:
         raise HTTPException(404, "Claim not found")
     return claim
+
+
+@router.get("/{claim_id}/emails", response_model=list[schemas.EntityLinkedEmailOut])
+def list_claim_emails(
+    claim_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 11" step 3/4 — see routers/incidents.py's
+    list_incident_emails for the full rationale; identical shape, scoped to
+    CLAIM instead of INCIDENT."""
+    if db.get(models.Claim, claim_id) is None:
+        raise HTTPException(404, "Claim not found")
+    links = email_service.list_linked_threads_for_entity(db, "CLAIM", claim_id, current_user.user_id)
+    return [email_service.to_entity_linked_email_out(link) for link in links]
 
 
 @router.post("", response_model=schemas.ClaimOut, status_code=201)

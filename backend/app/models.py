@@ -458,6 +458,61 @@ class EmailAttachment(Base):
     email: Mapped["Email"] = relationship(back_populates="attachments")
 
 
+class EntityEmail(Base):
+    """Contextual link between an email thread and a business entity (Incident/
+    Claim/Property) — TODO_SPEC.md "משימה 11": "קישור שרשור מיילים ישירות
+    לאירוע/תביעה/נכס". `email_id` always stores the THREAD ROOT's email_id
+    (the same value `Email.thread_id` points at for every reply in that
+    thread, or the message's own `email_id` if it has no `thread_id` at all —
+    i.e. `email.thread_id if email.thread_id is not None else email.email_id`),
+    never an individual reply's id. The spec's own wording is "link a
+    *thread* to an entity", and every message in a thread already shares one
+    root by construction (see `Email`'s docstring) — storing the root once
+    means "is this thread linked to entity X" is a single equality check
+    instead of a fan-out over every message in the thread, and a thread
+    linked from any one of its messages (root or reply) is linked as a
+    whole, matching how `GET /api/emails/{id}` already always resolves to a
+    thread rather than a single message. A separate design (link the
+    specific message id from the URL, not the root) would let one reply be
+    "linked" while its siblings aren't, which doesn't match "link a
+    thread" and would force every consumer of this table to re-derive the
+    thread anyway to show it as one linked conversation.
+
+    `entity_type` mirrors `Document.entity_type`'s naming style but is
+    deliberately a narrower set: "INCIDENT"/"CLAIM"/"PROPERTY" only (no
+    "POLICY" — the spec's own step 1 names only these three entities for
+    this task, unlike Documents' four).
+
+    `linked_by`/`linked_at` record who created the link and when. `auto_linked`
+    distinguishes an automatic link created by the optional step-5
+    subject-line detector (`services/email.autodetect_entity_links`) from one
+    a user created via `POST /api/emails/{id}/link` — auto-created rows still
+    set `linked_by` to the email's own sender (the person "responsible" for
+    the auto-link), so the column is never nullable; `auto_linked` is what
+    actually distinguishes the two origins, not a null-vs-set `linked_by`.
+
+    The (email_id, entity_type, entity_id) uniqueness constraint prevents the
+    same thread from being linked to the same entity twice (e.g. re-running
+    auto-detection on a second reply in an already-linked thread, or a user
+    clicking "link" twice) — `services/email.link_email_to_entity` is
+    idempotent against it, returning the existing row instead of erroring."""
+    __tablename__ = "Entity_Emails"
+    __table_args__ = (
+        UniqueConstraint("email_id", "entity_type", "entity_id", name="uq_entity_emails_email_entity"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Emails.email_id", ondelete="CASCADE"))
+    entity_type: Mapped[str] = mapped_column(Unicode(20))
+    entity_id: Mapped[int] = mapped_column(BigInteger)
+    linked_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("Users.user_id"))
+    linked_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    auto_linked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    email: Mapped["Email"] = relationship()
+    linked_by_user: Mapped["User"] = relationship()
+
+
 class AgentActionLog(Base):
     """Audit trail of autonomous/semi-autonomous actions proposed or taken by an AI
     agent within a session (e.g. drafting an Incident, proposing a Mitigation_Task) —

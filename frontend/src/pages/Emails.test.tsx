@@ -18,6 +18,10 @@ const {
   fetchUsersMock,
   sendEmailMock,
   uploadEmailAttachmentsMock,
+  linkEmailToEntityMock,
+  fetchPropertiesMock,
+  fetchIncidentsMock,
+  fetchClaimsMock,
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
@@ -29,6 +33,13 @@ const {
   fetchUsersMock: vi.fn(),
   sendEmailMock: vi.fn(),
   uploadEmailAttachmentsMock: vi.fn(),
+  // Task 11: the thread panel also renders EmailEntityLinkControl, which pulls
+  // in its own api/client dependencies (link call + the three entity-picker
+  // list fetchers) even before the user interacts with it.
+  linkEmailToEntityMock: vi.fn(),
+  fetchPropertiesMock: vi.fn(),
+  fetchIncidentsMock: vi.fn(),
+  fetchClaimsMock: vi.fn(),
 }));
 
 vi.mock("../api/client", () => ({
@@ -39,6 +50,10 @@ vi.mock("../api/client", () => ({
   fetchUsers: fetchUsersMock,
   sendEmail: sendEmailMock,
   uploadEmailAttachments: uploadEmailAttachmentsMock,
+  linkEmailToEntity: linkEmailToEntityMock,
+  fetchProperties: fetchPropertiesMock,
+  fetchIncidents: fetchIncidentsMock,
+  fetchClaims: fetchClaimsMock,
 }));
 
 import Emails from "./Emails";

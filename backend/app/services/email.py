@@ -17,12 +17,14 @@ lands in the same thread as replying to the root.
 """
 from __future__ import annotations
 
+import re
+
 import bleach
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
-from app.schemas import EmailCreate
+from app.schemas import EmailCreate, EntityLinkedEmailOut
 from app.services import sse_manager, storage
 
 # TODO_SPEC.md "משימה 10" step 2 — XSS defense for Email.body_html. A small, fixed
@@ -129,6 +131,11 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
 
     db.commit()
     db.refresh(email)
+
+    # Contextual auto-linking (TODO_SPEC.md "משימה 11" step 5, optional) — best
+    # effort, never blocks the send itself (see autodetect_entity_links's
+    # docstring for why a failed/no-match scan is silent, not an error).
+    autodetect_entity_links(db, email)
 
     # Real-time nudge (TODO_SPEC.md "משימה 4"): push a `new_email` event to every
     # addressed recipient's open SSE connection(s), if any — see
@@ -290,3 +297,165 @@ def list_emails_for_user(
         .offset(skip)
         .limit(limit)
     ).all())
+
+
+# ---------------------------------------------------------------------------
+# Contextual entity linking (TODO_SPEC.md "משימה 11")
+# ---------------------------------------------------------------------------
+
+
+def link_email_to_entity(
+    db: Session,
+    thread_root_id: int,
+    entity_type: str,
+    entity_id: int,
+    linked_by: int,
+    auto_linked: bool = False,
+) -> models.EntityEmail:
+    """Creates (or, if the same thread is already linked to the same entity,
+    returns the existing row for) an Entity_Emails link. `thread_root_id`
+    must already be resolved to the thread's root email_id by the caller
+    (see models.EntityEmail's docstring for why every link is keyed on the
+    root, never an individual reply's id) — this function does not itself
+    walk thread_id, so the two call sites (routers/emails.py's manual link
+    endpoint, and autodetect_entity_links below) each resolve it exactly
+    once rather than this function silently re-deriving it twice.
+
+    Idempotent by design against the model's (email_id, entity_type,
+    entity_id) uniqueness constraint: re-linking an already-linked
+    (thread, entity) pair returns the existing row instead of raising or
+    inserting a duplicate — both a user re-clicking "link" and
+    autodetect_entity_links re-scanning a later reply in an
+    already-linked thread should be harmless no-ops."""
+    existing = db.scalar(
+        select(models.EntityEmail).where(
+            models.EntityEmail.email_id == thread_root_id,
+            models.EntityEmail.entity_type == entity_type,
+            models.EntityEmail.entity_id == entity_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    link = models.EntityEmail(
+        email_id=thread_root_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        linked_by=linked_by,
+        auto_linked=auto_linked,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+def list_linked_threads_for_entity(
+    db: Session, entity_type: str, entity_id: int, viewer_id: int
+) -> list[models.EntityEmail]:
+    """Every Entity_Emails link for (entity_type, entity_id) whose thread the
+    *current viewer* actually has mailbox access to — reuses the same
+    Email_Recipients-row-per-(email, user) scoping every other emails.py
+    endpoint relies on (see routers/emails.py's module docstring), so
+    linking a thread to an entity is never itself a way to read mail the
+    viewer wasn't addressed on. "Has access" means an Email_Recipients row
+    for *any* message in the thread (root or any reply) — a viewer who was
+    only CC'd on a later reply, not the original root message, still counts
+    as a thread participant, same as GET /api/emails/{id}'s own
+    per-viewer thread-membership filter.
+
+    The extra query-per-link below (get_thread, then an access check) is
+    O(number of links on this entity) — fine at this demo's scale (a
+    handful of links per entity, a handful of messages per thread); a
+    single joined query would be the next optimization if that stopped
+    being true."""
+    links = db.scalars(
+        select(models.EntityEmail)
+        .where(models.EntityEmail.entity_type == entity_type, models.EntityEmail.entity_id == entity_id)
+        .order_by(models.EntityEmail.linked_at.desc())
+    ).all()
+
+    visible: list[models.EntityEmail] = []
+    for link in links:
+        thread_email_ids = [m.email_id for m in get_thread(db, link.email_id)]
+        has_access = db.scalar(
+            select(models.EmailRecipient.id).where(
+                models.EmailRecipient.user_id == viewer_id,
+                models.EmailRecipient.email_id.in_(thread_email_ids),
+            )
+        )
+        if has_access is not None:
+            visible.append(link)
+    return visible
+
+
+def to_entity_linked_email_out(link: models.EntityEmail) -> EntityLinkedEmailOut:
+    """Builds the EntityLinkedEmailOut the entity-scoped GET endpoints return
+    (routers/incidents.py, routers/claims.py, routers/properties.py) from an
+    EntityEmail row — shared here rather than duplicated in all three
+    routers, same "one conversion helper" convention as _to_email_out in
+    routers/emails.py."""
+    return EntityLinkedEmailOut(
+        email_id=link.email.email_id,
+        subject=link.email.subject,
+        created_at=link.email.created_at,
+        sender=link.email.sender,
+        linked_by=link.linked_by_user,
+        linked_at=link.linked_at,
+        auto_linked=link.auto_linked,
+    )
+
+
+# Entity code formats actually used in this repo (TODO_SPEC.md "משימה 11" step
+# 5's own example is "INC-2026-001"-shaped):
+#   - Incidents.incident_code: "INC-{year}-{seq:03d}"  (routers/incidents.py:_next_incident_code)
+#   - Claims.claim_number:     "CLM-{year}-{seq:03d}"  (routers/claims.py:_next_claim_number;
+#     seed.py's demo rows use 2-digit sequences like "CLM-2025-01" — \d+ matches either)
+#   - Properties.property_code: "PRP-{seq:03d}"        (seed.py, no year segment)
+# All three are simple, fixed, unambiguous prefixes, so one plain regex per
+# shape reliably finds candidate tokens in free-text subjects without false
+# positives against ordinary Hebrew/English subject lines.
+_INCIDENT_OR_CLAIM_CODE_RE = re.compile(r"\b(?:INC|CLM)-\d{4}-\d+\b")
+_PROPERTY_CODE_RE = re.compile(r"\bPRP-\d+\b")
+
+
+def autodetect_entity_links(db: Session, email: models.Email) -> list[models.EntityEmail]:
+    """TODO_SPEC.md "משימה 11" step 5 (optional): if `email.subject` contains
+    an entity-code-shaped token matching this repo's actual code formats
+    (see the regexes above), auto-creates an Entity_Emails link
+    (auto_linked=True) to the matching entity, credited to the email's own
+    sender. Plain regex against a fixed, unambiguous format — not a fuzzy
+    match: a token that doesn't resolve to an existing row (typo, made-up
+    code, or a code for an entity that doesn't exist) is silently skipped
+    rather than erroring, since this is a best-effort convenience on top of
+    the manual link endpoint (step 2/3), never a replacement for it and
+    never allowed to block the send it's attached to.
+
+    Called from send_email for every newly sent message. Safe to call again
+    for the same email (link_email_to_entity is idempotent), so a future
+    caller (e.g. re-scanning after an edit, if that's ever added) wouldn't
+    create duplicate links either."""
+    created: list[models.EntityEmail] = []
+    root_id = email.thread_id if email.thread_id is not None else email.email_id
+
+    for code in _INCIDENT_OR_CLAIM_CODE_RE.findall(email.subject):
+        if code.startswith("INC-"):
+            entity_type, model, field = "INCIDENT", models.Incident, "incident_code"
+        else:
+            entity_type, model, field = "CLAIM", models.Claim, "claim_number"
+
+        entity = db.scalar(select(model).where(getattr(model, field) == code))
+        if entity is None:
+            continue
+        entity_id = entity.incident_id if entity_type == "INCIDENT" else entity.claim_id
+        created.append(link_email_to_entity(db, root_id, entity_type, entity_id, linked_by=email.sender_id, auto_linked=True))
+
+    for code in _PROPERTY_CODE_RE.findall(email.subject):
+        prop = db.scalar(select(models.Property).where(models.Property.property_code == code))
+        if prop is None:
+            continue
+        created.append(
+            link_email_to_entity(db, root_id, "PROPERTY", prop.property_id, linked_by=email.sender_id, auto_linked=True)
+        )
+
+    return created
