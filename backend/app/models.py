@@ -377,6 +377,67 @@ class AgentSession(Base):
     actions: Mapped[list["AgentActionLog"]] = relationship(back_populates="session", passive_deletes=True)
 
 
+class Email(Base):
+    """An internal email/message (TODO_SPEC.md, "משימה 1"). `thread_id` is a
+    self-referencing FK to this same table's `email_id`, pointing at the thread's
+    root email (not a separate Threads table): the first message in a thread has
+    `thread_id = NULL` (it *is* the root), and every reply sets `thread_id` to that
+    root's `email_id` — so "all messages in a thread" is a flat
+    `WHERE email_id = :root_id OR thread_id = :root_id` query, and the root is
+    reachable in one hop from any reply instead of walking a parent chain. A
+    separate `Email_Threads` table would model an arbitrary reply tree (parent-of-
+    reply) but the spec (task 3 step 4 / task 2's `EmailThreadOut`) only calls for
+    flat "all messages in this thread" retrieval, so the cheaper self-FK is enough.
+    `status` is a plain free-text column for now (e.g. "SENT"/"DRAFT"); task 13
+    adds a "SCHEDULED" status later — not built out here."""
+    __tablename__ = "Emails"
+
+    email_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Users.user_id"))
+    subject: Mapped[str] = mapped_column(Unicode(500))
+    body_html: Mapped[str] = mapped_column(UnicodeText)
+    thread_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Emails.email_id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    status: Mapped[str] = mapped_column(Unicode(20), default="SENT")
+
+    sender: Mapped["User"] = relationship()
+    thread_root: Mapped["Email | None"] = relationship(remote_side="Email.email_id", back_populates="replies")
+    replies: Mapped[list["Email"]] = relationship(back_populates="thread_root", passive_deletes=True)
+    recipients: Mapped[list["EmailRecipient"]] = relationship(back_populates="email", passive_deletes=True)
+    attachments: Mapped[list["EmailAttachment"]] = relationship(back_populates="email", passive_deletes=True)
+
+
+class EmailRecipient(Base):
+    """One (email, user) delivery record — one row per recipient per folder copy,
+    including the sender's own SENT-folder copy (TODO_SPEC.md task 3 step 3;
+    "SENT" isn't in task 2's literal folder list but is needed so a sender sees
+    their own outgoing mail)."""
+    __tablename__ = "Email_Recipients"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Emails.email_id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Users.user_id"))
+    recipient_type: Mapped[str] = mapped_column(Unicode(10))
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder: Mapped[str] = mapped_column(Unicode(20), default="INBOX")
+
+    email: Mapped["Email"] = relationship(back_populates="recipients")
+    user: Mapped["User"] = relationship()
+
+
+class EmailAttachment(Base):
+    __tablename__ = "Email_Attachments"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("Emails.email_id", ondelete="CASCADE"))
+    file_path: Mapped[str] = mapped_column(Unicode(500))
+    file_name: Mapped[str] = mapped_column(Unicode(255))
+    file_size: Mapped[int] = mapped_column(BigInteger)
+    content_type: Mapped[str] = mapped_column(Unicode(100))
+
+    email: Mapped["Email"] = relationship(back_populates="attachments")
+
+
 class AgentActionLog(Base):
     """Audit trail of autonomous/semi-autonomous actions proposed or taken by an AI
     agent within a session (e.g. drafting an Incident, proposing a Mitigation_Task) —
