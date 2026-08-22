@@ -23,16 +23,18 @@ const FOLDERS: { value: EmailFolder; label: string; icon: ReactNode }[] = [
 ];
 
 /** One lightweight unread-count query per folder. `limit: 200` is enough to cover this
- * demo's seeded mailboxes; polling cadence matches Navbar's notification-bell badge.
- * Task 9 replaces this polling with SSE-driven invalidation of the same ["emails", ...]
- * query keys, so no changes will be needed here beyond removing the interval. */
+ * demo's seeded mailboxes. TODO_SPEC.md "משימה 9" made `useSSE` (mounted once in
+ * Layout.tsx) the primary refresh path — it invalidates every `["emails", ...]` query,
+ * this one included, the moment a `new_email` SSE event arrives — so the badge updates
+ * without waiting on a poll. `refetchInterval` stays, just slowed way down, purely as a
+ * fallback for the (rare) case the SSE connection itself is down. */
 function useUnreadCount(folder: EmailFolder): number {
   const { data } = useQuery({
     queryKey: ["emails", folder, "unread-count"],
     queryFn: () => fetchEmails(folder, 0, 200),
     select: (items) => items.filter((item) => !item.is_read).length,
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   });
   return data ?? 0;
 }
