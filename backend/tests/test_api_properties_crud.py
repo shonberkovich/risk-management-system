@@ -141,3 +141,22 @@ def test_update_property_rejects_negative_replacement_value(client, make_user, m
         f"/api/properties/{prop.property_id}", json={"replacement_value": -1}, headers=auth_headers(admin)
     )
     assert resp.status_code == 422
+
+
+def test_create_property_rejects_property_code_over_30_chars(client, make_user):
+    """Properties.property_code is NVARCHAR(30) — a longer code must be a clean
+    422, not a raw SQL error, when it reaches the real (non-SQLite) DB."""
+    admin = make_user(role="ADMIN")
+    resp = client.post(
+        "/api/properties", json=_property_payload(property_code="X" * 31), headers=auth_headers(admin)
+    )
+    assert resp.status_code == 422
+
+
+def test_update_property_rejects_property_code_over_30_chars(client, make_user, make_property):
+    admin = make_user(role="ADMIN")
+    prop = make_property()
+    resp = client.put(
+        f"/api/properties/{prop.property_id}", json={"property_code": "X" * 31}, headers=auth_headers(admin)
+    )
+    assert resp.status_code == 422

@@ -219,6 +219,14 @@ def create_claim_payment(
         raise HTTPException(404, "Claim not found")
     if claim.claim_status not in _PAYABLE_CLAIM_STATUSES:
         raise HTTPException(400, "ניתן לרשום תשלום רק לתביעה מאושרת או סגורה")
+    # ClaimPaymentCreate.amount has no ge=0 constraint at the schema level (unlike
+    # ClaimCreate.claimed_amount/ClaimReserveCreate.reserve_amount, which do) — a
+    # zero/negative amount here would silently corrupt the running "paid so far" total
+    # and could be used to bypass the exceeds-approved-amount guard below (submit a
+    # negative payment first to create headroom, then overpay). Enforce it here instead
+    # of loosening this check.
+    if payload.amount <= 0:
+        raise HTTPException(400, "סכום התשלום חייב להיות חיובי")
 
     paid_so_far = db.scalar(
         select(func.sum(models.ClaimPayment.amount)).where(models.ClaimPayment.claim_id == claim_id)

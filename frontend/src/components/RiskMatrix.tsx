@@ -64,6 +64,8 @@ export default function RiskMatrix({
                       if (!onSelectCell || count === 0 || !cell) return;
                       onSelectCell(isSelected ? null : cell);
                     }}
+                    data-testid={`risk-matrix-cell-${prob}-${sev}`}
+                    data-count={count}
                     sx={{
                       bgcolor: cellColor(prob, sev, count),
                       borderRadius: 1,
