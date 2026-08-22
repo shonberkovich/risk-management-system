@@ -1,9 +1,12 @@
 """Anthropic Claude integration: incident classification, executive summaries,
-and natural-language data Q&A (tool use)."""
+natural-language data Q&A (tool use), and email thread summarization/reply
+drafting (TODO_SPEC.md "משימה 15")."""
+import html as html_lib
 from collections.abc import Iterator
 from typing import Literal
 
 import anthropic
+import bleach
 from anthropic import beta_tool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -245,3 +248,104 @@ def ask_question(question: str) -> str:
             if block.type == "text":
                 final_text = block.text
     return final_text or "לא הצלחתי לענות על השאלה."
+
+
+# ---------------------------------------------------------------------------
+# Email thread summarization + reply drafting (TODO_SPEC.md "משימה 15")
+#
+# Privacy (spec step 5): both functions below take only `messages: list[dict]`
+# — plain data the *caller* (routers/emails.py) builds from exactly one
+# thread's own Email rows, already scoped to what the requesting user is
+# allowed to see (see routers/emails.py's `_thread_messages_for_ai`). Nothing
+# here queries the DB, calls kpi_service, or otherwise reaches for
+# system-wide context the way ASK_TOOLS above deliberately does for the
+# broader Q&A feature — this is a narrow, single-thread operation only.
+# ---------------------------------------------------------------------------
+
+EMAIL_AI_SYSTEM_CONTEXT = (
+    "אתה עוזר AI במערכת RMIS (Risk Management Information System) המסייע לעובד לנהל "
+    "תכתובת דוא\"ל פנימית בעברית. אתה רואה אך ורק את הודעות שרשור הדוא\"ל הספציפי "
+    "שסופק לך בהודעת המשתמש - אין לך גישה לנתונים נוספים כלשהם במערכת (לא לנכסים, "
+    "לא לתביעות, לא לשרשורים אחרים). ענה תמיד בעברית."
+)
+
+
+def _strip_html_to_plain_text(body_html: str) -> str:
+    """Strips all markup down to plain text before it ever becomes prompt
+    content (spec step 5: "don't send raw HTML/markup as prompt content").
+    Reuses the same bleach tag-stripping already used to sanitize
+    Email.body_html (see services/email.py's sanitize_body_html) but with an
+    empty tag allowlist, so every tag is removed rather than a safe subset
+    kept; html.unescape resolves any leftover entities (e.g. &amp;) back to
+    plain characters."""
+    return html_lib.unescape(bleach.clean(body_html, tags=[], attributes={}, strip=True)).strip()
+
+
+def _format_thread_for_prompt(messages: list[dict]) -> str:
+    """Renders `messages` (each a {"sender": str, "created_at": str,
+    "body_html": str} dict for one message in the thread, oldest first) into
+    a plain-text transcript for the prompt. Purely a formatting/stripping
+    step over what's already been passed in - see this section's module
+    docstring for why the DB-querying/access-scoping happens one layer up,
+    in routers/emails.py, not here."""
+    blocks = []
+    for m in messages:
+        sender = m.get("sender", "")
+        created_at = m.get("created_at", "")
+        body = _strip_html_to_plain_text(m.get("body_html", ""))
+        blocks.append(f"מאת: {sender} | {created_at}\n{body}")
+    return "\n\n---\n\n".join(blocks)
+
+
+def summarize_email_thread(messages: list[dict]) -> str:
+    """Returns a Hebrew executive summary (spec: 3 sentences or fewer) of the
+    given thread messages. `messages` must be exactly this thread's own
+    messages - see this section's module docstring."""
+    transcript = _format_thread_for_prompt(messages)
+    client = get_client()
+    response = client.messages.create(
+        model=settings.anthropic_model,
+        max_tokens=512,
+        system=EMAIL_AI_SYSTEM_CONTEXT,
+        messages=[{
+            "role": "user",
+            "content": (
+                "להלן שרשור הודעות דוא\"ל. סכם אותו בעברית בשלושה משפטים לכל היותר - "
+                "תמציתי וממוקד בנושא הפנייה, בהחלטות/בקשות המרכזיות ובסטטוס הנוכחי. "
+                "אל תמציא פרטים שלא מופיעים בשרשור.\n\n"
+                f"{transcript}"
+            ),
+        }],
+    )
+    return next((block.text for block in response.content if block.type == "text"), "").strip()
+
+
+def suggest_email_reply(messages: list[dict]) -> str:
+    """Drafts a professional Hebrew reply based on the thread (particularly
+    its last message), returned as plain text - the same shape
+    EmailComposeModal.tsx's body TextField/`initialBody` prop already expects
+    (see that component's module docstring: `initialBody` is plain text, and
+    `plainTextToHtml` wraps it into `<p>...</p>` only at send time), so the
+    frontend can drop this straight into a reply-mode compose without any
+    HTML round-trip. `messages` must be exactly this thread's own messages -
+    see this section's module docstring. Never sent automatically - the
+    frontend always opens this pre-filled but editable (spec step 4)."""
+    transcript = _format_thread_for_prompt(messages)
+    client = get_client()
+    response = client.messages.create(
+        model=settings.anthropic_model,
+        max_tokens=1024,
+        system=EMAIL_AI_SYSTEM_CONTEXT,
+        messages=[{
+            "role": "user",
+            "content": (
+                "להלן שרשור הודעות דוא\"ל. נסח טיוטת תגובה מקצועית בעברית להודעה האחרונה "
+                "בשרשור, בטון עסקי ומנומס, המתייחסת לתוכן השרשור בפועל. "
+                "החזר טקסט רגיל בלבד - ללא כותרות, ללא תגי HTML, וללא חתימה (החתימה "
+                "האישית של המשתמש מתווספת אוטומטית בעורך הדוא\"ל). אפשר להפריד בין "
+                "פסקאות בשורה ריקה.\n\n"
+                f"{transcript}"
+            ),
+        }],
+    )
+    return next((block.text for block in response.content if block.type == "text"), "").strip()

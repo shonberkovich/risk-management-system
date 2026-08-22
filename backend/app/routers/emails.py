@@ -73,20 +73,58 @@ schedule_email docstrings for the full design), so there's nothing for
 `_require_recipient_row` to look up until it actually sends. Undo-send (the
 other half of this task) is pure frontend (EmailComposeModal.tsx) and has no
 backend surface at all.
+
+Task 15 ("סיכום מיילים ארוכים וסיווג באמצעות Claude AI") adds two AI-backed
+endpoints: POST /{email_id}/summarize and POST /{email_id}/suggest-reply.
+Placed in *this* router rather than routers/ai.py — where every other
+`/api/ai/*` endpoint lives — because both operate on a specific mailbox
+resource and need this router's own `_require_recipient_row` (email-or-403,
+actually 404, ownership check) run first: routers/ai.py's existing endpoints
+are either global (classify-incident/ask/executive-summary take no entity id
+at all) or scoped by a different ownership model entirely (the
+agent-action-log endpoints check `Agent_Actions_Log` ownership, not mailbox
+membership). Reusing `_require_recipient_row` in-place here — instead of
+importing it into ai.py or duplicating its 404-non-disclosure logic there —
+keeps the "can this caller even see this thread" check colocated with every
+other place that check already lives, which is exactly the property Task 10's
+RBAC audit (see above) depends on: one authorization helper, not two drifting
+copies. Both endpoints otherwise match ai.py's own conventions: a
+`_require_api_key`-equivalent 503 gate (CLAUDE.md's documented
+graceful-degradation pattern) and `anthropic.APIStatusError`/
+`APIConnectionError` -> 502 handling. The ownership check runs *before* the
+API-key gate (opposite of ai.py's endpoints, which have no per-resource
+ownership check to order against) so a non-participant always gets a 404
+regardless of whether ANTHROPIC_API_KEY happens to be configured — the
+API-key check alone must never become a way to distinguish "you're not on
+this thread" from "AI isn't configured right now".
 """
 from __future__ import annotations
 
+import anthropic
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import get_current_user
 from app.services import email as email_service
+from app.services import llm
 from app.services import storage
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
+
+
+class EmailSummaryOut(BaseModel):
+    """Response body for POST /{email_id}/summarize (Task 15)."""
+    summary: str
+
+
+class EmailReplySuggestionOut(BaseModel):
+    """Response body for POST /{email_id}/suggest-reply (Task 15)."""
+    draft: str
 
 _MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024  # 25 MB per file — same ceiling as media.py/documents.py uploads
 
@@ -127,6 +165,46 @@ def _require_sender(db: Session, email_id: int, user_id: int) -> models.Email:
     if email is None or email.sender_id != user_id:
         raise HTTPException(404, "Email not found")
     return email
+
+
+def _require_ai_api_key() -> None:
+    """Task 15's own copy of routers/ai.py's `_require_api_key` — same message,
+    same 503, same CLAUDE.md-documented "AI features degrade gracefully
+    without a key" pattern. See this module's docstring for why these two
+    endpoints live here instead of ai.py (and thus don't just import that
+    router's private helper)."""
+    if not settings.anthropic_api_key:
+        raise HTTPException(
+            503,
+            "AI features are not configured — set ANTHROPIC_API_KEY in backend/.env",
+        )
+
+
+def _thread_messages_for_ai(db: Session, thread_root_id: int, viewer_id: int) -> list[dict]:
+    """Builds the `messages: list[dict]` payload llm.summarize_email_thread /
+    llm.suggest_email_reply take — TODO_SPEC.md "משימה 15" step 5 (privacy):
+    only this thread's own messages, and only the ones `viewer_id` actually
+    has an Email_Recipients row for (same per-viewer thread-membership filter
+    GET /{email_id} above already applies — a viewer partly CC'd on the
+    thread must not have messages they can't see fed into the prompt either).
+    Nothing else in the system (no KPIs, no other threads, no unrelated
+    entities) is ever included."""
+    all_messages = email_service.get_thread(db, thread_root_id)
+    visible_ids = set(db.scalars(
+        select(models.EmailRecipient.email_id).where(
+            models.EmailRecipient.user_id == viewer_id,
+            models.EmailRecipient.email_id.in_([m.email_id for m in all_messages]),
+        )
+    ).all())
+    visible_messages = [m for m in all_messages if m.email_id in visible_ids]
+    return [
+        {
+            "sender": m.sender.full_name,
+            "created_at": m.created_at.isoformat(),
+            "body_html": email_service.sanitize_body_html(m.body_html),
+        }
+        for m in visible_messages
+    ]
 
 
 def _to_list_item(row: models.EmailRecipient) -> schemas.EmailListItemOut:
@@ -438,3 +516,58 @@ def link_email_to_entity(
     return email_service.link_email_to_entity(
         db, root_id, payload.entity_type, payload.entity_id, linked_by=current_user.user_id
     )
+
+
+@router.post("/{email_id}/summarize", response_model=EmailSummaryOut)
+def summarize_email_thread(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 15" — Hebrew executive summary (≤3 sentences) of the
+    thread containing `email_id`. See module docstring for the ordering of
+    the ownership check vs. the API-key gate, and `_thread_messages_for_ai`
+    for the privacy scoping."""
+    _require_recipient_row(db, email_id, current_user.user_id)
+    _require_ai_api_key()
+    email = db.get(models.Email, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+
+    thread_root_id = email.thread_id if email.thread_id is not None else email.email_id
+    messages = _thread_messages_for_ai(db, thread_root_id, current_user.user_id)
+    try:
+        summary = llm.summarize_email_thread(messages)
+    except anthropic.APIStatusError as e:
+        raise HTTPException(502, f"AI service error: {e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(502, "AI service unreachable") from e
+    return EmailSummaryOut(summary=summary)
+
+
+@router.post("/{email_id}/suggest-reply", response_model=EmailReplySuggestionOut)
+def suggest_email_reply(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 15" — drafts a Hebrew reply (plain text — see
+    llm.suggest_email_reply's docstring for why) based on the thread
+    containing `email_id`, particularly its last message. The frontend opens
+    this pre-filled into a reply-mode compose but never auto-sends it (spec
+    step 4)."""
+    _require_recipient_row(db, email_id, current_user.user_id)
+    _require_ai_api_key()
+    email = db.get(models.Email, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+
+    thread_root_id = email.thread_id if email.thread_id is not None else email.email_id
+    messages = _thread_messages_for_ai(db, thread_root_id, current_user.user_id)
+    try:
+        draft = llm.suggest_email_reply(messages)
+    except anthropic.APIStatusError as e:
+        raise HTTPException(502, f"AI service error: {e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(502, "AI service unreachable") from e
+    return EmailReplySuggestionOut(draft=draft)
