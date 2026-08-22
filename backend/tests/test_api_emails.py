@@ -8,6 +8,8 @@ move it — see routers/emails.py's module docstring for why 404 rather than
 """
 from __future__ import annotations
 
+from app.schemas import EmailCreate
+from app.services import email as email_service
 from tests.conftest import auth_headers
 
 
@@ -59,6 +61,42 @@ def test_send_email_creates_recipients_and_is_retrievable(client, make_user):
     # And by the sender too (their SENT copy).
     sender_get = client.get(f"/api/emails/{email_id}", headers=sender_headers)
     assert sender_get.status_code == 200
+
+
+def test_send_email_is_not_marked_system_email(client, make_user):
+    """TODO_SPEC.md "משימה 20" step 3 — a normal person-to-person send must never
+    come back marked as a system email."""
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    resp = _send(client, auth_headers(sender), to=[to_user.user_id])
+    assert resp.status_code == 201
+    assert resp.json()["is_system_email"] is False
+
+
+def test_system_email_marker_visible_in_list_and_thread(client, make_user, db):
+    """TODO_SPEC.md "משימה 20" step 3 — a system-generated email (here created
+    directly via services.email.send_email(is_system_email=True), same call
+    services/notifications.py's bridge makes) must come back marked True from
+    both GET /api/emails (list) and GET /api/emails/{id} (thread) for the
+    recipient it was addressed to."""
+    system_sender = make_user(role="ADMIN")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    email = email_service.send_email(
+        db,
+        system_sender.user_id,
+        EmailCreate(to=[recipient.user_id], subject="התראת מערכת לדוגמה", body_html="<p>תוכן</p>"),
+        is_system_email=True,
+    )
+
+    recipient_headers = auth_headers(recipient)
+    list_resp = client.get("/api/emails", headers=recipient_headers)
+    assert list_resp.status_code == 200
+    list_row = next(row for row in list_resp.json() if row["email_id"] == email.email_id)
+    assert list_row["is_system_email"] is True
+
+    thread_resp = client.get(f"/api/emails/{email.email_id}", headers=recipient_headers)
+    assert thread_resp.status_code == 200
+    assert thread_resp.json()["messages"][0]["is_system_email"] is True
 
 
 def test_send_email_requires_auth(client, make_user):

@@ -493,6 +493,23 @@ class Email(Base):
     # itself.
     read_receipt_requested: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # TODO_SPEC.md "משימה 20" step 3 — the cheapest correct "is this a system-
+    # generated email" signal. Considered and rejected: reusing `sender_id IS NULL`
+    # (would require making the NOT NULL `sender_id` FK nullable and `EmailOut.sender`/
+    # `EmailListItemOut.sender` Optional everywhere they're rendered — a much larger,
+    # more invasive change for a demo-scoped feature) and inferring it from
+    # `sender.role == "SYSTEM"` (works, but couples the frontend's rendering decision
+    # to a specific seeded user's role string instead of a first-class column, and
+    # forces an extra join/lookup everywhere a list row is rendered). A dedicated
+    # boolean is a single indexless column, defaults False for every email that
+    # existed before this feature and every normal person-to-person send, and is set
+    # True only by `services/notifications.py`'s dispatch->internal-email bridge (see
+    # that module's docstring) when it calls `services/email.send_email(...,
+    # is_system_email=True)`. `services/email.py` never sets it on its own — a real
+    # person composing/replying always sends a normal (False) email, even to/from the
+    # seeded system user's address.
+    is_system_email: Mapped[bool] = mapped_column(Boolean, default=False)
+
     sender: Mapped["User"] = relationship()
     thread_root: Mapped["Email | None"] = relationship(remote_side="Email.email_id", back_populates="replies")
     replies: Mapped[list["Email"]] = relationship(back_populates="thread_root", passive_deletes=True)

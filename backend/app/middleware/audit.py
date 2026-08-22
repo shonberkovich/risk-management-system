@@ -12,6 +12,37 @@ raising.
 Runs *after* the endpoint (in the `finally`), so `new_value` reflects the actual response
 body (what was persisted / the error returned), and the audited action is skipped
 entirely for requests that never reach a matching route (404s before routing).
+
+TODO_SPEC.md "משימה 20" step 1 — auditing two specific email actions:
+
+  * "הורדת צרופה רגישה" (downloading a sensitive attachment) — GET
+    /api/emails/attachments/{id}/signed-url (routers/emails.py's
+    get_attachment_signed_url, Task 6). This is a read, not one of the
+    _MUTATING_METHODS above, so the generic mutating-verb sweep never sees it at
+    all — but it's exactly the kind of action this task calls out for auditing, so
+    `_AUDITED_GET_ROUTES` below is a small, explicit, named allowlist of GET
+    routes audited *in addition to* every mutating request, kept in this same
+    middleware (the one existing mechanism every audit row already goes through)
+    rather than a second, parallel `AuditLog(...)` call added inside
+    routers/emails.py. Every other GET in the app is still never audited — this
+    is a narrow, deliberate exception, not a policy change. Per TODO_SPEC.md step
+    5's privacy concern, only metadata is recorded (who downloaded which
+    attachment_id, when, from what IP) — a GET has no request body to log, so
+    `new_value` is always None here; the attachment's file bytes/content are
+    never read or stored by this middleware.
+
+  * "מחיקת מייל לצמיתות" (permanently deleting an email from Trash) — checked for
+    and *not* wired up: this codebase has no permanent-delete endpoint for an
+    email anywhere (`services/email.py`'s trash_email only moves a message to the
+    TRASH folder via the same generic PATCH /{id}/folder every other folder move
+    uses; there is no DELETE that actually removes an Email/Email_Recipients row
+    for a received/sent message — the one real `db.delete(Email)` in that module,
+    `cancel_scheduled_email`, is for an unsent *scheduled* message and is a
+    different feature entirely). That PATCH move-to-TRASH and the real
+    cancel-schedule DELETE are both already audited for free by the generic
+    mutating-verb sweep above (PATCH -> UPDATE, DELETE -> DELETE) — nothing
+    further to add here. Inventing a new hard-delete-from-Trash feature just to
+    have something to audit was explicitly out of scope for this task.
 """
 from __future__ import annotations
 
@@ -34,6 +65,14 @@ _ACTION_BY_METHOD = {"POST": "CREATE", "PUT": "UPDATE", "PATCH": "UPDATE", "DELE
 # audit trail (best-effort, not a router).
 _PATH_RE = re.compile(r"^/api/([a-zA-Z\-]+?)(?:/(\d+))?(?:/.*)?$")
 
+# TODO_SPEC.md "משימה 20" step 1 — named GET routes audited despite being reads (see
+# module docstring above). Each entry is (path pattern with the id as capture group
+# 1, entity_type, action); matched only for method == "GET". Keep this list short and
+# deliberate — it's a named exception list, not a general "audit every read" switch.
+_AUDITED_GET_ROUTES: list[tuple[re.Pattern, str, str]] = [
+    (re.compile(r"^/api/emails/attachments/(\d+)/signed-url$"), "EMAIL_ATTACHMENT", "DOWNLOAD"),
+]
+
 
 def _extract_entity(path: str) -> tuple[str, int]:
     match = _PATH_RE.match(path)
@@ -54,17 +93,37 @@ def _current_user_id(request: Request) -> int | None:
     return int(payload["sub"])
 
 
+def _match_audited_get(path: str) -> tuple[str, str, int] | None:
+    """Checks `path` against `_AUDITED_GET_ROUTES` — returns (entity_type, action,
+    entity_id) for the first match, or None. See module docstring."""
+    for pattern, entity_type, action in _AUDITED_GET_ROUTES:
+        match = pattern.match(path)
+        if match:
+            return entity_type, action, int(match.group(1))
+    return None
+
+
 class AuditLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.method not in _MUTATING_METHODS or not request.url.path.startswith("/api/"):
+        is_mutating = request.method in _MUTATING_METHODS
+        audited_get = (
+            _match_audited_get(request.url.path) if request.method == "GET" else None
+        )
+        if not request.url.path.startswith("/api/") or not (is_mutating or audited_get):
             return await call_next(request)
 
         # Read the request body up front (Starlette caches it, so the endpoint can still
-        # read it downstream) — used as old/new value context for the audit row.
-        body_bytes = await request.body()
+        # read it downstream) — used as old/new value context for the audit row. A GET
+        # has no body to read (and nothing to log as new_value — see module docstring's
+        # metadata-only note for the audited-GET case).
+        body_bytes = await request.body() if is_mutating else b""
         response = await call_next(request)
 
-        entity_type, entity_id = _extract_entity(request.url.path)
+        if audited_get is not None:
+            entity_type, action, entity_id = audited_get
+        else:
+            entity_type, entity_id = _extract_entity(request.url.path)
+            action = _ACTION_BY_METHOD[request.method]
         user_id = _current_user_id(request)
         try:
             new_value = body_bytes.decode("utf-8")[:2000] if body_bytes else None
@@ -78,7 +137,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                     user_id=user_id,
                     entity_type=entity_type,
                     entity_id=entity_id,
-                    action=_ACTION_BY_METHOD[request.method],
+                    action=action,
                     old_value=None,
                     new_value=new_value,
                     timestamp=datetime.now(timezone.utc).replace(tzinfo=None),

@@ -17,18 +17,62 @@ only the last-mile delivery is simulated.
 
 This mirrors how routers/ai.py degrades gracefully without an ANTHROPIC_API_KEY: the
 feature is fully exercised end-to-end, just without an external side effect at the end.
+
+TODO_SPEC.md "משימה 20" step 2 — dispatch->internal-email bridge: real outbound
+delivery is still out of scope (see above), but *internal* delivery no longer is —
+this app now has a real internal mailbox (services/email.py). So alongside the
+simulated log + Notification_Log row every dispatched notification already got
+(_send_and_log, unchanged), `_bridge_to_internal_inbox` below additionally creates a
+genuine `Email`/`Email_Recipients` row in an *internal* recipient's own INBOX for
+every EMAIL-channel notification, so a risk_manager/cfo/etc. who is also a real
+Users row actually sees the alert show up in Emails.tsx, not just in a log file only
+an ops engineer would ever tail. "Internal" here means "this Recipient's `email`
+matches an existing `Users.email` row" — routing still comes entirely from
+Notification_Recipients/DEFAULT_RECIPIENTS as before; this only asks, for each
+already-routed EMAIL notification, "does that address happen to belong to a real
+system user?" and if so, mirrors it into their inbox too. A recipient whose email
+doesn't match any User (an external distribution address, or the DEFAULT_RECIPIENTS
+fallback's example.local addresses) simply never gets the internal-email step —
+still fully covered by the simulated-log/Notification_Log behavior alone, unchanged.
+
+Only the EMAIL channel is bridged (never SMS/PUSH) — a single alert fanned out to a
+recipient on multiple channels must not produce multiple duplicate inbox emails for
+the one alert; EMAIL is the one channel an internal inbox message is a faithful
+stand-in for.
+
+Privacy (TODO_SPEC.md "משימה 20" step 5): this bridge sends through
+`services/email.send_email` — the exact same function, same `Email_Recipients`
+fan-out, same RBAC (`routers/emails.py`'s mailbox-ownership checks) as any
+person-to-person email. There is no direct DB write here that hands a recipient's
+inbox contents to anyone who wasn't already an addressed recipient; the sender is a
+fixed, non-interactive "system" `Users` row (see `_get_or_create_system_user`) that
+can never log in (NULL password_hash), not a real person's account, and the message
+itself only ever contains the same title/message text already written to
+Notification_Log — never any other user's private mail content.
 """
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from html import escape
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
+from app.schemas import EmailCreate
+from app.services import email as email_service
 from app.services.kpi import calculate_alerts
 
 logger = logging.getLogger("rmis.notifications")
+
+# TODO_SPEC.md "משימה 20" step 2 — the fixed sender for every system-generated
+# internal email this bridge creates. Matched by email against Users (not by a
+# hardcoded id), so it's found whether it came from app/seed.py's demo data or was
+# lazily created by `_get_or_create_system_user` below on a DB that was never
+# reseeded after this feature landed (mirrors `_load_recipients`'s own
+# DEFAULT_RECIPIENTS fallback posture: never assume a fresh/test DB was seeded).
+SYSTEM_USER_EMAIL = "system@rmis.local"
+SYSTEM_USER_NAME = "מערכת RMIS"
 
 SEVERITY_RANK = {"critical": 0, "warning": 1}
 CHANNELS = ("EMAIL", "SMS", "PUSH")
@@ -150,6 +194,73 @@ def build_notifications(
     return _route_alerts(alerts, recipients)
 
 
+def _get_or_create_system_user(db: Session) -> models.User:
+    """Looks up the fixed system sender by `SYSTEM_USER_EMAIL`, creating it if this
+    DB was never reseeded after TODO_SPEC.md "משימה 20" landed (see module
+    docstring / app/seed.py's own insert of this same row for the normal case).
+    `password_hash=None`/`is_active=False` so this row can never actually log in
+    (services.auth.verify_password treats a NULL hash as "never matches") — it
+    exists only to be `Email.sender_id` for system-generated mail, never a real
+    session."""
+    user = db.scalar(select(models.User).where(models.User.email == SYSTEM_USER_EMAIL))
+    if user is not None:
+        return user
+    user = models.User(
+        full_name=SYSTEM_USER_NAME,
+        email=SYSTEM_USER_EMAIL,
+        role="SYSTEM",
+        password_hash=None,
+        is_active=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _internal_user_for_contact(db: Session, contact: str) -> models.User | None:
+    """Is `contact` (a routed notification's EMAIL-channel address) an internal
+    system user? Matched against `Users.email` — see module docstring for why this,
+    not a `user_id` on `Recipient`/`NotificationRecipient`, is what "internal"
+    means here (those rows are role/email/phone routing config, same shape whether
+    or not the address happens to also be a real employee's login)."""
+    return db.scalar(select(models.User).where(models.User.email == contact))
+
+
+def _bridge_to_internal_inbox(db: Session, notifications: list[dict]) -> None:
+    """TODO_SPEC.md "משימה 20" step 2 — for every already-"sent" (simulated)
+    EMAIL-channel notification whose `contact` matches a real internal `Users.email`,
+    also creates a genuine internal `Email` in that user's INBOX via
+    `services/email.send_email` (see module docstring for the privacy rationale).
+    Purely additive: never mutates or skips the simulated-log/Notification_Log
+    behavior `_send_and_log` already performed above this call — a notification
+    with no matching internal user is simply left as simulated-log-only, exactly
+    as before this feature existed.
+
+    The system sender is looked up/created lazily (only once real work is needed,
+    not on every dispatch call that happens to route zero EMAIL notifications) so
+    a DB that never triggers this path never gains an extra Users row for nothing."""
+    system_user: models.User | None = None
+    for n in notifications:
+        if n["channel"] != "EMAIL":
+            continue
+        recipient_user = _internal_user_for_contact(db, n["contact"])
+        if recipient_user is None:
+            continue
+        if system_user is None:
+            system_user = _get_or_create_system_user(db)
+        if recipient_user.user_id == system_user.user_id:
+            continue  # never mail the system account itself
+
+        body_html = f"<p>{escape(n['message'])}</p>"
+        email_service.send_email(
+            db,
+            system_user.user_id,
+            EmailCreate(to=[recipient_user.user_id], subject=n["title"], body_html=body_html),
+            is_system_email=True,
+        )
+
+
 def _send_and_log(db: Session, notifications: list[dict]) -> list[dict]:
     """"Sends" each already-routed notification record. Real delivery is out of scope
     (see module docstring), so sending is simulated: each notification is logged at
@@ -187,6 +298,11 @@ def _send_and_log(db: Session, notifications: list[dict]) -> list[dict]:
         ))
     if notifications:
         db.commit()
+
+    # TODO_SPEC.md "משימה 20" step 2 — additive, after the simulated-log/
+    # Notification_Log behavior above (unchanged) has already committed. See
+    # `_bridge_to_internal_inbox`'s own docstring.
+    _bridge_to_internal_inbox(db, notifications)
 
     return notifications
 

@@ -76,6 +76,22 @@ def run():
         [(*u, password_hash) for u in users],
     )
 
+    # TODO_SPEC.md "משימה 20" step 2 — the fixed "system" sender used by
+    # services/notifications.py's dispatch->internal-email bridge (see that
+    # module's SYSTEM_USER_EMAIL / _get_or_create_system_user docstring): a
+    # real Users row (Emails.sender_id stays NOT NULL — see models.Email's
+    # docstring for why this was chosen over a nullable sender_id) that can
+    # never actually log in (password_hash NULL, is_active 0), inserted
+    # separately from the `users` list above so it doesn't get the shared
+    # DEMO_PASSWORD hash every real seeded employee gets. notifications.py
+    # also lazily creates this same row (matched by email) if a DB was never
+    # reseeded after this feature landed, so this insert isn't load-bearing —
+    # it only makes a freshly-seeded demo DB show a real name for it right away.
+    cur.execute(
+        "INSERT INTO Users (full_name, email, role, password_hash, is_active) VALUES (?, ?, ?, ?, ?)",
+        ("מערכת RMIS", "system@rmis.local", "SYSTEM", None, 0),
+    )
+
     # --- Regions ---
     regions = [
         ("CENTER", "מרכז"),

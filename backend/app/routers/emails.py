@@ -238,6 +238,7 @@ def _to_list_item(db: Session, row: models.EmailRecipient) -> schemas.EmailListI
         is_read=row.is_read,
         folder=row.folder,
         labels=[schemas.LabelOut.model_validate(l) for l in email_service.get_labels_for_email(db, _thread_root_id(email))],
+        is_system_email=email.is_system_email,
     )
 
 

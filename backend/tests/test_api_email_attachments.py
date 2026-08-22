@@ -11,6 +11,7 @@ import io
 
 import pytest
 
+from app import models
 from app.services import storage
 from tests.conftest import auth_headers
 
@@ -214,3 +215,67 @@ def test_signed_url_requires_auth(client, make_user):
 
     resp = client.get(f"/api/emails/attachments/{attachment_id}/signed-url")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# TODO_SPEC.md "משימה 20" step 1 — signed-url downloads are audited despite
+# being a GET (see app/middleware/audit.py's module docstring for the
+# named-GET-route mechanism).
+# ---------------------------------------------------------------------------
+
+
+def test_signed_url_download_writes_an_audit_log_row(client, make_user, db):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    sender_headers = auth_headers(sender)
+    email_id = _send(client, sender_headers, to=[recipient.user_id])
+    attachment_id = _attach(
+        client, sender_headers, email_id, [("files", "doc.pdf", b"x", "application/pdf")]
+    ).json()[0]["id"]
+
+    before = db.query(models.AuditLog).count()
+    resp = client.get(f"/api/emails/attachments/{attachment_id}/signed-url", headers=sender_headers)
+    assert resp.status_code == 200
+
+    rows = db.query(models.AuditLog).order_by(models.AuditLog.log_id.desc()).all()
+    assert len(rows) == before + 1
+    row = rows[0]
+    assert row.entity_type == "EMAIL_ATTACHMENT"
+    assert row.entity_id == attachment_id
+    assert row.action == "DOWNLOAD"
+    assert row.user_id == sender.user_id
+    # Metadata only (TODO_SPEC.md step 5) — no email/attachment content is ever
+    # logged, just who/what/when.
+    assert row.new_value is None
+    assert row.old_value is None
+
+
+def test_signed_url_download_audit_row_visible_via_admin_audit_log_api(client, make_user):
+    admin = make_user(role="ADMIN")
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    sender_headers = auth_headers(sender)
+    email_id = _send(client, sender_headers, to=[recipient.user_id])
+    attachment_id = _attach(
+        client, sender_headers, email_id, [("files", "doc.pdf", b"x", "application/pdf")]
+    ).json()[0]["id"]
+
+    client.get(f"/api/emails/attachments/{attachment_id}/signed-url", headers=sender_headers)
+
+    resp = client.get("/api/audit-log", params={"entity_type": "EMAIL_ATTACHMENT"}, headers=auth_headers(admin))
+    assert resp.status_code == 200
+    entries = resp.json()["entries"]
+    assert any(e["entity_id"] == attachment_id and e["action"] == "DOWNLOAD" for e in entries)
+
+
+def test_other_gets_still_not_audited(client, make_user, db):
+    """The named-GET-route allowlist (module docstring) is a narrow exception —
+    an ordinary GET like listing emails must still never write an audit row."""
+    sender = make_user(role="RISK_MANAGER")
+    _send(client, auth_headers(sender), to=[sender.user_id])
+
+    before = db.query(models.AuditLog).count()
+    resp = client.get("/api/emails", headers=auth_headers(sender))
+    assert resp.status_code == 200
+    after = db.query(models.AuditLog).count()
+    assert after == before

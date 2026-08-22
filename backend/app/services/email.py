@@ -272,7 +272,9 @@ def _broadcast_new_email_event(email: models.Email, recipient_ids: set[int]) -> 
         sse_manager.broadcast(user_id, event)
 
 
-def send_email(db: Session, sender_id: int, email_in: EmailCreate, status: str = "SENT") -> models.Email:
+def send_email(
+    db: Session, sender_id: int, email_in: EmailCreate, status: str = "SENT", is_system_email: bool = False
+) -> models.Email:
     """Creates the Email row, resolves thread linkage, and fans the message out
     to every recipient's INBOX plus the sender's own SENT copy. Commits and
     returns the persisted, refreshed Email.
@@ -282,7 +284,17 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate, status: str =
     `_maybe_send_auto_reply` is the one caller that passes `status="AUTO_REPLY"` —
     see models.Email's docstring for what that value means and models.py's own
     "status is a plain free-text column" convention (schemas.py's status comment)
-    for why adding it needed no new column or schema change."""
+    for why adding it needed no new column or schema change.
+
+    `is_system_email` (TODO_SPEC.md "משימה 20" step 2/3) defaults False for every
+    normal caller. `services/notifications.py`'s dispatch->internal-email bridge
+    is the one caller that passes `is_system_email=True`, when it turns an already
+    routed/"sent" (simulated) notification into a real internal Email for an
+    internal recipient — see that module's docstring and models.Email.
+    is_system_email's docstring. Deliberately routed through this exact function
+    (not a parallel write path) so a system-generated email gets the exact same
+    fan-out/EmailRecipient/RBAC treatment as any other email — see this module's
+    docstring and `_fan_out_recipients`."""
     thread_id = (
         _resolve_thread_root_id(db, email_in.in_reply_to)
         if email_in.in_reply_to is not None
@@ -296,6 +308,7 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate, status: str =
         thread_id=thread_id,
         status=status,
         read_receipt_requested=email_in.read_receipt_requested,
+        is_system_email=is_system_email,
     )
     db.add(email)
     db.flush()  # assigns email.email_id so the recipient rows below can reference it

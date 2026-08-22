@@ -1,5 +1,6 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import CampaignIcon from "@mui/icons-material/Campaign";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -108,6 +109,26 @@ const FOLDER_LABELS: Record<EmailFolder, string> = {
  * accepted, intentional use of the API — not a blanket trust of arbitrary HTML. */
 function EmailBody({ html }: { html: string }) {
   return <Box sx={{ "& p": { m: 0, mb: 1 }, "& p:last-child": { mb: 0 } }} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+/** TODO_SPEC.md "משימה 20" step 3 — the small visual marker that distinguishes a
+ * system-generated email (a home-front alert, a weather warning, a critical-
+ * incident ticket — anything the backend's notifications->internal-email bridge
+ * created, services/notifications.py) from a normal person-to-person message, both
+ * in the inbox list row and the opened thread view. Driven entirely by
+ * `is_system_email` — no client-side guessing from subject text or sender name. */
+function SystemEmailChip() {
+  return (
+    <Chip
+      size="small"
+      icon={<CampaignIcon fontSize="small" />}
+      label="התראת מערכת"
+      color="info"
+      variant="filled"
+      sx={{ height: 20, fontSize: "0.7rem" }}
+      data-testid="system-email-chip"
+    />
+  );
 }
 
 function AttachmentChip({ attachmentId, fileName }: { attachmentId: number; fileName: string }) {
@@ -222,6 +243,7 @@ function EmailMessageCard({ message }: { message: Email }) {
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               {message.subject}
             </Typography>
+            {message.is_system_email && <SystemEmailChip />}
             <ReadReceiptIndicator message={message} />
           </Stack>
           <Typography variant="body2" color="text.secondary">
@@ -627,6 +649,7 @@ export default function Emails() {
                       <TableCell>
                         <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
                           <span style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.subject}</span>
+                          {item.is_system_email && <SystemEmailChip />}
                           {item.labels.map((label) => (
                             <Chip
                               key={label.id}

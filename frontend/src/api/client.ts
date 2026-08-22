@@ -1351,6 +1351,13 @@ export interface Email {
    * double-checkmark icon / tooltip / recipient-breakdown popover) — the
    * backend tracks `read_at` on every recipient regardless of this flag. */
   read_receipt_requested: boolean;
+  /** TODO_SPEC.md "משימה 20" step 3 — true only for a message created by the
+   * backend's notifications->internal-email bridge (services/notifications.py),
+   * e.g. a home-front alert or a critical-incident ticket. Optional (rather than
+   * required) purely so older test fixtures/mocks built before this field existed
+   * keep compiling — a real API response always includes it (backend default
+   * False). Emails.tsx renders a small "התראת מערכת" chip when this is true. */
+  is_system_email?: boolean;
 }
 
 export interface EmailThread {
@@ -1372,6 +1379,8 @@ export interface EmailListItem {
   folder: EmailFolder;
   /** TODO_SPEC.md "משימה 16" — same thread-resolved label list as `Email.labels`. */
   labels: Label[];
+  /** TODO_SPEC.md "משימה 20" step 3 — same system-email marker as `Email.is_system_email`. */
+  is_system_email?: boolean;
 }
 
 export interface EmailCreate {
