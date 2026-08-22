@@ -226,7 +226,7 @@ API בשרת: POST /api/folders, POST /api/emails/{id}/tags
 
 ==================================================
 
-[ ] משימה 17: כללי סינון אוטומטיים (Email Rules/Filters)
+[x] משימה 17: כללי סינון אוטומטיים (Email Rules/Filters)
 
 מהות המשימה: מנגנון המאפשר למשתמש להגדיר חוקים. לדוגמה: 'אם נושא המייל מכיל המילה 'דחוף', סמן בכוכב והוסף תגית אדומה'.
 מיקום במערכת: Backend (services/email_rules.py, models.py) & Frontend (Settings)
@@ -237,7 +237,7 @@ API בשרת: POST /api/rules
  שלב 3: פיתוח ממשק הגדרות המאפשר להרכיב חוק באמצעות תפריטים קופצים (If [Condition] Then [Action]).
  שלב 4: הוספת פעולות כמו 'העבר לאשפה מיד', 'סמן כנקרא', 'העבר לתיקייה X'.
  שלב 5: וידוא ביצועים למניעת האטה בזמן חלוקת מייל בעקבות ריבוי חוקים.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור הפיתוח יכתב כאן לאחר הביצוע]
+✅ בוצע ב-branch `feature/email-rules`: מודל `EmailRule`/טבלת `Email_Rules` (מיגרציה `e1b4c7a9d3f5`), conditions/actions כ-JSON text (אותה קונבנציה כמו `Agent_Sessions.context_data`). `evaluate_rules_for_recipient` ב-`services/email_rules.py` — שאילתה אחת פר נמען, לולאה בזיכרון (לא N+1), משולב ב-`_fan_out_recipients`. `POST/GET /api/rules`, `DELETE /api/rules/{id}`. UI: בונה חוקי If/Then נוסף כסקשן בעמוד `ProfileSettings.tsx` (משימה 14). 607 טסטים בבקאנד + 192 בפרונט עברו.
 
 ==================================================
 
