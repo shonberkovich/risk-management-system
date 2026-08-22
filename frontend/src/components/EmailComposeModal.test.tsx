@@ -14,16 +14,18 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchUsersMock, sendEmailMock, uploadEmailAttachmentsMock } = vi.hoisted(() => ({
+const { fetchUsersMock, sendEmailMock, uploadEmailAttachmentsMock, fetchEmailTemplatesMock } = vi.hoisted(() => ({
   fetchUsersMock: vi.fn(),
   sendEmailMock: vi.fn(),
   uploadEmailAttachmentsMock: vi.fn(),
+  fetchEmailTemplatesMock: vi.fn(),
 }));
 
 vi.mock("../api/client", () => ({
   fetchUsers: fetchUsersMock,
   sendEmail: sendEmailMock,
   uploadEmailAttachments: uploadEmailAttachmentsMock,
+  fetchEmailTemplates: fetchEmailTemplatesMock,
 }));
 
 import EmailComposeModal from "./EmailComposeModal";
@@ -31,6 +33,25 @@ import EmailComposeModal from "./EmailComposeModal";
 const USERS = [
   { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER" },
   { user_id: 2, full_name: "דנה לוי", role: "CFO" },
+];
+
+const TEMPLATES = [
+  {
+    id: 1,
+    name: "דרישת מסמכים משמאי",
+    subject_template: "בקשה למסמכים - תביעה {{claim_number}}",
+    body_template: "שלום {{client_name}}, אנא שלחו את המסמכים עבור תביעה {{claim_number}}.",
+    created_by: 1,
+    created_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: 2,
+    name: "עדכון סטטוס תביעה",
+    subject_template: "עדכון סטטוס - {{claim_number}}",
+    body_template: "שלום, מצורף עדכון סטטוס.",
+    created_by: 1,
+    created_at: "2026-01-01T00:00:00Z",
+  },
 ];
 
 function renderModal(props: Partial<React.ComponentProps<typeof EmailComposeModal>> = {}) {
@@ -63,6 +84,7 @@ describe("EmailComposeModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchUsersMock.mockResolvedValue(USERS);
+    fetchEmailTemplatesMock.mockResolvedValue(TEMPLATES);
   });
 
   it("opens with empty fields and the send button disabled until required fields are filled", async () => {
@@ -212,6 +234,53 @@ describe("EmailComposeModal", () => {
     expect(await screen.findByText("דנה לוי")).toBeInTheDocument(); // pre-filled TO chip
     expect(screen.getByLabelText("נושא")).toHaveValue("Re: תביעה מס' 5");
     expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue("טיוטת תשובה");
+  });
+
+  describe("template picker (TODO_SPEC.md \"משימה 12\")", () => {
+    it("opens a picker listing templates from GET /api/email-templates when 'השתמש בתבנית' is clicked", async () => {
+      renderModal();
+      await userEvent.click(screen.getByRole("button", { name: "השתמש בתבנית" }));
+
+      expect(await screen.findByText("דרישת מסמכים משמאי")).toBeInTheDocument();
+      expect(screen.getByText("עדכון סטטוס תביעה")).toBeInTheDocument();
+    });
+
+    it("selecting a template fills subject/body, substituting variables from templateContext", async () => {
+      renderModal({ templateContext: { claim_number: "CLM-042", client_name: "חברת דוגמה" } });
+
+      await userEvent.click(screen.getByRole("button", { name: "השתמש בתבנית" }));
+      await userEvent.click(await screen.findByText("דרישת מסמכים משמאי"));
+
+      expect(screen.getByLabelText("נושא")).toHaveValue("בקשה למסמכים - תביעה CLM-042");
+      expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue(
+        "שלום חברת דוגמה, אנא שלחו את המסמכים עבור תביעה CLM-042.",
+      );
+    });
+
+    it("leaves unresolved {{...}} placeholders visible when no matching templateContext value is supplied", async () => {
+      renderModal();
+
+      await userEvent.click(screen.getByRole("button", { name: "השתמש בתבנית" }));
+      await userEvent.click(await screen.findByText("דרישת מסמכים משמאי"));
+
+      expect(screen.getByLabelText("נושא")).toHaveValue("בקשה למסמכים - תביעה {{claim_number}}");
+      expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue(
+        "שלום {{client_name}}, אנא שלחו את המסמכים עבור תביעה {{claim_number}}.",
+      );
+    });
+
+    it("still allows editing the loaded template text before sending", async () => {
+      renderModal({ templateContext: { claim_number: "CLM-042" } });
+
+      await userEvent.click(screen.getByRole("button", { name: "השתמש בתבנית" }));
+      await userEvent.click(await screen.findByText("עדכון סטטוס תביעה"));
+
+      const subjectField = screen.getByLabelText("נושא");
+      expect(subjectField).toHaveValue("עדכון סטטוס - CLM-042");
+
+      await userEvent.type(subjectField, " - דחוף");
+      expect(subjectField).toHaveValue("עדכון סטטוס - CLM-042 - דחוף");
+    });
   });
 });
 

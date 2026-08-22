@@ -534,3 +534,32 @@ class AgentActionLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     session: Mapped["AgentSession"] = relationship(back_populates="actions")
+
+
+class EmailTemplate(Base):
+    """A reusable canned message for the Compose modal (TODO_SPEC.md "משימה 12":
+    "תמיכה בתבניות מייל מוגדרות מראש") — e.g. "דרישת מסמכים משמאי" or "עדכון
+    סטטוס תביעה". `subject_template`/`body_template` may contain `{{variable}}`
+    placeholders (e.g. `{{claim_number}}`, `{{client_name}}`); substitution is
+    done client-side when a template is loaded into the compose form (see
+    frontend/src/components/EmailComposeModal.tsx and
+    frontend/src/utils/emailTemplates.ts for the whitelisted-substitution
+    function and the rationale for doing this in the browser rather than a
+    server endpoint) — this table only stores the raw, unsubstituted text.
+
+    Managing the template library itself (create/update/delete) is ADMIN-only
+    (TODO_SPEC.md step 2: "חשיפת API לניהול תבניות (CRUD) - מוגבל למנהלים"),
+    but *reading* the list is open to any authenticated user via
+    `require_roles()` — every role composes email and should be able to pick a
+    template, only curating the library is an admin task. See
+    routers/email_templates.py."""
+    __tablename__ = "Email_Templates"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(Unicode(200))
+    subject_template: Mapped[str] = mapped_column(Unicode(500))
+    body_template: Mapped[str] = mapped_column(UnicodeText)
+    created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    created_by_user: Mapped["User | None"] = relationship()
