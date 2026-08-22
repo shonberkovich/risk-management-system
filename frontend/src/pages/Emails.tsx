@@ -2,6 +2,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ReplyIcon from "@mui/icons-material/Reply";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import SearchIcon from "@mui/icons-material/Search";
@@ -11,9 +12,15 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -25,13 +32,17 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
 
 import {
+  addLabelToEmail,
   fetchEmailAttachmentSignedUrl,
   fetchEmailThread,
   fetchEmails,
+  fetchLabels,
   fetchScheduledEmails,
   markEmailRead,
+  removeLabelFromEmail,
   summarizeEmailThread,
   suggestEmailReply,
   type Email,
@@ -128,6 +139,13 @@ function EmailMessageCard({ message }: { message: Email }) {
             אל: {toNames.length > 0 ? toNames.join(", ") : "—"}
             {ccNames.length > 0 && <> · עותק: {ccNames.join(", ")}</>}
           </Typography>
+          {message.labels.length > 0 && (
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+              {message.labels.map((label) => (
+                <Chip key={label.id} size="small" label={label.name} sx={{ bgcolor: label.color, color: "#fff" }} />
+              ))}
+            </Stack>
+          )}
         </Stack>
 
         <Typography variant="body2" component="div">
@@ -265,6 +283,64 @@ function EmailThreadView({ emailId, onOpenReply }: { emailId: number; onOpenRepl
   );
 }
 
+/** TODO_SPEC.md "משימה 16" step 4 — the "⋮" action menu shown at the end of each
+ * inbox row: a context-menu/overflow-menu action to add/remove a label from the
+ * row's thread, offered as the honest alternative to real drag-and-drop (a
+ * checkbox next to each of the caller's own labels, checked ones already tagging
+ * this thread — clicking toggles attach/detach via POST/DELETE
+ * /api/emails/{id}/tags[/...]). Stops click-propagation on its own IconButton so
+ * opening the menu never also triggers the row's onClick (which opens the
+ * thread and marks it read). */
+function EmailLabelMenu({ item }: { item: EmailListItem }) {
+  const queryClient = useQueryClient();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const labelsQuery = useQuery({ queryKey: ["labels"], queryFn: fetchLabels, enabled: anchorEl !== null });
+  const appliedIds = new Set(item.labels.map((l) => l.id));
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["emails"] });
+  const addMutation = useMutation({
+    mutationFn: (labelId: number) => addLabelToEmail(item.email_id, labelId),
+    onSuccess: invalidate,
+  });
+  const removeMutation = useMutation({
+    mutationFn: (labelId: number) => removeLabelFromEmail(item.email_id, labelId),
+    onSuccess: invalidate,
+  });
+
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setAnchorEl(e.currentTarget);
+  };
+  const handleClose = () => setAnchorEl(null);
+  const handleToggle = (labelId: number, e: MouseEvent) => {
+    e.stopPropagation();
+    if (appliedIds.has(labelId)) removeMutation.mutate(labelId);
+    else addMutation.mutate(labelId);
+  };
+
+  return (
+    <>
+      <IconButton size="small" onClick={handleOpen} aria-label={`תגיות עבור ${item.subject}`} data-testid={`email-row-menu-${item.email_id}`}>
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+      <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={handleClose} onClick={(e) => e.stopPropagation()}>
+        {(labelsQuery.data ?? []).length === 0 ? (
+          <MenuItem disabled>אין תגיות — צרו תגית מתפריט הצד</MenuItem>
+        ) : (
+          (labelsQuery.data ?? []).map((label) => (
+            <MenuItem key={label.id} onClick={(e) => handleToggle(label.id, e)} data-testid={`label-menu-item-${item.email_id}-${label.id}`}>
+              <ListItemIcon>
+                <Checkbox size="small" edge="start" checked={appliedIds.has(label.id)} tabIndex={-1} disableRipple />
+              </ListItemIcon>
+              <ListItemText primary={label.name} />
+            </MenuItem>
+          ))
+        )}
+      </Menu>
+    </>
+  );
+}
+
 /** TODO_SPEC.md "משימה 7" — main mailbox screen: folder nav (EmailSidebar) + a
  * folder-scoped list (sender/subject/date, bold when unread) + a thread detail
  * panel opened by clicking a row. See EmailListItem's own doc comment in
@@ -274,6 +350,12 @@ export default function Emails() {
   const [folder, setFolder] = useState<EmailFolder>("INBOX");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+
+  // TODO_SPEC.md "משימה 16" step 5 — the active label filter, if any. Deliberately
+  // does NOT reset when `folder` changes (see handleSelectFolder below) — folders
+  // and labels compose ("show me INBOX emails tagged urgent"), so switching
+  // folders while a label filter is active keeps that filter in effect.
+  const [activeLabelId, setActiveLabelId] = useState<number | null>(null);
 
   // TODO_SPEC.md "משימה 15" step 4 — reply-mode pre-fill for EmailComposeModal
   // (Task 8's initialTo/initialSubject/initialBody/inReplyTo props), set by
@@ -322,8 +404,8 @@ export default function Emails() {
   // arrives, so refetchInterval below is now just a slow fallback for when the SSE
   // connection itself happens to be down, not the primary refresh mechanism.
   const list = useQuery({
-    queryKey: ["emails", folder, debouncedSearch],
-    queryFn: () => fetchEmails(folder, 0, 50, debouncedSearch),
+    queryKey: ["emails", folder, debouncedSearch, activeLabelId],
+    queryFn: () => fetchEmails(folder, 0, 50, debouncedSearch, activeLabelId),
     staleTime: 15_000,
     refetchInterval: 120_000,
   });
@@ -391,7 +473,12 @@ export default function Emails() {
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
         <Card variant="outlined" sx={{ flexShrink: 0, width: { xs: "100%", md: "auto" } }}>
-          <EmailSidebar selected={folder} onSelect={handleSelectFolder} />
+          <EmailSidebar
+            selected={folder}
+            onSelect={handleSelectFolder}
+            activeLabelId={activeLabelId}
+            onSelectLabel={setActiveLabelId}
+          />
         </Card>
 
         <Card variant="outlined" sx={{ flex: 1, minWidth: 0, width: "100%" }}>
@@ -426,6 +513,7 @@ export default function Emails() {
                     <TableCell>שולח</TableCell>
                     <TableCell>נושא</TableCell>
                     <TableCell>תאריך</TableCell>
+                    <TableCell />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -439,8 +527,23 @@ export default function Emails() {
                       data-testid={`email-row-${item.email_id}`}
                     >
                       <TableCell style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.sender.full_name}</TableCell>
-                      <TableCell style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.subject}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                          <span style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.subject}</span>
+                          {item.labels.map((label) => (
+                            <Chip
+                              key={label.id}
+                              size="small"
+                              label={label.name}
+                              sx={{ bgcolor: label.color, color: "#fff", height: 18, fontSize: "0.7rem" }}
+                            />
+                          ))}
+                        </Stack>
+                      </TableCell>
                       <TableCell>{formatDateTime(item.created_at)}</TableCell>
+                      <TableCell padding="none" onClick={(e) => e.stopPropagation()}>
+                        <EmailLabelMenu item={item} />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

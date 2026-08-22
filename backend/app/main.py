@@ -21,6 +21,7 @@ from app.routers import (
     financials,
     incidents,
     integrations,
+    labels,
     media,
     mitigation,
     notifications,
@@ -104,6 +105,7 @@ app.include_router(audit.router)
 app.include_router(sse.router)
 app.include_router(emails.router)
 app.include_router(email_templates.router)
+app.include_router(labels.router)
 
 
 @app.get("/api/health")

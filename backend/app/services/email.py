@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timezone
 
 import bleach
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models
@@ -443,6 +443,7 @@ def list_emails_for_user(
     skip: int = 0,
     limit: int = 50,
     q: str | None = None,
+    label_id: int | None = None,
 ) -> list[models.EmailRecipient]:
     """Folder-scoped, paginated listing of `user_id`'s mailbox copies (newest
     email first) — owns the query GET /api/emails (Task 5) needs, so the router
@@ -456,7 +457,21 @@ def list_emails_for_user(
     search is out of scope here. Matches against the *stored* body_html (i.e.
     against post-sanitization markup, tags included) — acceptable for a simple demo
     search box; a reader wanting to search rendered text only would need to strip
-    tags first, which isn't worth the extra complexity for this task."""
+    tags first, which isn't worth the extra complexity for this task.
+
+    `label_id` (TODO_SPEC.md "משימה 16" step 5) narrows the same already
+    folder/user-scoped query further, exactly like `q` does — it composes with
+    `folder` and `q`, never replaces them (the router's own docstring/tests spell
+    out "show me INBOX emails tagged urgent" as the motivating example). Every
+    row in this table is one specific message's mailbox copy, but Email_Labels
+    always keys off a *thread's root* email_id (see models.EmailLabel's
+    docstring) — so matching requires resolving each row's own message to its
+    thread root first (`COALESCE(Email.thread_id, Email.email_id)`) before
+    joining Email_Labels on it, rather than comparing Email_Labels.email_id
+    against Email.email_id directly (which would silently miss every reply in
+    a tagged thread). The router validates `label_id` actually belongs to
+    `user_id` before calling this (labels are private per Task 16 step 1), so
+    no such check is repeated here."""
     query = (
         select(models.EmailRecipient)
         .join(models.Email, models.EmailRecipient.email_id == models.Email.email_id)
@@ -473,6 +488,12 @@ def list_emails_for_user(
             | models.Email.body_html.like(like)
             | models.User.full_name.like(like)
         )
+    if label_id is not None:
+        thread_root_expr = func.coalesce(models.Email.thread_id, models.Email.email_id)
+        query = query.join(
+            models.EmailLabel,
+            models.EmailLabel.email_id == thread_root_expr,
+        ).where(models.EmailLabel.label_id == label_id)
     return list(db.scalars(
         query
         .order_by(models.Email.created_at.desc(), models.Email.email_id.desc())
@@ -641,3 +662,96 @@ def autodetect_entity_links(db: Session, email: models.Email) -> list[models.Ent
         )
 
     return created
+
+
+# ---------------------------------------------------------------------------
+# Custom Folders / Labels (TODO_SPEC.md "משימה 16")
+# ---------------------------------------------------------------------------
+
+
+def create_label(db: Session, user_id: int, name: str, color: str) -> models.Label:
+    """POST /api/folders (Task 16 steps 1/3) — creates a new label owned by
+    `user_id`. No uniqueness constraint on (user_id, name): the spec doesn't ask
+    for one, and two differently-colored labels with the same name is a harmless
+    user choice, not a data-integrity problem."""
+    label = models.Label(user_id=user_id, name=name, color=color)
+    db.add(label)
+    db.commit()
+    db.refresh(label)
+    return label
+
+
+def list_labels_for_user(db: Session, user_id: int) -> list[models.Label]:
+    """GET /api/folders (Task 16 step 1) — only `user_id`'s own labels; see
+    models.Label's docstring for why this is per-user, never global."""
+    return list(db.scalars(
+        select(models.Label).where(models.Label.user_id == user_id).order_by(models.Label.name)
+    ).all())
+
+
+def delete_label(db: Session, label_id: int, user_id: int) -> None:
+    """DELETE /api/folders/{id} (Task 16 step 1). Raises ValueError for the
+    router to translate into a 404 — same not-yours-vs-doesn't-exist
+    non-disclosure convention as `cancel_scheduled_email`/
+    `_require_recipient_row`. Any Email_Labels rows tagging this label cascade-
+    delete with it (ondelete="CASCADE" on EmailLabel.label_id)."""
+    label = db.get(models.Label, label_id)
+    if label is None or label.user_id != user_id:
+        raise ValueError("not found")
+    db.delete(label)
+    db.commit()
+
+
+def add_label_to_email(db: Session, thread_root_id: int, label_id: int) -> models.EmailLabel:
+    """Creates (or, if the same thread already carries the same label, returns
+    the existing row for — idempotent against the model's (email_id, label_id)
+    uniqueness constraint, same pattern as `link_email_to_entity`) an
+    Email_Labels row. `thread_root_id` must already be resolved to the thread's
+    root email_id by the caller (see models.EmailLabel's docstring for why —
+    same division of responsibility `link_email_to_entity` uses for
+    Entity_Emails)."""
+    existing = db.scalar(
+        select(models.EmailLabel).where(
+            models.EmailLabel.email_id == thread_root_id,
+            models.EmailLabel.label_id == label_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    link = models.EmailLabel(email_id=thread_root_id, label_id=label_id)
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+def remove_label_from_email(db: Session, thread_root_id: int, label_id: int) -> None:
+    """DELETE /api/emails/{id}/tags/{label_id} (Task 16 step 4). A no-op (not an
+    error) if the thread wasn't tagged with this label to begin with — removing
+    an already-absent tag is a harmless idempotent request, same posture as
+    every other detach-style operation in this module."""
+    link = db.scalar(
+        select(models.EmailLabel).where(
+            models.EmailLabel.email_id == thread_root_id,
+            models.EmailLabel.label_id == label_id,
+        )
+    )
+    if link is not None:
+        db.delete(link)
+        db.commit()
+
+
+def get_labels_for_email(db: Session, thread_root_id: int) -> list[models.Label]:
+    """Every Label tagged on the thread rooted at `thread_root_id` — used by
+    routers/emails.py to populate EmailOut.labels/EmailListItemOut.labels. One
+    query per email/list-row is O(number of messages shown) — fine at this
+    demo's scale, same admitted trade-off as `list_linked_threads_for_entity`
+    above; a single joined query would be the next optimization if that
+    stopped being true."""
+    return list(db.scalars(
+        select(models.Label)
+        .join(models.EmailLabel, models.EmailLabel.label_id == models.Label.id)
+        .where(models.EmailLabel.email_id == thread_root_id)
+        .order_by(models.Label.name)
+    ).all())

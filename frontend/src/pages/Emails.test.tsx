@@ -27,6 +27,11 @@ const {
   fetchScheduledEmailsMock,
   cancelScheduledEmailMock,
   useAuthMock,
+  fetchLabelsMock,
+  createLabelMock,
+  deleteLabelMock,
+  addLabelToEmailMock,
+  removeLabelFromEmailMock,
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
@@ -58,6 +63,14 @@ const {
   // signature via useAuth() as soon as it mounts (see comment above on why it's
   // already mounted here even in tests that never open it).
   useAuthMock: vi.fn(),
+  // TODO_SPEC.md "משימה 16": EmailSidebar fetches the labels list unconditionally
+  // (needed for the "תגיות" nav section), and each row's overflow menu / the
+  // sidebar's create/delete controls call the rest of these.
+  fetchLabelsMock: vi.fn(),
+  createLabelMock: vi.fn(),
+  deleteLabelMock: vi.fn(),
+  addLabelToEmailMock: vi.fn(),
+  removeLabelFromEmailMock: vi.fn(),
 }));
 
 vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
@@ -78,6 +91,11 @@ vi.mock("../api/client", () => ({
   fetchClaims: fetchClaimsMock,
   fetchScheduledEmails: fetchScheduledEmailsMock,
   cancelScheduledEmail: cancelScheduledEmailMock,
+  fetchLabels: fetchLabelsMock,
+  createLabel: createLabelMock,
+  deleteLabel: deleteLabelMock,
+  addLabelToEmail: addLabelToEmailMock,
+  removeLabelFromEmail: removeLabelFromEmailMock,
 }));
 
 import Emails from "./Emails";
@@ -93,6 +111,7 @@ const UNREAD_ITEM = {
   thread_id: null,
   is_read: false,
   folder: "INBOX",
+  labels: [],
 };
 const READ_ITEM = {
   email_id: 11,
@@ -102,6 +121,7 @@ const READ_ITEM = {
   thread_id: null,
   is_read: true,
   folder: "INBOX",
+  labels: [],
 };
 
 const THREAD_MESSAGE = {
@@ -114,6 +134,7 @@ const THREAD_MESSAGE = {
   sender: SENDER,
   recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", is_read: false, folder: "INBOX" }],
   attachments: [],
+  labels: [],
 };
 const THREAD = { root: THREAD_MESSAGE, messages: [THREAD_MESSAGE] };
 
@@ -135,6 +156,7 @@ describe("Emails", () => {
     markEmailReadMock.mockResolvedValue({ user: RECIPIENT_USER, recipient_type: "TO", is_read: true, folder: "INBOX" });
     fetchScheduledEmailsMock.mockResolvedValue([]);
     useAuthMock.mockReturnValue({ user: { ...RECIPIENT_USER, signature: null } });
+    fetchLabelsMock.mockResolvedValue([]);
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -186,7 +208,7 @@ describe("Emails", () => {
     await userEvent.click(screen.getByTestId("email-folder-SENT"));
 
     expect(await screen.findByText("אין הודעות בתיקייה זו.")).toBeInTheDocument();
-    expect(fetchEmailsMock).toHaveBeenCalledWith("SENT", 0, 50, "");
+    expect(fetchEmailsMock).toHaveBeenCalledWith("SENT", 0, 50, "", null);
   });
 
   it("debounces the search box and re-fetches the list with the query", async () => {
@@ -199,9 +221,80 @@ describe("Emails", () => {
 
     // Debounced (300ms) — must not fire once per keystroke.
     await waitFor(() => {
-      expect(fetchEmailsMock).toHaveBeenCalledWith("INBOX", 0, 50, "תקציב");
+      expect(fetchEmailsMock).toHaveBeenCalledWith("INBOX", 0, 50, "תקציב", null);
     });
     expect(fetchEmailsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Custom Folders / Labels (TODO_SPEC.md "משימה 16")
+  // ---------------------------------------------------------------------------
+  describe("labels", () => {
+    const URGENT_LABEL = { id: 5, name: "דחוף", color: "#e53935" };
+
+    it("selecting a label in the sidebar filters the list, composing with the active folder", async () => {
+      fetchLabelsMock.mockResolvedValue([URGENT_LABEL]);
+      renderPage();
+      await screen.findByText("עדכון דחוף");
+      fetchEmailsMock.mockClear();
+
+      const labelEl = await screen.findByTestId("email-label-5");
+      await userEvent.click(labelEl);
+
+      await waitFor(() => expect(fetchEmailsMock).toHaveBeenCalledWith("INBOX", 0, 50, "", 5));
+      expect(labelEl).toHaveClass("Mui-selected");
+
+      // Clicking the same label again clears the filter (back to the
+      // no-label-filter query — same key as the initial mount, so it's
+      // already cached/fresh and doesn't necessarily re-fetch; the visible
+      // effect is the label no longer showing as the active filter).
+      await userEvent.click(labelEl);
+      await waitFor(() => expect(labelEl).not.toHaveClass("Mui-selected"));
+    });
+
+    it("applying a label from the list row's overflow menu calls addLabelToEmail", async () => {
+      fetchLabelsMock.mockResolvedValue([URGENT_LABEL]);
+      addLabelToEmailMock.mockResolvedValue({ id: 1, email_id: 10, label: URGENT_LABEL });
+      renderPage();
+      await screen.findByText("עדכון דחוף");
+
+      await userEvent.click(screen.getByTestId("email-row-menu-10"));
+      const menuItem = await screen.findByTestId("label-menu-item-10-5");
+      await userEvent.click(menuItem);
+
+      expect(addLabelToEmailMock).toHaveBeenCalledWith(10, 5);
+      // Opening the menu and picking a label must not also open the thread/mark it read.
+      expect(fetchEmailThreadMock).not.toHaveBeenCalled();
+      expect(markEmailReadMock).not.toHaveBeenCalled();
+    });
+
+    it("picking an already-applied label from the overflow menu removes it", async () => {
+      fetchLabelsMock.mockResolvedValue([URGENT_LABEL]);
+      removeLabelFromEmailMock.mockResolvedValue(undefined);
+      fetchEmailsMock.mockImplementation((folder: string) =>
+        Promise.resolve(folder === "INBOX" ? [{ ...UNREAD_ITEM, labels: [URGENT_LABEL] }, READ_ITEM] : []),
+      );
+      renderPage();
+      await screen.findByText("עדכון דחוף");
+
+      await userEvent.click(screen.getByTestId("email-row-menu-10"));
+      const menuItem = await screen.findByTestId("label-menu-item-10-5");
+      await userEvent.click(menuItem);
+
+      expect(removeLabelFromEmailMock).toHaveBeenCalledWith(10, 5);
+      expect(addLabelToEmailMock).not.toHaveBeenCalled();
+    });
+
+    it("shows the label chip on a tagged row", async () => {
+      fetchLabelsMock.mockResolvedValue([URGENT_LABEL]);
+      fetchEmailsMock.mockImplementation((folder: string) =>
+        Promise.resolve(folder === "INBOX" ? [{ ...UNREAD_ITEM, labels: [URGENT_LABEL] }, READ_ITEM] : []),
+      );
+      renderPage();
+
+      const row = await screen.findByTestId("email-row-10");
+      expect(within(row).getByText("דחוף")).toBeInTheDocument();
+    });
   });
 
   // ---------------------------------------------------------------------------
