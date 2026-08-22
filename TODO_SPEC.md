@@ -136,7 +136,7 @@ API בשרת: N/A
  שלב 5: יצירת דאטה התחלתי (Seed Data) של תכתובות בין עובדים לבדיקות ופיתוח בסביבה המקומית.
 ✅ בוצע ב-branch `feature/email-security-perf`: ביקורת RBAC מצאה ותיקנה 2 חורים אמיתיים — דליפת רשימת BCC לצופים לא-מורשים, ואפשרות ל-enumeration דרך הבדל טקסט שגיאה ב-signed-url. נוסף `bleach` לניקוי `body_html` (כתיבה וקריאה כהגנה כפולה), allow-list: p/br/b/i/u/strong/em/ul/ol/li/a(href)/blockquote. הוחלט שלא להצפין `body_html` (מתנגש עם חיפוש LIKE במשימה זו עצמה). נוסף חיפוש `?q=` (LIKE על נושא/גוף/שם שולח) עם תיבת חיפוש debounced בפרונט. הורחב `seed.py` עם 7 מיילים לדוגמה (שרשור, BCC, צרופה). 481 טסטים בבקאנד + 142 בפרונט עברו.
 
-[ ] משימה 11: קישור אוטומטי וידני של שרשורי מיילים לישויות במערכת (Contextual Linking)
+[x] משימה 11: קישור אוטומטי וידני של שרשורי מיילים לישויות במערכת (Contextual Linking)
 
 מהות המשימה: פיתוח מנגנון המאפשר לקשר שרשור מיילים (Thread) ישירות לאירוע (Incident), תביעה (Claim) או נכס (Property), כך שכל התקשורת מתועדת בתוך תיק הישות.
 מיקום במערכת: Backend (models.py, routers/emails.py) & Frontend (Entity details)
@@ -147,7 +147,7 @@ API בשרת: POST /api/emails/{id}/link, GET /api/{entity}/{id}/emails
  שלב 3: ממשק משתמש בתוך המייל המאפשר לבחור ישות לקשר אליה (למשל Dropdown חכם 'קשר לתביעה...').
  שלב 4: הוספת כרטיסיית 'תקשורת' (Emails Tab) בעמודי תיק נכס/תביעה המציגה את המיילים המקושרים.
  שלב 5: (אופציונלי) זיהוי אוטומטי - אם נושא המייל מכיל מזהה אירוע (למשל INC-2026-001), המערכת תקשר אותו אוטומטית.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור הפיתוח יכתב כאן לאחר הביצוע]
+✅ בוצע ב-branch `feature/email-entity-linking`: טבלת `Entity_Emails` (מיגרציה `a3f7c1e9d4b6`) מקשרת לפי thread root (לא כל הודעה בנפרד), עם unique constraint על `(email_id, entity_type, entity_id)`. `POST /api/emails/{id}/link` + `GET /api/{incidents|claims|properties}/{id}/emails` (מקביל לתבנית הקיימת של Documents). זיהוי אוטומטי (שלב 5) מומש בעזרת regex על קודי INC-/CLM-/PRP- בנושא המייל. נוספה כרטיסיית "תקשורת" ב-`PropertyDetail.tsx`. 499 טסטים בבקאנד + 147 בפרונט עברו.
 
 ==================================================
 
