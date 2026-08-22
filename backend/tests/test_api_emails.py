@@ -145,6 +145,95 @@ def test_get_nonexistent_email_returns_404(client, make_user):
 
 
 # ---------------------------------------------------------------------------
+# BCC visibility (Task 10 RBAC-audit fix — see routers/emails.py's module
+# docstring / _visible_recipients)
+# ---------------------------------------------------------------------------
+
+
+def test_bcc_recipients_hidden_from_to_recipient_and_from_each_other(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    bcc_user = make_user(role="CFO")
+    other_bcc_user = make_user(role="ADJUSTER")
+
+    email_id = _send(
+        client, auth_headers(sender), to=[to_user.user_id], bcc=[bcc_user.user_id, other_bcc_user.user_id]
+    ).json()["email_id"]
+
+    def _recipient_ids(headers):
+        thread = client.get(f"/api/emails/{email_id}", headers=headers).json()
+        return {r["user"]["user_id"] for r in thread["messages"][0]["recipients"]}
+
+    # The sender designed the distribution list — sees every row, BCC included.
+    sender_ids = _recipient_ids(auth_headers(sender))
+    assert {sender.user_id, to_user.user_id, bcc_user.user_id, other_bcc_user.user_id} <= sender_ids
+
+    # The TO recipient must never learn who was BCC'd.
+    to_ids = _recipient_ids(auth_headers(to_user))
+    assert to_user.user_id in to_ids
+    assert bcc_user.user_id not in to_ids
+    assert other_bcc_user.user_id not in to_ids
+
+    # A BCC'd recipient sees the TO recipient and themselves, but not the other
+    # BCC'd recipient — BCC recipients must not see each other either.
+    bcc_ids = _recipient_ids(auth_headers(bcc_user))
+    assert to_user.user_id in bcc_ids
+    assert bcc_user.user_id in bcc_ids
+    assert other_bcc_user.user_id not in bcc_ids
+
+
+def test_send_email_response_to_sender_still_shows_all_recipients(client, make_user):
+    """The BCC-hiding fix must not blind the sender to their own send — POST
+    /api/emails's response (always viewed by the sender) should be unaffected."""
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    bcc_user = make_user(role="CFO")
+
+    resp = _send(client, auth_headers(sender), to=[to_user.user_id], bcc=[bcc_user.user_id])
+    recipient_ids = {r["user"]["user_id"] for r in resp.json()["recipients"]}
+    assert to_user.user_id in recipient_ids
+    assert bcc_user.user_id in recipient_ids
+
+
+# ---------------------------------------------------------------------------
+# Search / filter (Task 10 step 4)
+# ---------------------------------------------------------------------------
+
+
+def test_list_emails_search_filters_by_subject_body_and_sender_name(client, make_user):
+    sender = make_user(role="RISK_MANAGER", full_name="דנה כהן")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    recipient_headers = auth_headers(recipient)
+
+    _send(client, auth_headers(sender), to=[recipient.user_id], subject="עדכון תקציב", body_html="<p>שלום</p>")
+    _send(client, auth_headers(sender), to=[recipient.user_id], subject="פגישה מחר", body_html="<p>אנא אשר הגעה</p>")
+
+    by_subject = client.get("/api/emails", params={"q": "תקציב"}, headers=recipient_headers).json()
+    assert [e["subject"] for e in by_subject] == ["עדכון תקציב"]
+
+    by_body = client.get("/api/emails", params={"q": "הגעה"}, headers=recipient_headers).json()
+    assert [e["subject"] for e in by_body] == ["פגישה מחר"]
+
+    by_sender = client.get("/api/emails", params={"q": "דנה"}, headers=recipient_headers).json()
+    assert len(by_sender) == 2
+
+    no_match = client.get("/api/emails", params={"q": "no-such-text-xyz"}, headers=recipient_headers).json()
+    assert no_match == []
+
+
+def test_list_emails_search_still_scoped_to_own_folder(client, make_user):
+    """A search hit in someone else's mailbox must never surface for this user —
+    `q` narrows an already folder/user-scoped query, it never widens it."""
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    bystander = make_user(role="CFO")
+    _send(client, auth_headers(sender), to=[recipient.user_id], subject="נושא ייחודי במיוחד")
+
+    resp = client.get("/api/emails", params={"q": "ייחודי"}, headers=auth_headers(bystander))
+    assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
 # Folder listing + pagination
 # ---------------------------------------------------------------------------
 

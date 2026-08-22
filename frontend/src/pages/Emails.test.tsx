@@ -5,7 +5,7 @@
  * the message read.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -120,7 +120,14 @@ describe("Emails", () => {
 
     expect(fetchEmailThreadMock).toHaveBeenCalledWith(10);
     expect(markEmailReadMock).toHaveBeenCalledWith(10, true);
-    expect(await screen.findByText(/שלום, יש עדכון\./)).toBeInTheDocument();
+
+    // Task 10: body_html now renders as real (server-sanitized) HTML rather than
+    // Task 7's plain-text-only stopgap — assert the <b> tag actually rendered as
+    // markup (not just its text), proving dangerouslySetInnerHTML is in play, plus
+    // the full paragraph text is intact around it.
+    const bold = await screen.findByText("יש", { selector: "b" });
+    expect(bold).toBeInTheDocument();
+    expect(bold.closest("p")?.textContent).toBe("שלום, יש עדכון.");
   });
 
   it("clicking an already-read row fetches the thread but does not re-mark it read", async () => {
@@ -138,6 +145,21 @@ describe("Emails", () => {
     await userEvent.click(screen.getByTestId("email-folder-SENT"));
 
     expect(await screen.findByText("אין הודעות בתיקייה זו.")).toBeInTheDocument();
-    expect(fetchEmailsMock).toHaveBeenCalledWith("SENT");
+    expect(fetchEmailsMock).toHaveBeenCalledWith("SENT", 0, 50, "");
+  });
+
+  it("debounces the search box and re-fetches the list with the query", async () => {
+    renderPage();
+    await screen.findByText("עדכון דחוף");
+    fetchEmailsMock.mockClear();
+
+    const input = within(screen.getByTestId("email-search-input")).getByRole("textbox");
+    await userEvent.type(input, "תקציב");
+
+    // Debounced (300ms) — must not fire once per keystroke.
+    await waitFor(() => {
+      expect(fetchEmailsMock).toHaveBeenCalledWith("INBOX", 0, 50, "תקציב");
+    });
+    expect(fetchEmailsMock).toHaveBeenCalledTimes(1);
   });
 });

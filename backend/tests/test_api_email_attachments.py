@@ -184,6 +184,27 @@ def test_signed_url_for_nonexistent_attachment_returns_404(client, make_user):
     assert resp.status_code == 404
 
 
+def test_signed_url_404_message_does_not_distinguish_nonexistent_from_not_yours(client, make_user):
+    """Task 10 RBAC-audit fix (see routers/emails.py's module docstring): a
+    nonexistent attachment_id and an existing-but-not-yours attachment_id used to
+    come back with two different 404 messages, letting a caller enumerate valid
+    attachment_ids by message text alone. Both cases must now be identical."""
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    bystander = make_user(role="CFO")
+    sender_headers = auth_headers(sender)
+    email_id = _send(client, sender_headers, to=[recipient.user_id])
+    attachment_id = _attach(
+        client, sender_headers, email_id, [("files", "doc.pdf", b"x", "application/pdf")]
+    ).json()[0]["id"]
+
+    not_yours = client.get(f"/api/emails/attachments/{attachment_id}/signed-url", headers=auth_headers(bystander))
+    nonexistent = client.get("/api/emails/attachments/999999/signed-url", headers=auth_headers(bystander))
+
+    assert not_yours.status_code == nonexistent.status_code == 404
+    assert not_yours.json()["detail"] == nonexistent.json()["detail"] == "Attachment not found"
+
+
 def test_signed_url_requires_auth(client, make_user):
     sender = make_user(role="RISK_MANAGER")
     email_id = _send(client, auth_headers(sender), to=[sender.user_id])

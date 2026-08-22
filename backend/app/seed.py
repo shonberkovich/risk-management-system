@@ -19,7 +19,9 @@ import pyodbc
 
 from app.database import SessionLocal, get_connection_string
 from app.models import Claim, ClaimPayment, InsurancePolicy, PolicyAsset
+from app.services import storage
 from app.services.auth import hash_password
+from app.services.email import sanitize_body_html
 
 
 def _d(iso: str | None) -> date | None:
@@ -43,14 +45,16 @@ def run():
         "Notification_Log", "Claim_Reserves", "Claim_Payments", "Claims", "Incident_Media", "Incidents",
         "Documents", "Audit_Log", "Policy_Assets", "Mitigation_Tasks", "Asset_Risk_Profiles",
         "Insurance_Policies", "Properties", "Regions", "Role_Permissions",
-        "Financial_Statements", "Notification_Recipients", "Users",
+        "Financial_Statements", "Notification_Recipients",
+        "Email_Attachments", "Email_Recipients", "Emails", "Users",
     ]:
         cur.execute(f"DELETE FROM {table}")
     for table in [
         "Regions", "Properties", "Asset_Risk_Profiles", "Insurance_Policies",
         "Incidents", "Claims", "Claim_Payments", "Claim_Reserves", "Mitigation_Tasks",
         "Audit_Log", "Role_Permissions", "Documents", "Financial_Statements",
-        "Notification_Recipients", "Notification_Log", "Users",
+        "Notification_Recipients", "Notification_Log",
+        "Email_Attachments", "Email_Recipients", "Emails", "Users",
     ]:
         cur.execute(f"DBCC CHECKIDENT ('{table}', RESEED, 1)")
 
@@ -485,6 +489,132 @@ def run():
            (role, display_name, email, phone, channels, min_severity, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         notification_recipients,
+    )
+
+    # --- Emails / Email_Recipients / Email_Attachments (TODO_SPEC.md "משימה 10"
+    # step 5) ---
+    # Demo internal correspondence between the seeded employees above (user_id: 1
+    # דנה כהן/RISK_MANAGER, 2 אבי לוי/CFO, 3 מיכל אזולאי/PROPERTY_MANAGER,
+    # 4 יוסי מזרחי/PROPERTY_MANAGER, 5 רונית שמעוני/FIELD_WORKER, 6 עומר בר/
+    # FIELD_WORKER, 8 נעם פרידמן/RISK_OFFICER, 9 שרה כהן/ADJUSTER). Bodies are run
+    # through the same `sanitize_body_html` every real send_email call uses (see
+    # services/email.py) — not because this hardcoded demo content is untrusted,
+    # but so seed data can never itself become the one row on record that predates
+    # sanitization, and so it stays a faithful example of what a real POST
+    # /api/emails body looks like once persisted.
+    #
+    # Emails are inserted one at a time (not executemany, unlike every other table
+    # above) because thread replies need the *previous* insert's generated
+    # email_id — for `thread_id` (always the thread root) and, further down, for
+    # this script's own bookkeeping of which email a reply answers. The generated
+    # id is read back with `@@IDENTITY` right after each single-row INSERT, rather
+    # than assuming sequential numbering the way the rest of this script does for
+    # tables with no self-referencing FK. Deliberately `@@IDENTITY`, not the more
+    # commonly-recommended `SCOPE_IDENTITY()`: pyodbc sends a parameterized INSERT
+    # via `sp_executesql`, which executes it in its own nested scope, so a
+    # `SCOPE_IDENTITY()` queried from the *next*, separate statement sees that
+    # scope has already closed and returns NULL. `@@IDENTITY` isn't scope-limited
+    # (session-wide instead) and reflects the insert correctly; there are no
+    # triggers on Emails that could insert into another identity table and make
+    # `@@IDENTITY` ambiguous, so it's safe here.
+    def _insert_email(sender_id, subject, body_html, thread_id, to_ids, cc_ids=None, bcc_ids=None):
+        cc_ids = cc_ids or []
+        bcc_ids = bcc_ids or []
+        cur.execute(
+            "INSERT INTO Emails (sender_id, subject, body_html, thread_id, status) VALUES (?, ?, ?, ?, 'SENT')",
+            (sender_id, subject, sanitize_body_html(body_html), thread_id),
+        )
+        cur.execute("SELECT @@IDENTITY")
+        new_email_id = int(cur.fetchone()[0])
+
+        recipient_rows = [(new_email_id, uid, "TO", 0, "INBOX") for uid in to_ids]
+        recipient_rows += [(new_email_id, uid, "CC", 0, "INBOX") for uid in cc_ids]
+        recipient_rows += [(new_email_id, uid, "BCC", 0, "INBOX") for uid in bcc_ids]
+        # Sender's own SENT-folder copy — mirrors services/email.py's send_email
+        # (SENDER_COPY_RECIPIENT_TYPE = "TO", already read/not sitting in an inbox).
+        recipient_rows.append((new_email_id, sender_id, "TO", 1, "SENT"))
+        cur.executemany(
+            "INSERT INTO Email_Recipients (email_id, user_id, recipient_type, is_read, folder) VALUES (?, ?, ?, ?, ?)",
+            recipient_rows,
+        )
+        return new_email_id
+
+    # Two standalone (non-threaded) emails.
+    _insert_email(
+        3, "עדכון סטטוס - אירוע INC-2026-002",
+        "<p>שלום דנה,</p>"
+        "<p>מצורף עדכון לגבי התקלה החשמלית בתחנת החלוקה בנתניה (INC-2026-002). "
+        "הצוות הטכני סיים בדיקה ראשונית וממתין לאישור תקציב לתיקון הלוח הראשי.</p>"
+        "<p>בברכה,<br>מיכל</p>",
+        None, to_ids=[1],
+    )
+    _insert_email(
+        2, "אישור תקציב למשימות מיטיגציה - רבעון נוכחי",
+        "<p>היי דנה,</p>"
+        "<p>אישרתי את התקציב המבוקש למשימות המיטיגציה ברבעון הקרוב. "
+        "אשמח לעדכון סטטוס מול נעם בסוף החודש.</p>"
+        "<p>אבי</p>",
+        None, to_ids=[1], cc_ids=[8],
+    )
+
+    # A real multi-message thread: a root plus two replies, all three sharing the
+    # same `thread_id` (the root's own email_id) — the same flat shape
+    # services/email.py's `_resolve_thread_root_id` produces at runtime whether you
+    # reply to the root or to an intermediate reply (thread_id always points at the
+    # root, never at an intermediate message), reproduced directly here since this
+    # script writes rows straight to the DB rather than going through send_email.
+    thread_root_id = _insert_email(
+        8, "בקשה למסמכי סקר סיכונים - PRP-009",
+        "<p>היי יוסי,</p>"
+        "<p>נדרשים מסמכי סקר הסיכונים העדכניים לתחנת החלוקה בנתניה (PRP-009) "
+        "לצורך עדכון פרופיל הסיכון. תוכל להעלות אותם למערכת השבוע?</p>"
+        "<p>תודה,<br>נעם</p>",
+        None, to_ids=[4],
+    )
+    _insert_email(
+        4, "Re: בקשה למסמכי סקר סיכונים - PRP-009",
+        "<p>היי נעם,</p>"
+        "<p>אעלה את המסמכים עד יום חמישי. יש לי גם כמה תובנות מהביקור האחרון "
+        "בשטח שכדאי לשלב בסקר.</p>"
+        "<p>יוסי</p>",
+        thread_root_id, to_ids=[8],
+    )
+    _insert_email(
+        8, "Re: בקשה למסמכי סקר סיכונים - PRP-009",
+        "<p>מעולה, תודה יוסי. נשמח לשמוע גם על התובנות - אפשר לתאם שיחה קצרה מחר?</p>",
+        thread_root_id, to_ids=[4],
+    )
+
+    # Email with a real attachment, uploaded through the same storage.upload_file
+    # Task 6's POST /api/emails/{id}/attachments uses, so it's downloadable via the
+    # real signed-URL flow in a running dev environment, not just a DB row.
+    attachment_email_id = _insert_email(
+        1, 'דוח סקר סיכונים - PRP-001 מצורף',
+        "<p>שלום שרה,</p>"
+        '<p>מצורף דוח סקר הסיכונים העדכני עבור מרלו"ג מודיעין (PRP-001), '
+        "לצורך הכנת חוות הדעת.</p>"
+        "<p>בברכה,<br>דנה</p>",
+        None, to_ids=[9], cc_ids=[2],
+    )
+    _attachment_upload = storage.upload_file(
+        b"%PDF-1.4\n% Seed demo attachment placeholder - PRP-001 risk survey report.\n",
+        'דוח_סקר_סיכונים_PRP-001.pdf', "EMAIL", attachment_email_id,
+    )
+    cur.execute(
+        "INSERT INTO Email_Attachments (email_id, file_path, file_name, file_size, content_type) VALUES (?, ?, ?, ?, ?)",
+        (attachment_email_id, _attachment_upload.storage_key, 'דוח_סקר_סיכונים_PRP-001.pdf',
+         _attachment_upload.size_bytes, _attachment_upload.content_type),
+    )
+
+    # BCC demo: lets a developer manually verify the Task 10 RBAC fix (BCC hidden
+    # from the TO recipient, and would be hidden from any second BCC'd recipient
+    # too — see routers/emails.py's _visible_recipients) against real seeded data.
+    _insert_email(
+        6, "עדכון שטח - נזק קל שזוהה בסיור",
+        "<p>היי רונית,</p>"
+        "<p>בסיור הבוקר זיהיתי נזק קל לגדר ההיקפית באתר. לא דחוף, אך כדאי לתעד.</p>"
+        "<p>עומר</p>",
+        None, to_ids=[5], bcc_ids=[1],
     )
 
     conn.commit()

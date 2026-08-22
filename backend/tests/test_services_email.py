@@ -200,3 +200,54 @@ def test_list_emails_for_user_is_folder_scoped_and_paginated(db: Session, make_u
     assert len(page1) == 2
     assert len(page2) == 1
     assert {r.id for r in page1}.isdisjoint({r.id for r in page2})
+
+
+# ---------------------------------------------------------------------------
+# XSS sanitization (Task 10 step 2)
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_body_html_strips_script_and_event_handlers():
+    dirty = '<p onclick="steal()">hi <script>alert(1)</script></p><img src=x onerror=alert(2)>'
+    clean = email_service.sanitize_body_html(dirty)
+    assert "<script" not in clean
+    assert "onclick" not in clean
+    assert "onerror" not in clean
+    assert "<img" not in clean
+
+
+def test_sanitize_body_html_strips_javascript_href_but_keeps_safe_link():
+    dirty = '<a href="javascript:alert(1)">bad</a><a href="https://example.com">good</a>'
+    clean = email_service.sanitize_body_html(dirty)
+    assert "javascript:" not in clean
+    assert 'href="https://example.com"' in clean
+
+
+def test_sanitize_body_html_keeps_allowed_formatting_tags():
+    # bleach re-serializes self-closing tags without the trailing slash
+    # ("<br />" -> "<br>") — harmless, still valid HTML5, not something worth
+    # asserting byte-for-byte equality on.
+    safe = "<p>שלום <b>עולם</b>, <i>איך</i> הולך?<br />שורה שנייה</p>"
+    clean = email_service.sanitize_body_html(safe)
+    assert "<b>עולם</b>" in clean
+    assert "<i>איך</i>" in clean
+    assert "<br" in clean
+    assert "שורה שנייה" in clean
+
+
+def test_send_email_sanitizes_body_html_before_storing(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+
+    email_in = EmailCreate(
+        to=[recipient.user_id],
+        subject="נושא",
+        body_html='<p>שלום</p><script>alert("xss")</script>',
+    )
+    email = email_service.send_email(db, sender.user_id, email_in)
+
+    # The dangerous tag must never even reach the database, not just be filtered
+    # on the way back out — re-read the row fresh to prove that.
+    stored = db.get(models.Email, email.email_id)
+    assert "<script" not in stored.body_html
+    assert "<p>שלום</p>" in stored.body_html
