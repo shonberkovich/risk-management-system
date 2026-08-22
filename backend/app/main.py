@@ -12,6 +12,7 @@ from app.routers import (
     claims,
     compliance,
     documents,
+    emails,
     financials,
     incidents,
     integrations,
@@ -76,6 +77,7 @@ app.include_router(compliance.router)
 app.include_router(financials.router)
 app.include_router(audit.router)
 app.include_router(sse.router)
+app.include_router(emails.router)
 
 
 @app.get("/api/health")

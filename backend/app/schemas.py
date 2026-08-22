@@ -1195,4 +1195,21 @@ class MoveToFolder(BaseModel):
     ARCHIVE/TRASH. Reuses the EmailFolder Literal so the set of valid folders is
     defined once."""
     folder: EmailFolder
+
+
+class EmailListItemOut(BaseModel):
+    """One row of GET /api/emails (Task 5 step 1) — lighter than EmailOut. The
+    list endpoint is folder-scoped per *current user*, and
+    services.email.list_emails_for_user accordingly returns Email_Recipients
+    rows (the current user's own mailbox copy), not Email rows directly — so
+    unlike EmailOut this carries the viewer's own is_read/folder state for this
+    message instead of the full recipients/attachments fan-out (unnecessary,
+    N+1-shaped payload if repeated across every row of a list)."""
+    model_config = ConfigDict(from_attributes=True)
+    email_id: int
+    subject: str
     created_at: datetime
+    sender: UserOut
+    thread_id: int | None = None
+    is_read: bool
+    folder: EmailFolder
