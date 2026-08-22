@@ -24,6 +24,7 @@ from app.routers import (
     risk_profiles,
     role_permissions,
     simulation,
+    sse,
     users,
 )
 
@@ -74,6 +75,7 @@ app.include_router(notifications.router)
 app.include_router(compliance.router)
 app.include_router(financials.router)
 app.include_router(audit.router)
+app.include_router(sse.router)
 
 
 @app.get("/api/health")
