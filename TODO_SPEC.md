@@ -166,7 +166,7 @@ API בשרת: GET /api/email-templates, POST /api/email-templates
 
 ==================================================
 
-[ ] משימה 13: השהיית שליחה וביטול שליחה (Undo Send / Scheduled Send)
+[x] משימה 13: השהיית שליחה וביטול שליחה (Undo Send / Scheduled Send)
 
 מהות המשימה: מתן זמן חסד (למשל 10 שניות) לביטול המייל לאחר הלחיצה על 'שלח', ומתן אפשרות לתזמן שליחת מייל למועד עתידי.
 מיקום במערכת: Backend (Task Queue) & Frontend (Compose, Timeout logic)
@@ -177,7 +177,7 @@ API בשרת: POST /api/emails/schedule, DELETE /api/emails/cancel-schedule
  שלב 3: הקמת תור משימות פשוט (BackgroundTasks או Celery) שיבדוק וישלח מיילים שזמנם הגיע.
  שלב 4: הוספת אופציה ב-UI 'שלח במועד אחר' (בחירת תאריך ושעה).
  שלב 5: Endpoint לביטול השליחה (מחיקה או העברה חזרה לטיוטות) כל עוד לא הגיע המועד.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור הפיתוח יכתב כאן לאחר הביצוע]
+✅ בוצע ב-branch `feature/email-scheduled-send`: Undo-send בצד לקוח (Snackbar עם countdown של 10 שניות ב-`EmailComposeModal.tsx`, ללא קריאת API עד שהזמן חולף). `Email.scheduled_for`+`scheduled_recipients` (JSON, כמו `Agent_Sessions.context_data`) — מייל מתוזמן לא יוצר `Email_Recipients` עד השליחה בפועל, כך שהוא בלתי נראה לנמענים. סקדולר asyncio poll (30s) ב-`services/scheduler.py`, לא Celery — נבחר על פני `asyncio.sleep` per-email כי שורד restart של uvicorn --reload. `DELETE /api/emails/cancel-schedule/{id}` מוחק את הרשומה (אין drafts במערכת). 533 טסטים בבקאנד + 158 בפרונט עברו.
 
 ==================================================
 
