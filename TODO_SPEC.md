@@ -109,7 +109,7 @@ API בשרת: POST /api/emails
 ✅ בוצע ב-branch `feature/email-compose-ui`: `EmailComposeModal.tsx` עם Autocomplete לנמענים (To/CC/BCC), TextField רב-שורתי (אין react-quill בפרויקט, לא נוספה תלות חדשה — הטקסט נשמר כ-`<p>`/`<br/>` עם escaping), גרירת קבצים + כפתור בחירה, שליחה דו-שלבית (`sendEmail` ואז `uploadEmailAttachments`) עם retry-להעלאה בלבד במקרה כשלון אחרי שהמייל כבר נוצר. תמיכה במצב תגובה (`initialTo`/`initialSubject`/`initialBody`/`inReplyTo`) לשימוש עתידי במשימה 15. חובר לעמוד `Emails.tsx` עם כפתור "כתיבת מייל". כל הטסטים ירוקים (133/133).
 
 ==================================================
-[ ] משימה 9: חיבור ה-SSE לממשק הלקוח והתראות גלובליות
+[x] משימה 9: חיבור ה-SSE לממשק הלקוח והתראות גלובליות
 
 מהות המשימה: האזנה לערוץ ה-SSE בצד הלקוח והצגת התראות מתפרצות בכל מקום במערכת.
 מיקום במערכת: Frontend (src/hooks/useSSE.ts, src/components/MainLayout.tsx)
@@ -120,7 +120,7 @@ API בשרת: GET /api/sse/stream
  שלב 3: הקפצת חיווי גלובלי (Toast / Snackbar) ב-`MainLayout` כשיש מייל חדש.
  שלב 4: עדכון (Invalidate) של ה-Query של רשימת המיילים ומונה ההודעות ב-Sidebar אוטומטית מבלי לרענן עמוד.
  שלב 5: ניקוי ה-EventSource כשהמשתמש מתנתק מהמערכת.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-sse-frontend`: `hooks/useSSE.ts` נפתח רק כשמחובר עם טוקן, מאזין ל-`new_email`, מציג Snackbar/Alert גלובלי (MUI, ללא ספריה חדשה) ומבצע `invalidateQueries(["emails"])`. מותקן פעם אחת ב-`Layout.tsx`. ניקוי EventSource ב-cleanup של useEffect (unmount/logout). Polling הקיים הואט ל-120s כ-fallback בלבד. 141/141 טסטים עברו.
 
 ==================================================
 [ ] משימה 10: הגדרות אבטחה, הרשאות ואופטימיזציה של פניות
