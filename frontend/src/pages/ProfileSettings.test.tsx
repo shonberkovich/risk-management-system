@@ -35,7 +35,16 @@ function renderProfile() {
   return render(<ProfileSettings />, { wrapper });
 }
 
-const DEMO_USER = { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: null };
+const DEMO_USER = {
+  user_id: 1,
+  full_name: "יוסי כהן",
+  role: "RISK_MANAGER",
+  signature: null,
+  auto_reply_enabled: false,
+  auto_reply_start: null,
+  auto_reply_end: null,
+  auto_reply_body: null,
+};
 
 describe("ProfileSettings — signature editor", () => {
   const updateSignature = vi.fn();
@@ -105,6 +114,108 @@ describe("ProfileSettings — signature editor", () => {
 
     expect(await screen.findByText(/שמירת החתימה נכשלה/)).toBeInTheDocument();
     expect(screen.getByTestId("signature-textfield")).toHaveValue("חתימה חדשה");
+  });
+});
+
+describe("ProfileSettings — out-of-office / auto-responder (TODO_SPEC.md \"משימה 18\")", () => {
+  const updateAutoResponder = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateAutoResponder.mockResolvedValue(undefined);
+    fetchEmailRulesMock.mockResolvedValue([]);
+    fetchLabelsMock.mockResolvedValue([]);
+  });
+
+  it("loads the current out-of-office settings into the form", () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        ...DEMO_USER,
+        auto_reply_enabled: true,
+        auto_reply_start: "2026-01-01",
+        auto_reply_end: "2026-01-10",
+        auto_reply_body: "חוזר בקרוב",
+      },
+      updateSignature: vi.fn(),
+      updateAutoResponder,
+    });
+    renderProfile();
+
+    expect(screen.getByTestId("auto-responder-toggle")).toBeChecked();
+    expect(screen.getByTestId("auto-responder-start")).toHaveValue("2026-01-01");
+    expect(screen.getByTestId("auto-responder-end")).toHaveValue("2026-01-10");
+    expect(screen.getByTestId("auto-responder-body")).toHaveValue("חוזר בקרוב");
+  });
+
+  it("the save button starts disabled and enables once a setting is changed", async () => {
+    useAuthMock.mockReturnValue({ user: DEMO_USER, updateSignature: vi.fn(), updateAutoResponder });
+    renderProfile();
+
+    const saveButton = screen.getByTestId("save-auto-responder-button");
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.click(screen.getByTestId("auto-responder-toggle"));
+    expect(saveButton).not.toBeDisabled();
+  });
+
+  it("saves the toggle, date range and message via updateAutoResponder", async () => {
+    useAuthMock.mockReturnValue({ user: DEMO_USER, updateSignature: vi.fn(), updateAutoResponder });
+    renderProfile();
+
+    await userEvent.click(screen.getByTestId("auto-responder-toggle"));
+    await userEvent.type(screen.getByTestId("auto-responder-start"), "2026-02-01");
+    await userEvent.type(screen.getByTestId("auto-responder-end"), "2026-02-10");
+    await userEvent.type(screen.getByTestId("auto-responder-body"), "בחופשה");
+    await userEvent.click(screen.getByTestId("save-auto-responder-button"));
+
+    await waitFor(() =>
+      expect(updateAutoResponder).toHaveBeenCalledWith({
+        auto_reply_enabled: true,
+        auto_reply_start: "2026-02-01",
+        auto_reply_end: "2026-02-10",
+        auto_reply_body: "בחופשה",
+      }),
+    );
+    expect(await screen.findByText("הגדרות המענה האוטומטי נשמרו בהצלחה.")).toBeInTheDocument();
+  });
+
+  it("saving a blank message sends null rather than an empty string", async () => {
+    useAuthMock.mockReturnValue({
+      user: { ...DEMO_USER, auto_reply_body: "ישן" },
+      updateSignature: vi.fn(),
+      updateAutoResponder,
+    });
+    renderProfile();
+
+    await userEvent.clear(screen.getByTestId("auto-responder-body"));
+    await userEvent.click(screen.getByTestId("save-auto-responder-button"));
+
+    await waitFor(() =>
+      expect(updateAutoResponder).toHaveBeenCalledWith(expect.objectContaining({ auto_reply_body: null })),
+    );
+  });
+
+  it("flags an end date before the start date and disables saving", async () => {
+    useAuthMock.mockReturnValue({ user: DEMO_USER, updateSignature: vi.fn(), updateAutoResponder });
+    renderProfile();
+
+    await userEvent.click(screen.getByTestId("auto-responder-toggle"));
+    await userEvent.type(screen.getByTestId("auto-responder-start"), "2026-05-10");
+    await userEvent.type(screen.getByTestId("auto-responder-end"), "2026-05-01");
+
+    expect(screen.getByTestId("save-auto-responder-button")).toBeDisabled();
+    expect(screen.getByText(/תאריך הסיום חייב להיות אחרי תאריך ההתחלה/)).toBeInTheDocument();
+  });
+
+  it("shows an error message if saving fails", async () => {
+    updateAutoResponder.mockRejectedValue(new Error("network error"));
+    useAuthMock.mockReturnValue({ user: DEMO_USER, updateSignature: vi.fn(), updateAutoResponder });
+    renderProfile();
+
+    await userEvent.click(screen.getByTestId("auto-responder-toggle"));
+    await userEvent.click(screen.getByTestId("save-auto-responder-button"));
+
+    expect(await screen.findByText(/שמירת הגדרות המענה האוטומטי נכשלה/)).toBeInTheDocument();
   });
 });
 

@@ -49,9 +49,11 @@ import {
   type EmailFolder,
   type EmailListItem,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import EmailComposeModal from "../components/EmailComposeModal";
 import EmailEntityLinkControl from "../components/EmailEntityLinkControl";
 import EmailSidebar from "../components/EmailSidebar";
+import OutOfOfficeBanner from "../components/OutOfOfficeBanner";
 import ScheduledEmailsDialog from "../components/ScheduledEmailsDialog";
 import { formatDateTime } from "../format";
 
@@ -347,6 +349,10 @@ function EmailLabelMenu({ item }: { item: EmailListItem }) {
  * api/client.ts for why the list has no body excerpt column. */
 export default function Emails() {
   const queryClient = useQueryClient();
+  // TODO_SPEC.md "משימה 18" step 5 — the current user's own record, just for the
+  // out-of-office banner below (OutOfOfficeBanner reads auto_reply_enabled/
+  // auto_reply_start/auto_reply_end off it).
+  const { user } = useAuth();
   const [folder, setFolder] = useState<EmailFolder>("INBOX");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -431,6 +437,7 @@ export default function Emails() {
 
   return (
     <Stack spacing={3}>
+      <OutOfOfficeBanner user={user} />
       <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
         <Stack direction="row" spacing={1} alignItems="center">
           <MailOutlineIcon color="primary" fontSize="large" />

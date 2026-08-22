@@ -9,9 +9,10 @@ import {
   login as loginRequest,
   logout as logoutRequest,
   setTokens,
+  updateMyAutoResponder,
   updateMySignature,
 } from "../api/client";
-import type { CurrentUser } from "../api/client";
+import type { CurrentUser, UserAutoResponderUpdate } from "../api/client";
 
 interface AuthContextValue {
   user: CurrentUser | null;
@@ -24,6 +25,11 @@ interface AuthContextValue {
    * modal both see the new signature immediately, without a page reload or an extra
    * /auth/me round-trip. */
   updateSignature: (signature: string | null) => Promise<void>;
+  /** TODO_SPEC.md "משימה 18" step 2 — saves via `PUT /api/users/auto-responder` (no
+   * id in the path, always the current user — see api/client.ts) and updates the
+   * in-memory `user` the same way `updateSignature` does, so ProfileSettings and the
+   * out-of-office banner (Emails.tsx) both see the new settings immediately. */
+  updateAutoResponder: (payload: UserAutoResponderUpdate) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -78,9 +84,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const updateAutoResponder = useCallback(
+    async (payload: UserAutoResponderUpdate) => {
+      if (!user) throw new Error("updateAutoResponder called with no signed-in user");
+      const updated = await updateMyAutoResponder(payload);
+      setUser(updated);
+    },
+    [user],
+  );
+
   const value = useMemo(
-    () => ({ user, loading, login, logout, updateSignature }),
-    [user, loading, login, logout, updateSignature],
+    () => ({ user, loading, login, logout, updateSignature, updateAutoResponder }),
+    [user, loading, login, logout, updateSignature, updateAutoResponder],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

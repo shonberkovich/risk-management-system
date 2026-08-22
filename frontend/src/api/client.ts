@@ -79,12 +79,29 @@ export interface LoginRequest {
 /** TODO_SPEC.md "משימה 14" — signature is only ever present here (the caller's own
  * record, returned by /auth/me and login's TokenPair.user) and never on the plain
  * `User` shape below (GET /api/users, EmailOut sender/recipients, ...) — see
- * backend/app/schemas.py's UserMeOut docstring for why it's kept off the shared shape. */
+ * backend/app/schemas.py's UserMeOut docstring for why it's kept off the shared shape.
+ *
+ * TODO_SPEC.md "משימה 18" step 2 adds the four out-of-office fields here for the same
+ * reason: self-only settings, returned by GET /auth/me and PUT /users/auto-responder,
+ * never broadcast on the open `User` picker shape. `auto_reply_start`/`auto_reply_end`
+ * are plain "YYYY-MM-DD" date strings (backend schemas.py's `date` fields serialize
+ * that way), matching a native `<input type="date">`'s own value format. */
 export interface CurrentUser {
   user_id: number;
   full_name: string;
   role: string;
   signature: string | null;
+  auto_reply_enabled: boolean;
+  auto_reply_start: string | null;
+  auto_reply_end: string | null;
+  auto_reply_body: string | null;
+}
+
+export interface UserAutoResponderUpdate {
+  auto_reply_enabled: boolean;
+  auto_reply_start: string | null;
+  auto_reply_end: string | null;
+  auto_reply_body: string | null;
 }
 
 export interface TokenPair {
@@ -845,6 +862,10 @@ export const updateUser = (id: number, payload: UserUpdate) =>
 // backend/app/routers/users.py's module docstring for the 403-vs-404 rationale).
 export const updateMySignature = (userId: number, signature: string | null) =>
   api.patch<CurrentUser>(`/users/${userId}/signature`, { signature }).then((r) => r.data);
+// TODO_SPEC.md "משימה 18" step 2 — always the *current* user (no id in the path, see
+// backend/app/routers/users.py's module docstring), unlike updateMySignature above.
+export const updateMyAutoResponder = (payload: UserAutoResponderUpdate) =>
+  api.put<CurrentUser>("/users/auto-responder", payload).then((r) => r.data);
 
 export const fetchRolePermissions = (role?: string) =>
   api.get<RolePermission[]>("/role-permissions", { params: role ? { role } : undefined }).then((r) => r.data);
