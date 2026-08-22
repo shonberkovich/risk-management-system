@@ -139,11 +139,15 @@ export default function Emails() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
+  // TODO_SPEC.md "משימה 9": useSSE (mounted once in Layout.tsx) invalidates every
+  // ["emails", ...] query — this one included — the instant a `new_email` SSE event
+  // arrives, so refetchInterval below is now just a slow fallback for when the SSE
+  // connection itself happens to be down, not the primary refresh mechanism.
   const list = useQuery({
     queryKey: ["emails", folder],
     queryFn: () => fetchEmails(folder),
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   });
 
   const markReadMutation = useMutation({
