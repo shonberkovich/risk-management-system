@@ -9,6 +9,7 @@ import {
   login as loginRequest,
   logout as logoutRequest,
   setTokens,
+  updateMySignature,
 } from "../api/client";
 import type { CurrentUser } from "../api/client";
 
@@ -18,6 +19,11 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** TODO_SPEC.md "משימה 14" step 2/3 — saves via `PATCH /api/users/{id}/signature`
+   * and updates the in-memory `user` so ProfileSettings and a currently-open Compose
+   * modal both see the new signature immediately, without a page reload or an extra
+   * /auth/me round-trip. */
+  updateSignature: (signature: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -63,7 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     doLogout();
   }, [doLogout]);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const updateSignature = useCallback(
+    async (signature: string | null) => {
+      if (!user) throw new Error("updateSignature called with no signed-in user");
+      const updated = await updateMySignature(user.user_id, signature);
+      setUser(updated);
+    },
+    [user],
+  );
+
+  const value = useMemo(
+    () => ({ user, loading, login, logout, updateSignature }),
+    [user, loading, login, logout, updateSignature],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

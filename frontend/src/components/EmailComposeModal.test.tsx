@@ -14,19 +14,20 @@
  * send).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchUsersMock, sendEmailMock, scheduleEmailMock, uploadEmailAttachmentsMock, fetchEmailTemplatesMock } =
+const { fetchUsersMock, sendEmailMock, scheduleEmailMock, uploadEmailAttachmentsMock, fetchEmailTemplatesMock, useAuthMock } =
   vi.hoisted(() => ({
     fetchUsersMock: vi.fn(),
     sendEmailMock: vi.fn(),
     scheduleEmailMock: vi.fn(),
     uploadEmailAttachmentsMock: vi.fn(),
     fetchEmailTemplatesMock: vi.fn(),
+    useAuthMock: vi.fn(),
   }));
 
 vi.mock("../api/client", () => ({
@@ -36,6 +37,13 @@ vi.mock("../api/client", () => ({
   uploadEmailAttachments: uploadEmailAttachmentsMock,
   fetchEmailTemplates: fetchEmailTemplatesMock,
 }));
+
+// TODO_SPEC.md "משימה 14" — the modal reads the signed-in user's `signature` via
+// useAuth() (see EmailComposeModal.tsx's signaturePlainText). Defaults to "no
+// signature" (matches most users, who never set one) so every pre-existing test
+// above keeps seeing exactly the plain body text it asserts on; signature-specific
+// tests below override this per-test.
+vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 
 import EmailComposeModal, { type EmailComposeModalProps } from "./EmailComposeModal";
 
@@ -115,6 +123,7 @@ describe("EmailComposeModal", () => {
     vi.clearAllMocks();
     fetchUsersMock.mockResolvedValue(USERS);
     fetchEmailTemplatesMock.mockResolvedValue(TEMPLATES);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: null } });
   });
 
   afterEach(() => {
@@ -172,6 +181,76 @@ describe("EmailComposeModal", () => {
     expect(await screen.findByText("דנה לוי")).toBeInTheDocument(); // pre-filled TO chip
     expect(screen.getByLabelText("נושא")).toHaveValue("Re: תביעה מס' 5");
     expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue("טיוטת תשובה");
+  });
+
+  // -------------------------------------------------------------------------
+  // Signature auto-append (TODO_SPEC.md "משימה 14" steps 3/4/5)
+  // -------------------------------------------------------------------------
+  describe("signature auto-append", () => {
+    it("appends the current user's signature to the bottom of the body on a fresh compose", async () => {
+      useAuthMock.mockReturnValue({
+        user: { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: "<p>יוסי כהן</p><p>מנהל סיכונים</p>" },
+      });
+      renderModal();
+
+      expect(await screen.findByText("מייל חדש")).toBeInTheDocument();
+      expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue("יוסי כהן\nמנהל סיכונים");
+    });
+
+    it("does nothing when the user has no signature configured", async () => {
+      useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: null } });
+      renderModal();
+
+      expect(await screen.findByText("מייל חדש")).toBeInTheDocument();
+      expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue("");
+    });
+
+    it("in reply mode, inserts the signature above the quoted original message rather than after it", async () => {
+      useAuthMock.mockReturnValue({
+        user: { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: "<p>יוסי כהן</p>" },
+      });
+      renderModal({ initialTo: [2], initialSubject: "Re: תביעה", initialBody: "> ההודעה המקורית", inReplyTo: 7 });
+
+      const body = await screen.findByLabelText("תוכן ההודעה");
+      expect(body).toHaveValue("יוסי כהן\n\n> ההודעה המקורית");
+      // Signature appears before (above) the quoted text, not after it.
+      const value = (body as HTMLTextAreaElement).value;
+      expect(value.indexOf("יוסי כהן")).toBeLessThan(value.indexOf("> ההודעה המקורית"));
+    });
+
+    it("does not duplicate the signature when the compose modal is closed and reopened fresh", async () => {
+      useAuthMock.mockReturnValue({
+        user: { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER", signature: "<p>יוסי כהן</p>" },
+      });
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function Wrapper() {
+        const [open, setOpen] = useState(true);
+        return (
+          <>
+            <button onClick={() => setOpen(true)}>reopen</button>
+            <EmailComposeModal open={open} onClose={() => setOpen(false)} onReopen={() => setOpen(true)} />
+          </>
+        );
+      }
+      render(
+        <QueryClientProvider client={client}>
+          <Wrapper />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByLabelText("תוכן ההודעה")).toHaveValue("יוסי כהן");
+
+      // Close (a plain cancel, not undo-send) and reopen fresh. Waits for the dialog
+      // to actually unmount first: MUI's Modal marks background siblings
+      // aria-hidden="true" while open, which would otherwise hide the "reopen"
+      // button from a role-based query until the exit transition finishes.
+      await userEvent.click(screen.getByRole("button", { name: "ביטול" }));
+      await waitForElementToBeRemoved(() => screen.queryByText("מייל חדש"));
+      await userEvent.click(screen.getByRole("button", { name: "reopen" }));
+
+      // Still exactly one copy of the signature — not appended onto itself.
+      expect(await screen.findByLabelText("תוכן ההודעה")).toHaveValue("יוסי כהן");
+    });
   });
 
   describe("template picker (TODO_SPEC.md \"משימה 12\")", () => {

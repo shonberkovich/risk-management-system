@@ -76,10 +76,15 @@ export interface LoginRequest {
   password: string;
 }
 
+/** TODO_SPEC.md "משימה 14" — signature is only ever present here (the caller's own
+ * record, returned by /auth/me and login's TokenPair.user) and never on the plain
+ * `User` shape below (GET /api/users, EmailOut sender/recipients, ...) — see
+ * backend/app/schemas.py's UserMeOut docstring for why it's kept off the shared shape. */
 export interface CurrentUser {
   user_id: number;
   full_name: string;
   role: string;
+  signature: string | null;
 }
 
 export interface TokenPair {
@@ -836,6 +841,10 @@ export const createUser = (payload: UserCreate) =>
   api.post<UserAdmin>("/users", payload).then((r) => r.data);
 export const updateUser = (id: number, payload: UserUpdate) =>
   api.patch<UserAdmin>(`/users/${id}`, payload).then((r) => r.data);
+// TODO_SPEC.md "משימה 14" step 2 — self-only (403 for anyone else's user_id, see
+// backend/app/routers/users.py's module docstring for the 403-vs-404 rationale).
+export const updateMySignature = (userId: number, signature: string | null) =>
+  api.patch<CurrentUser>(`/users/${userId}/signature`, { signature }).then((r) => r.data);
 
 export const fetchRolePermissions = (role?: string) =>
   api.get<RolePermission[]>("/role-permissions", { params: role ? { role } : undefined }).then((r) => r.data);

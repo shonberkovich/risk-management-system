@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import Mitigation from "./pages/Mitigation";
 import Notifications from "./pages/Notifications";
 import Policies from "./pages/Policies";
+import Profile from "./pages/ProfileSettings";
 import Properties from "./pages/Properties";
 import PropertyDetail from "./pages/PropertyDetail";
 import Reports from "./pages/Reports";
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/roles" element={<Roles />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/integrations" element={<Integrations />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </Layout>
   );

@@ -36,6 +36,7 @@ import {
   type EmailTemplate,
   type User,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { applyEmailTemplate, type EmailTemplateVariables } from "../utils/emailTemplates";
 
 /** TODO_SPEC.md "משימה 8" — Compose modal for the internal email system.
@@ -95,6 +96,48 @@ function plainTextToHtml(text: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
   return `<p>${escaped.split("\n").join("<br />")}</p>`;
+}
+
+/** TODO_SPEC.md "משימה 14" steps 3/4 — the current user's `signature` (from
+ * `useAuth()`'s user object, already included there via `/auth/me`/login — see
+ * AuthContext/api/client.ts's `CurrentUser`) is server-sanitized HTML (same
+ * allow-list as `Email.body_html`, see backend/app/services/email.py), but this
+ * modal's body field is the same plain-text TextField the rest of the component
+ * already commits to (module docstring above) — there's no rich-text editor here
+ * to actually render signature markup like `<b>`. Converting it to plain text
+ * before inserting it keeps that single-editor design intact instead of quietly
+ * introducing raw HTML tags as visible characters in the textarea. Uses
+ * `DOMParser` the same way this codebase's own read-side used to (before Task 10's
+ * server-side sanitization let Emails.tsx switch to rendering body_html directly). */
+function signatureToPlainText(signatureHtml: string | null | undefined): string {
+  if (!signatureHtml) return "";
+  // `textContent` alone joins block-level elements with no separator at all
+  // ("<p>a</p><p>b</p>" -> "ab") — signature HTML is line-oriented (one line per
+  // <p>/<li>/<blockquote>, plus explicit <br>s, matching sanitize_body_html's own
+  // allow-list on the backend), so those boundaries are turned into real newlines
+  // before parsing, then collapsed/trimmed.
+  const withBreaks = signatureHtml
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|li|blockquote)>/gi, "\n");
+  const doc = new DOMParser().parseFromString(withBreaks, "text/html");
+  return (doc.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** TODO_SPEC.md "משימה 14" steps 3/4/5 — combines whatever the body TextField should
+ * start with (blank for a fresh compose, or the quoted original for a reply — see
+ * `initialBody`'s doc comment) with the signature, placed:
+ *  - fresh compose: appended to the *bottom* of the (empty) editor — step 3.
+ *  - reply (`isReply`): placed *above* the quoted original, not duplicated into it —
+ *    step 4. `initialBody` here is only ever the quoted-original text a future Reply
+ *    entry point would pass in; the signature is never itself part of that string, so
+ *    there's nothing to double up even if this modal is reopened for the same reply
+ *    (each open recomputes this from scratch — see the effect that calls it, which
+ *    resets `body` to this value rather than appending onto whatever `body` already
+ *    holds). */
+function buildBodyWithSignature(base: string, signaturePlainText: string, isReply: boolean): string {
+  if (!signaturePlainText) return base;
+  if (isReply) return base ? `${signaturePlainText}\n\n${base}` : signaturePlainText;
+  return base ? `${base}\n\n${signaturePlainText}` : signaturePlainText;
 }
 
 function formatFileSize(bytes: number): string {
@@ -165,6 +208,8 @@ export default function EmailComposeModal({
   templateContext,
 }: EmailComposeModalProps) {
   const queryClient = useQueryClient();
+  const { user: me } = useAuth();
+  const signaturePlainText = signatureToPlainText(me?.signature);
   const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers, enabled: open });
   // Same "fetch once the modal is open" convention as `users` above, so the
   // picker's list is already loaded (no extra spinner) the moment the
@@ -214,7 +259,12 @@ export default function EmailComposeModal({
     // own doc comment.
     if (restoringDraftRef.current) return;
     setSubject(initialSubject ?? "");
-    setBody(initialBody ?? "");
+    // TODO_SPEC.md "משימה 14" steps 3/4/5 — auto-appends the signature here (fresh
+    // compose: bottom of the body; reply: above the quoted original) as part of the
+    // same "recompute body from scratch on every open" reset this effect already did
+    // before this task — see buildBodyWithSignature's doc comment for why that alone
+    // is what prevents double-insertion on reopen, without needing extra guard state.
+    setBody(buildBodyWithSignature(initialBody ?? "", signaturePlainText, Boolean(inReplyTo)));
     setCc([]);
     setBcc([]);
     setPendingFiles([]);

@@ -67,7 +67,7 @@ def logout(_user: models.User = Depends(get_current_user)):
     return None
 
 
-@router.get("/me", response_model=schemas.UserOut)
+@router.get("/me", response_model=schemas.UserMeOut)
 def me(user: models.User = Depends(get_current_user)):
     return user
 

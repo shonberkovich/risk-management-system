@@ -19,6 +19,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
+import PersonIcon from "@mui/icons-material/Person";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import ShieldIcon from "@mui/icons-material/Shield";
 import SummarizeIcon from "@mui/icons-material/Summarize";
@@ -491,6 +492,14 @@ export default function Navbar() {
                     <Chip label={ROLE_LABELS[user.role] ?? user.role} size="small" sx={{ mt: 0.5 }} />
                   </Box>
                   <Divider />
+                  {/* TODO_SPEC.md "משימה 14" step 2 — entry point to the new self-service
+                      Profile Settings screen (signature editor). */}
+                  <MenuItem component={Link} to="/profile" onClick={() => setUserMenuAnchor(null)}>
+                    <ListItemIcon>
+                      <PersonIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>הגדרות פרופיל</ListItemText>
+                  </MenuItem>
                   <MenuItem
                     onClick={() => {
                       setUserMenuAnchor(null);
@@ -610,18 +619,31 @@ export default function Navbar() {
                 <Chip label={ROLE_LABELS[user.role] ?? user.role} size="small" sx={{ mt: 0.25 }} />
               </Box>
             </Stack>
-            <Button
-              fullWidth
-              variant="outlined"
-              color="inherit"
-              startIcon={<LogoutIcon />}
-              onClick={() => {
-                setMobileOpen(false);
-                logout();
-              }}
-            >
-              התנתקות
-            </Button>
+            <Stack spacing={1}>
+              <Button
+                fullWidth
+                variant="outlined"
+                color="inherit"
+                startIcon={<PersonIcon />}
+                component={Link}
+                to="/profile"
+                onClick={() => setMobileOpen(false)}
+              >
+                הגדרות פרופיל
+              </Button>
+              <Button
+                fullWidth
+                variant="outlined"
+                color="inherit"
+                startIcon={<LogoutIcon />}
+                onClick={() => {
+                  setMobileOpen(false);
+                  logout();
+                }}
+              >
+                התנתקות
+              </Button>
+            </Stack>
           </Box>
         )}
       </Drawer>
