@@ -1,4 +1,4 @@
-[ ] משימה 1: הקמת סכמת מסד נתונים למערכת המיילים
+[x] משימה 1: הקמת סכמת מסד נתונים למערכת המיילים
 
 מהות המשימה: יצירת מודלים ב-SQLAlchemy וטבלאות ב-DB עבור הודעות, נמענים, תיקיות, קבצים מצורפים ותמיכה בשרשורים.
 מיקום במערכת: Backend (app/models.py, alembic/versions/)
@@ -9,7 +9,7 @@ API בשרת: N/A
  שלב 3: הוספת מודל `EmailAttachment` (id, email_id, file_path, file_name, file_size, content_type).
  שלב 4: יצירת קשרי גומלין (Relationships) בין המודלים למודל ה-User הקיים.
  שלב 5: יצירת מיגרציה בעזרת Alembic (`alembic revision --autogenerate`) והחלתה.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-db-schema`: נוספו מודלים `Email`/`EmailRecipient`/`EmailAttachment` ב-`models.py` (טבלאות `Emails`/`Email_Recipients`/`Email_Attachments`), עם `thread_id` כ-FK עצמי המצביע על הודעת השורש של השרשור, `folder` כולל גם `SENT` (לעותק אצל השולח). עודכן `sql/schema.sql` בהתאם, ונוצרה/הוחלה מיגרציית Alembic `f65d3748905b`.
 
 ==================================================
 [ ] משימה 2: פיתוח שכבת הנתונים (Schemas & Pydantic Models)
