@@ -159,6 +159,120 @@ def test_mark_as_read_unknown_recipient_raises(db: Session, make_user):
         email_service.mark_as_read(db, email.email_id, bystander.user_id, True)
 
 
+# ---------------------------------------------------------------------------
+# Read receipts (TODO_SPEC.md "משימה 19")
+# ---------------------------------------------------------------------------
+
+
+def test_mark_as_read_sets_read_at_on_first_read(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    email = email_service.send_email(
+        db, sender.user_id, EmailCreate(to=[recipient.user_id], subject="x", body_html="x")
+    )
+
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, False)
+    assert row.read_at is None  # never read -> still NULL, even though is_read is being written
+
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, True)
+    assert row.read_at is not None
+    first_read_at = row.read_at
+
+
+def test_mark_as_read_does_not_move_read_at_on_later_toggles(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    email = email_service.send_email(
+        db, sender.user_id, EmailCreate(to=[recipient.user_id], subject="x", body_html="x")
+    )
+
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, True)
+    first_read_at = row.read_at
+    assert first_read_at is not None
+
+    # Marking unread again must NOT clear read_at (the sender should still know
+    # it *was* opened at the original time).
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, False)
+    assert row.is_read is False
+    assert row.read_at == first_read_at
+
+    # Marking read again (a "second open") must NOT move read_at forward either
+    # — a receipt records the *first* open only.
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, True)
+    assert row.is_read is True
+    assert row.read_at == first_read_at
+
+
+def test_sender_copy_never_gets_a_read_at(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    email = email_service.send_email(
+        db, sender.user_id, EmailCreate(to=[recipient.user_id], subject="x", body_html="x")
+    )
+    sender_copy = (
+        db.query(models.EmailRecipient)
+        .filter_by(email_id=email.email_id, user_id=sender.user_id)
+        .one()
+    )
+    assert sender_copy.read_at is None  # is_read=True from creation, but never "opened" via mark_as_read
+
+
+def test_read_at_tracked_regardless_of_read_receipt_requested(db: Session, make_user):
+    """TODO_SPEC.md "משימה 19" step 2 design decision: `read_at` is tracked
+    unconditionally for every email, whether or not the sender checked "בקש
+    אישור קריאה" — `read_receipt_requested` only gates the frontend's receipt
+    UI, never the underlying tracking itself."""
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    email = email_service.send_email(
+        db,
+        sender.user_id,
+        EmailCreate(to=[recipient.user_id], subject="x", body_html="x", read_receipt_requested=False),
+    )
+    assert email.read_receipt_requested is False
+
+    row = email_service.mark_as_read(db, email.email_id, recipient.user_id, True)
+    assert row.read_at is not None
+
+
+def test_get_tracking_returns_per_recipient_status(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    to_user = make_user(role="PROPERTY_MANAGER")
+    cc_user = make_user(role="CFO")
+    email = email_service.send_email(
+        db,
+        sender.user_id,
+        EmailCreate(
+            to=[to_user.user_id], cc=[cc_user.user_id], subject="x", body_html="x", read_receipt_requested=True
+        ),
+    )
+
+    email_service.mark_as_read(db, email.email_id, to_user.user_id, True)
+
+    rows = email_service.get_tracking(db, email.email_id, sender.user_id)
+    by_user = {r.user_id: r for r in rows}
+
+    # Only the two real recipients — never the sender's own SENT-folder copy.
+    assert set(by_user.keys()) == {to_user.user_id, cc_user.user_id}
+    assert by_user[to_user.user_id].read_at is not None
+    assert by_user[cc_user.user_id].read_at is None
+
+
+def test_get_tracking_raises_for_non_sender(db: Session, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    recipient = make_user(role="PROPERTY_MANAGER")
+    bystander = make_user(role="CFO")
+    email = email_service.send_email(
+        db, sender.user_id, EmailCreate(to=[recipient.user_id], subject="x", body_html="x")
+    )
+
+    # Not even the recipient themselves may call this — sender-only.
+    with pytest.raises(ValueError):
+        email_service.get_tracking(db, email.email_id, recipient.user_id)
+    with pytest.raises(ValueError):
+        email_service.get_tracking(db, email.email_id, bystander.user_id)
+
+
 def test_move_to_folder_and_archive_trash_wrappers(db: Session, make_user):
     sender = make_user(role="RISK_MANAGER")
     recipient = make_user(role="PROPERTY_MANAGER")

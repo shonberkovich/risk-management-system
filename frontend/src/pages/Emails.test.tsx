@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   fetchEmailsMock,
   fetchEmailThreadMock,
+  fetchEmailTrackingMock,
   markEmailReadMock,
   fetchEmailAttachmentSignedUrlMock,
   fetchUsersMock,
@@ -35,6 +36,10 @@ const {
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
+  // TODO_SPEC.md "משימה 19" — GET /{id}/tracking, fetched by Emails.tsx's
+  // ReadReceiptIndicator for a message the current user sent with a receipt
+  // requested.
+  fetchEmailTrackingMock: vi.fn(),
   markEmailReadMock: vi.fn(),
   fetchEmailAttachmentSignedUrlMock: vi.fn(),
   // Emails.tsx renders EmailComposeModal (Task 8) even before it's opened, so
@@ -78,6 +83,7 @@ vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../api/client", () => ({
   fetchEmails: fetchEmailsMock,
   fetchEmailThread: fetchEmailThreadMock,
+  fetchEmailTracking: fetchEmailTrackingMock,
   markEmailRead: markEmailReadMock,
   fetchEmailAttachmentSignedUrl: fetchEmailAttachmentSignedUrlMock,
   fetchUsers: fetchUsersMock,
@@ -132,9 +138,10 @@ const THREAD_MESSAGE = {
   status: "SENT",
   thread_id: null,
   sender: SENDER,
-  recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", is_read: false, folder: "INBOX" }],
+  recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", is_read: false, folder: "INBOX", read_at: null }],
   attachments: [],
   labels: [],
+  read_receipt_requested: false,
 };
 const THREAD = { root: THREAD_MESSAGE, messages: [THREAD_MESSAGE] };
 
@@ -153,6 +160,7 @@ describe("Emails", () => {
       Promise.resolve(folder === "INBOX" ? [UNREAD_ITEM, READ_ITEM] : []),
     );
     fetchEmailThreadMock.mockResolvedValue(THREAD);
+    fetchEmailTrackingMock.mockResolvedValue({ email_id: 10, read_receipt_requested: false, recipients: [] });
     markEmailReadMock.mockResolvedValue({ user: RECIPIENT_USER, recipient_type: "TO", is_read: true, folder: "INBOX" });
     fetchScheduledEmailsMock.mockResolvedValue([]);
     useAuthMock.mockReturnValue({ user: { ...RECIPIENT_USER, signature: null } });
@@ -363,6 +371,106 @@ describe("Emails", () => {
 
       await userEvent.click(await screen.findByTestId("scheduled-emails-button"));
       expect(await screen.findByText("אין מיילים המתוזמנים לשליחה עתידית.")).toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Read receipts (TODO_SPEC.md "משימה 19")
+  // ---------------------------------------------------------------------------
+  describe("read receipts", () => {
+    const SENT_ITEM = { ...READ_ITEM, email_id: 30, subject: "דוח רבעוני", folder: "SENT" };
+    const SENT_MESSAGE = {
+      ...THREAD_MESSAGE,
+      email_id: 30,
+      subject: "דוח רבעוני",
+      sender: SENDER, // the signed-in user for this block (see beforeEach) is the sender
+      read_receipt_requested: true,
+      recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", is_read: false, folder: "INBOX", read_at: null }],
+    };
+
+    beforeEach(() => {
+      useAuthMock.mockReturnValue({ user: { ...SENDER, signature: null } });
+      fetchEmailsMock.mockImplementation((folder: string) =>
+        Promise.resolve(folder === "SENT" ? [SENT_ITEM] : []),
+      );
+      fetchEmailThreadMock.mockResolvedValue({ root: SENT_MESSAGE, messages: [SENT_MESSAGE] });
+    });
+
+    async function openSentMessage() {
+      renderPage();
+      await userEvent.click(screen.getByTestId("email-folder-SENT"));
+      await userEvent.click(await screen.findByTestId("email-row-30"));
+      return screen.findByTestId("read-receipt-icon-30");
+    }
+
+    it("shows a grey (unread) icon when the recipient hasn't read it yet", async () => {
+      fetchEmailTrackingMock.mockResolvedValue({
+        email_id: 30,
+        read_receipt_requested: true,
+        recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", read_at: null }],
+      });
+      const icon = await openSentMessage();
+      await waitFor(() => expect(icon).toHaveAttribute("data-all-read", "false"));
+    });
+
+    it("colors the icon once every recipient has read it", async () => {
+      fetchEmailTrackingMock.mockResolvedValue({
+        email_id: 30,
+        read_receipt_requested: true,
+        recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", read_at: "2026-08-21T12:30:00Z" }],
+      });
+      const icon = await openSentMessage();
+      await waitFor(() => expect(icon).toHaveAttribute("data-all-read", "true"));
+    });
+
+    it("clicking the icon opens a popover listing each recipient's read status", async () => {
+      fetchEmailTrackingMock.mockResolvedValue({
+        email_id: 30,
+        read_receipt_requested: true,
+        recipients: [{ user: RECIPIENT_USER, recipient_type: "TO", read_at: "2026-08-21T12:30:00Z" }],
+      });
+      const icon = await openSentMessage();
+      await waitFor(() => expect(fetchEmailTrackingMock).toHaveBeenCalledWith(30));
+      await userEvent.click(icon);
+
+      const list = await screen.findByTestId("read-receipt-list-30");
+      expect(within(list).getByText("יוסי לוי")).toBeInTheDocument();
+    });
+
+    it("does not show the icon (or fetch tracking) when the message did not request a read receipt", async () => {
+      fetchEmailThreadMock.mockResolvedValue({
+        root: { ...SENT_MESSAGE, read_receipt_requested: false },
+        messages: [{ ...SENT_MESSAGE, read_receipt_requested: false }],
+      });
+      renderPage();
+      await userEvent.click(screen.getByTestId("email-folder-SENT"));
+      await userEvent.click(await screen.findByTestId("email-row-30"));
+
+      // Thread pane loaded (its AI-actions row is a reliable, unambiguous
+      // marker — unlike the subject, which appears both in the list row and
+      // the detail pane at the same time).
+      await screen.findByRole("button", { name: "סכם עם AI" });
+      expect(screen.queryByTestId("read-receipt-icon-30")).not.toBeInTheDocument();
+      expect(fetchEmailTrackingMock).not.toHaveBeenCalled();
+    });
+
+    it("does not show the icon on a message the current user received rather than sent", async () => {
+      // Back to the default signed-in user (RECIPIENT_USER) for this one test —
+      // this describe block's own beforeEach signs in as SENDER, but here we
+      // need a viewer who is a *recipient* of THREAD_MESSAGE, not its sender.
+      useAuthMock.mockReturnValue({ user: { ...RECIPIENT_USER, signature: null } });
+      fetchEmailsMock.mockImplementation((folder: string) =>
+        Promise.resolve(folder === "INBOX" ? [UNREAD_ITEM] : []),
+      );
+      fetchEmailThreadMock.mockResolvedValue({
+        root: { ...THREAD_MESSAGE, read_receipt_requested: true },
+        messages: [{ ...THREAD_MESSAGE, read_receipt_requested: true }],
+      });
+      renderPage();
+      await userEvent.click(await screen.findByTestId("email-row-10"));
+
+      await screen.findByRole("button", { name: "סכם עם AI" });
+      expect(screen.queryByTestId("read-receipt-icon-10")).not.toBeInTheDocument();
     });
   });
 });
