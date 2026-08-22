@@ -67,7 +67,7 @@ API בשרת: GET /api/emails, POST /api/emails
 ✅ בוצע ב-branch `feature/email-api`: נוצר `routers/emails.py` עם 5 ה-endpoints. `GET /{id}` מחזיר תמיד `EmailThreadOut` (גם למייל בודד), מסונן להודעות שהמשתמש הנוכחי נמען/שולח בהן בלבד. 404 (לא 403) למייל שלא שייך למשתמש. נוספה `EmailListItemOut` קלה לרשימה. תוקן גם באג קיים מ-משימה 2 (`MoveToFolder` כלל שדה `created_at` מיותר). 461 טסטים עברו.
 
 ==================================================
-[ ] משימה 6: ניהול קבצים מצורפים והורדתם (Attachments)
+[x] משימה 6: ניהול קבצים מצורפים והורדתם (Attachments)
 
 מהות המשימה: יכולת העלאת קבצים יחד עם המייל, שמירתם בשירות אחסון הקיים, והורדתם מאובטחת.
 מיקום במערכת: Backend (app/routers/emails.py, app/services/storage.py)
@@ -78,7 +78,7 @@ API בשרת: POST /api/emails/{id}/attachments, GET /api/emails/attachments/{id
  שלב 3: יצירת רשומות בטבלת `EmailAttachment` וקישורן למייל.
  שלב 4: חשיפת Endpoint ליצירת Signed URL בדומה למנגנון המסמכים הקיים.
  שלב 5: אכיפת הרשאות - רק נמענים או השולח רשאים לבקש URL להורדת צרופות.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-attachments`: `POST /api/emails/{id}/attachments` (multipart, נפרד מ-`POST /api/emails` שנשאר JSON טהור) עם `services/email.add_attachments` שמשתמש ב-`storage.upload_file` הקיים. `GET /api/emails/attachments/{id}/signed-url` משתמש באותה בדיקת הרשאה (`_require_recipient_row`) כמו משימה 5. הורדה בפועל דרך `GET /api/media/download` הקיים. הגבלת 25MB לקובץ. 472 טסטים עברו.
 
 ==================================================
 [ ] משימה 7: פיתוח ממשק משתמש (React) - תיבת דואר וניווט
