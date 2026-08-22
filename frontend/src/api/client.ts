@@ -1266,3 +1266,87 @@ export const fetchPropertyHazmatProximity = (propertyId?: number) =>
       params: propertyId != null ? { property_id: propertyId } : undefined,
     })
     .then((r) => r.data);
+
+// --- Internal Email System (TODO_SPEC.md "משימה 7", mirrors backend/app/schemas.py's
+// Email* models — see routers/emails.py's module docstring for the endpoint contracts) ---
+
+export type EmailFolder = "INBOX" | "ARCHIVE" | "TRASH" | "SPAM" | "SENT";
+export type EmailRecipientType = "TO" | "CC" | "BCC";
+
+export interface EmailAttachment {
+  id: number;
+  file_name: string;
+  file_size: number;
+  content_type: string;
+}
+
+export interface EmailRecipient {
+  user: User;
+  recipient_type: EmailRecipientType;
+  is_read: boolean;
+  folder: EmailFolder;
+}
+
+export interface Email {
+  email_id: number;
+  subject: string;
+  body_html: string;
+  created_at: string;
+  status: string;
+  thread_id: number | null;
+  sender: User;
+  recipients: EmailRecipient[];
+  attachments: EmailAttachment[];
+}
+
+export interface EmailThread {
+  root: Email;
+  messages: Email[];
+}
+
+/** One row of GET /api/emails — deliberately lighter than `Email` (mirrors
+ * EmailListItemOut on the backend): no `body_html`, `recipients`, or
+ * `attachments`, so the inbox table can show sender/subject/date/read-state
+ * but not a body excerpt without an extra per-row fetch. */
+export interface EmailListItem {
+  email_id: number;
+  subject: string;
+  created_at: string;
+  sender: User;
+  thread_id: number | null;
+  is_read: boolean;
+  folder: EmailFolder;
+}
+
+export interface EmailCreate {
+  to: number[];
+  cc?: number[];
+  bcc?: number[];
+  subject: string;
+  body_html: string;
+  in_reply_to?: number | null;
+}
+
+export const fetchEmails = (folder: EmailFolder = "INBOX", skip = 0, limit = 50) =>
+  api.get<EmailListItem[]>("/emails", { params: { folder, skip, limit } }).then((r) => r.data);
+export const fetchEmailThread = (emailId: number) =>
+  api.get<EmailThread>(`/emails/${emailId}`).then((r) => r.data);
+export const sendEmail = (payload: EmailCreate) =>
+  api.post<Email>("/emails", payload).then((r) => r.data);
+export const markEmailRead = (emailId: number, isRead: boolean) =>
+  api.patch<EmailRecipient>(`/emails/${emailId}/read`, { is_read: isRead }).then((r) => r.data);
+export const moveEmailToFolder = (emailId: number, folder: EmailFolder) =>
+  api.patch<EmailRecipient>(`/emails/${emailId}/folder`, { folder }).then((r) => r.data);
+export const uploadEmailAttachments = (emailId: number, files: File[]) => {
+  const form = new FormData();
+  files.forEach((file) => form.append("files", file));
+  return api
+    .post<EmailAttachment[]>(`/emails/${emailId}/attachments`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data);
+};
+// Reuses the existing `SignedUrl` interface above — SignedUrlOut's shape (url/
+// download_url/storage_key/expires_at) is identical for every entity type.
+export const fetchEmailAttachmentSignedUrl = (attachmentId: number) =>
+  api.get<SignedUrl>(`/emails/attachments/${attachmentId}/signed-url`).then((r) => r.data);

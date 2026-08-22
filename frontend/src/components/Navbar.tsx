@@ -14,6 +14,7 @@ import HistoryIcon from "@mui/icons-material/History";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import LogoutIcon from "@mui/icons-material/Logout";
+import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import MenuIcon from "@mui/icons-material/Menu";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
@@ -53,7 +54,7 @@ import type { ReactNode } from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { previewNotifications } from "../api/client";
+import { fetchEmails, previewNotifications } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../format";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -90,6 +91,10 @@ function canSee(roles: string[] | undefined, role: string | undefined): boolean 
 // the current user, so tightening/loosening a leaf's roles is all that's needed to reshape groups.
 const NAV_ENTRIES: NavEntry[] = [
   { kind: "link", to: "/", label: "דשבורד", icon: <DashboardIcon fontSize="small" /> },
+  // No `roles` restriction — matches routers/emails.py's module docstring: email is a
+  // general internal tool, not role-gated (access is scoped per-message by mailbox
+  // ownership server-side, not by role).
+  { kind: "link", to: "/emails", label: "דואר", icon: <MailOutlineIcon fontSize="small" /> },
   {
     kind: "group",
     key: "assets",
@@ -312,6 +317,17 @@ export default function Navbar() {
   });
   const notifCount = notifPreview?.length ?? 0;
 
+  // Unread-inbox badge on the mail icon — same lightweight "fetch + count client-side"
+  // approach as EmailSidebar's per-folder badges (see that component's doc comment);
+  // Task 9 replaces the polling with SSE-driven invalidation of the same query key.
+  const { data: inboxUnreadCount } = useQuery({
+    queryKey: ["emails", "INBOX", "unread-count"],
+    queryFn: () => fetchEmails("INBOX", 0, 200),
+    select: (items) => items.filter((item) => !item.is_read).length,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const visibleEntries = useMemo(() => {
     return NAV_ENTRIES.map((entry) => {
       if (entry.kind === "link") return canSee(entry.roles, user?.role) ? entry : null;
@@ -423,6 +439,14 @@ export default function Navbar() {
             <Box sx={{ display: { xs: "none", md: "block" } }}>
               <ConnectionStatus />
             </Box>
+
+            <Tooltip title="דואר">
+              <IconButton component={Link} to="/emails" sx={{ color: "#fff" }}>
+                <Badge badgeContent={inboxUnreadCount ?? 0} color="error" max={9}>
+                  <MailOutlineIcon fontSize="small" />
+                </Badge>
+              </IconButton>
+            </Tooltip>
 
             {notificationsAllowed && (
               <Tooltip title="התראות">
