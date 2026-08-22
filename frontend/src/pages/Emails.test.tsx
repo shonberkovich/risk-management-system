@@ -26,6 +26,7 @@ const {
   fetchClaimsMock,
   fetchScheduledEmailsMock,
   cancelScheduledEmailMock,
+  useAuthMock,
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
@@ -53,7 +54,13 @@ const {
   // tests that never open that dialog.
   fetchScheduledEmailsMock: vi.fn(),
   cancelScheduledEmailMock: vi.fn(),
+  // TODO_SPEC.md "משימה 14": EmailComposeModal now reads the signed-in user's
+  // signature via useAuth() as soon as it mounts (see comment above on why it's
+  // already mounted here even in tests that never open it).
+  useAuthMock: vi.fn(),
 }));
+
+vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 
 vi.mock("../api/client", () => ({
   fetchEmails: fetchEmailsMock,
@@ -127,6 +134,7 @@ describe("Emails", () => {
     fetchEmailThreadMock.mockResolvedValue(THREAD);
     markEmailReadMock.mockResolvedValue({ user: RECIPIENT_USER, recipient_type: "TO", is_read: true, folder: "INBOX" });
     fetchScheduledEmailsMock.mockResolvedValue([]);
+    useAuthMock.mockReturnValue({ user: { ...RECIPIENT_USER, signature: null } });
   });
   afterEach(() => vi.restoreAllMocks());
 

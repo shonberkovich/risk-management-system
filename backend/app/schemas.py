@@ -40,6 +40,22 @@ class UserAdminOut(BaseModel):
     created_at: datetime
 
 
+class UserMeOut(UserOut):
+    """TODO_SPEC.md "משימה 14" — UserOut plus `signature`, used only for endpoints that
+    return the *caller's own* record (`GET /api/auth/me`, `POST /api/auth/login`'s
+    `TokenPair.user`, and `PATCH /api/users/{id}/signature`'s response) — never for the
+    open `GET /api/users` picker or anywhere a user's data is rendered to *other* users
+    (e.g. EmailOut's sender/recipient fields, which stay UserOut). Signature text is
+    self-authored and destined for outgoing mail, but it's still per-user free text with
+    no reason to be broadcast to every unauthenticated caller of the open list, so it's
+    kept off the shared UserOut base rather than added there."""
+    signature: str | None = None
+
+
+class UserSignatureUpdate(BaseModel):
+    signature: str | None = None
+
+
 class UserCreate(BaseModel):
     full_name: str
     email: str
@@ -89,7 +105,11 @@ class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-    user: UserOut
+    # UserMeOut (not the plain UserOut every other schema in this file uses for a user
+    # reference): this `user` is always the caller's own record, so including
+    # `signature` here means the frontend's AuthContext already has it after login
+    # without a follow-up /auth/me round-trip (see UserMeOut's docstring).
+    user: UserMeOut
 
 
 class RefreshRequest(BaseModel):

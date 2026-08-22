@@ -31,6 +31,11 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(Unicode(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # TODO_SPEC.md "משימה 14" — personal email signature (HTML), auto-appended to the
+    # bottom of a fresh Compose and sanitized through services/email.sanitize_body_html
+    # (the same bleach allow-list as Email.body_html) on every write, never a second
+    # sanitizer. NULL = no signature configured; nothing is appended in that case.
+    signature: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
 
 class Region(Base):
