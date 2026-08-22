@@ -71,7 +71,15 @@ CREATE TABLE dbo.Users (
     password_hash   NVARCHAR(255) NULL,   -- pbkdf2_hmac "salt$hash" hex; NULL = no local password (SSO-only / not provisioned)
     is_active       BIT NOT NULL DEFAULT 1,   -- disabled users are rejected at login and on every existing token, see dependencies/permissions.get_current_user
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    signature       NVARCHAR(MAX) NULL   -- personal email signature (HTML), bleach-sanitized on write via services/email.sanitize_body_html; see routers/users.py PATCH /{user_id}/signature
+    signature       NVARCHAR(MAX) NULL,   -- personal email signature (HTML), bleach-sanitized on write via services/email.sanitize_body_html; see routers/users.py PATCH /{user_id}/signature
+    -- Out-of-office / auto-responder (TODO_SPEC.md "משימה 18") — see models.User's
+    -- docstring. auto_reply_enabled defaults to 0 so the feature is opt-in; the
+    -- active window is the inclusive [auto_reply_start, auto_reply_end] range, both
+    -- nullable so enabling the toggle before picking dates is a valid inert state.
+    auto_reply_enabled BIT NOT NULL DEFAULT 0,
+    auto_reply_start   DATE NULL,
+    auto_reply_end     DATE NULL,
+    auto_reply_body    NVARCHAR(MAX) NULL   -- bleach-sanitized like `signature`; becomes an outgoing Email.body_html, see PUT /api/users/auto-responder
 );
 GO
 

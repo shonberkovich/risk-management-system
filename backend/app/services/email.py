@@ -20,12 +20,18 @@ where a recipient's own Email_Rules are evaluated and applied, right after
 that recipient's Email_Recipients row is created and before it's ever
 committed — see `services/email_rules.py`'s module docstring for the full
 design.
+
+Out-of-office auto-responder hook (TODO_SPEC.md "משימה 18"): `_fan_out_recipients`
+also calls `_maybe_send_auto_reply` for each TO/CC/BCC recipient, right next to
+(in addition to, not instead of) the Task 17 rules-engine call above — see
+`_maybe_send_auto_reply`'s own docstring for the out-of-office check, the
+loop-prevention guard, and the once-per-day-per-sender rate limit.
 """
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import bleach
 from sqlalchemy import func, select
@@ -112,7 +118,11 @@ def _fan_out_recipients(
     this lives in the shared fan-out helper (so both send_email and a
     scheduled send that finally fires get identical rules treatment) and for
     the performance characteristics (one query per recipient, no per-rule
-    N+1)."""
+    N+1).
+
+    TODO_SPEC.md "משימה 18" step 3: right after that same rules-engine call,
+    `_maybe_send_auto_reply` gets the same per-recipient look — see its own
+    docstring for the out-of-office check, loop guard, and rate limit."""
     for recipient_type, user_ids in (("TO", to), ("CC", cc), ("BCC", bcc)):
         for user_id in user_ids:
             recipient_row = models.EmailRecipient(
@@ -124,6 +134,7 @@ def _fan_out_recipients(
             )
             db.add(recipient_row)
             email_rules.evaluate_rules_for_recipient(db, user_id, email, recipient_row)
+            _maybe_send_auto_reply(db, user_id, email, sender_id)
 
     # The sender's own copy: it's their outgoing mail, not something unread waiting
     # for them, so is_read=True and it lives in SENT rather than INBOX.
@@ -134,6 +145,106 @@ def _fan_out_recipients(
         folder="SENT",
         is_read=True,
     ))
+
+
+# ---------------------------------------------------------------------------
+# Out-of-office / auto-responder (TODO_SPEC.md "משימה 18")
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_AUTO_REPLY_BODY = "<p>הודעה אוטומטית: הנמען נמצא מחוץ למשרד כעת.</p>"
+
+
+def _auto_reply_subject(original_subject: str) -> str:
+    """Prefixes `original_subject` with "Re: " for an auto-reply, without piling on
+    a second "Re: Re: ..." if the original subject was already a reply (a
+    case-insensitive, leading-whitespace-tolerant match — same casual-matching
+    posture as email_rules._condition_matches's "contains"/"equals" comparisons)."""
+    if re.match(r"^\s*re:\s*", original_subject, flags=re.IGNORECASE):
+        return original_subject
+    return f"Re: {original_subject}"
+
+
+def _has_auto_replied_today(db: Session, out_of_office_user_id: int, original_sender_id: int) -> bool:
+    """TODO_SPEC.md "משימה 18" step 4's explicit rate limit: has
+    `out_of_office_user_id` already sent `original_sender_id` an auto-reply today?
+    Bounds the query by `Email.created_at` (naive-UTC, see models.py's `_utcnow`
+    docstring) between today's start and tomorrow's start, rather than a
+    DB-specific `DATE(created_at) = ...`/`CAST(... AS DATE)` function — so the exact
+    same query runs unmodified against both this repo's SQLite test engine and the
+    real SQL Server LocalDB (see conftest.py's module docstring on why tests run
+    against SQLite at all)."""
+    start_of_today = datetime.combine(date.today(), datetime.min.time())
+    start_of_tomorrow = start_of_today + timedelta(days=1)
+    existing = db.scalar(
+        select(models.Email.email_id)
+        .join(models.EmailRecipient, models.EmailRecipient.email_id == models.Email.email_id)
+        .where(
+            models.Email.sender_id == out_of_office_user_id,
+            models.Email.status == "AUTO_REPLY",
+            models.EmailRecipient.user_id == original_sender_id,
+            models.Email.created_at >= start_of_today,
+            models.Email.created_at < start_of_tomorrow,
+        )
+    )
+    return existing is not None
+
+
+def _maybe_send_auto_reply(db: Session, recipient_user_id: int, email: models.Email, sender_id: int) -> None:
+    """TODO_SPEC.md "משימה 18" steps 3/4 — called once per TO/CC/BCC recipient from
+    `_fan_out_recipients`, right next to (never for) the Task 17 rules-engine call
+    (an out-of-office reply, like a rule, only ever fires for genuinely incoming
+    mail — never for the sender's own SENT copy, which isn't looped over the same
+    way; see `_fan_out_recipients`'s docstring). No-op unless `recipient_user_id`'s
+    own `User` row has `auto_reply_enabled=True` and today's date falls within the
+    inclusive `[auto_reply_start, auto_reply_end]` window — either bound missing
+    means "never in range", never "always in range" (see models.User's docstring).
+
+    Loop prevention, guard (a): refuses to generate a further auto-reply to a
+    message that is *itself* an auto-reply (`email.status == "AUTO_REPLY"` — see
+    models.Email's docstring). Checked first, before even loading the recipient's
+    settings, so a reply chain between two out-of-office users can produce at most
+    one auto-reply total, never bounce back and forth indefinitely. Also skips a
+    user "replying" to their own outgoing message (`recipient_user_id == sender_id`,
+    e.g. a self-addressed email) — never a useful auto-reply, even though guard (a)
+    alone would already stop it from cascading further.
+
+    Loop prevention, guard (b) / step 4's explicit rate limit: at most one
+    auto-reply per (out-of-office user, original sender) pair per calendar day,
+    enforced by `_has_auto_replied_today` below.
+
+    Sends via `send_email` itself (this task's own instruction), threaded onto the
+    original message via `in_reply_to` so the auto-reply lands in the same thread,
+    with `status="AUTO_REPLY"` so guard (a) above recognizes it on any further hop.
+    That nested `send_email` call commits the single shared `Session` as a side
+    effect (see `send_email`'s docstring) — harmless here: it only ever
+    flushes/commits work this same outer `send_email` / `process_due_scheduled_emails`
+    call was already about to commit itself, never a partial or inconsistent state."""
+    if email.status == "AUTO_REPLY":
+        return
+    if recipient_user_id == sender_id:
+        return
+
+    recipient = db.get(models.User, recipient_user_id)
+    if recipient is None or not recipient.auto_reply_enabled:
+        return
+    if recipient.auto_reply_start is None or recipient.auto_reply_end is None:
+        return
+    today = date.today()
+    if not (recipient.auto_reply_start <= today <= recipient.auto_reply_end):
+        return
+
+    if _has_auto_replied_today(db, recipient_user_id, sender_id):
+        return
+
+    reply_body = recipient.auto_reply_body if recipient.auto_reply_body else _DEFAULT_AUTO_REPLY_BODY
+    reply_in = EmailCreate(
+        to=[sender_id],
+        subject=_auto_reply_subject(email.subject),
+        body_html=reply_body,
+        in_reply_to=email.email_id,
+    )
+    send_email(db, recipient_user_id, reply_in, status="AUTO_REPLY")
 
 
 def _broadcast_new_email_event(email: models.Email, recipient_ids: set[int]) -> None:
@@ -161,10 +272,17 @@ def _broadcast_new_email_event(email: models.Email, recipient_ids: set[int]) -> 
         sse_manager.broadcast(user_id, event)
 
 
-def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Email:
+def send_email(db: Session, sender_id: int, email_in: EmailCreate, status: str = "SENT") -> models.Email:
     """Creates the Email row, resolves thread linkage, and fans the message out
     to every recipient's INBOX plus the sender's own SENT copy. Commits and
-    returns the persisted, refreshed Email."""
+    returns the persisted, refreshed Email.
+
+    `status` defaults to "SENT" for every normal caller (routers/emails.py's
+    POST /api/emails never passes it). TODO_SPEC.md "משימה 18" step 3's
+    `_maybe_send_auto_reply` is the one caller that passes `status="AUTO_REPLY"` —
+    see models.Email's docstring for what that value means and models.py's own
+    "status is a plain free-text column" convention (schemas.py's status comment)
+    for why adding it needed no new column or schema change."""
     thread_id = (
         _resolve_thread_root_id(db, email_in.in_reply_to)
         if email_in.in_reply_to is not None
@@ -176,7 +294,7 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
         subject=email_in.subject,
         body_html=sanitize_body_html(email_in.body_html),
         thread_id=thread_id,
-        status="SENT",
+        status=status,
     )
     db.add(email)
     db.flush()  # assigns email.email_id so the recipient rows below can reference it

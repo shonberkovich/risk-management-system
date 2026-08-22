@@ -48,12 +48,35 @@ class UserMeOut(UserOut):
     (e.g. EmailOut's sender/recipient fields, which stay UserOut). Signature text is
     self-authored and destined for outgoing mail, but it's still per-user free text with
     no reason to be broadcast to every unauthenticated caller of the open list, so it's
-    kept off the shared UserOut base rather than added there."""
+    kept off the shared UserOut base rather than added there.
+
+    TODO_SPEC.md "משימה 18" step 2 also piggybacks the out-of-office fields onto this
+    same "caller's own record" shape (also returned by `PUT /api/users/auto-responder`)
+    for the same reason `signature` lives here rather than on `UserOut`: self-authored,
+    self-only settings with no reason to be broadcast to every caller of the open
+    `GET /api/users` picker."""
     signature: str | None = None
+    auto_reply_enabled: bool = False
+    auto_reply_start: date | None = None
+    auto_reply_end: date | None = None
+    auto_reply_body: str | None = None
 
 
 class UserSignatureUpdate(BaseModel):
     signature: str | None = None
+
+
+class UserAutoResponderUpdate(BaseModel):
+    """Body for `PUT /api/users/auto-responder` (TODO_SPEC.md "משימה 18" step 2) —
+    always acts on the current authenticated user (no `user_id` in the path/body at
+    all, see routers/users.py's endpoint docstring), so there is nothing here to
+    validate as "yours" vs. "someone else's". All four fields are required (not a
+    partial update like `UserUpdate`) — this is a small, single-purpose settings form
+    saved as one unit by the frontend, not a field-by-field PATCH."""
+    auto_reply_enabled: bool
+    auto_reply_start: date | None = None
+    auto_reply_end: date | None = None
+    auto_reply_body: str | None = None
 
 
 class UserCreate(BaseModel):
@@ -1132,10 +1155,11 @@ EmailRecipientType = Literal["TO", "CC", "BCC"]
 EmailFolder = Literal["INBOX", "ARCHIVE", "TRASH", "SPAM", "SENT"]
 
 # Email.status (models.py: Unicode(20), default "SENT") is deliberately left as a
-# plain str rather than a Literal here — SENT and SCHEDULED (task 13) are the only two
-# values any code path in this repo actually writes today, but keeping this a plain str
-# (rather than Literal["SENT", "SCHEDULED"]) avoids yet another schema change if a future
-# task adds e.g. a real DRAFT status.
+# plain str rather than a Literal here — SENT, SCHEDULED (task 13), and AUTO_REPLY
+# (task 18, see models.Email's docstring) are the only values any code path in this
+# repo actually writes today, but keeping this a plain str (rather than a closed
+# Literal) avoids yet another schema change if a future task adds e.g. a real DRAFT
+# status.
 
 
 # ---------------------------------------------------------------------------

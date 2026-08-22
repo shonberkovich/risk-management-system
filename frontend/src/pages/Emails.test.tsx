@@ -167,6 +167,26 @@ describe("Emails", () => {
     expect(screen.getAllByText("דנה כהן").length).toBeGreaterThan(0);
   });
 
+  // TODO_SPEC.md "משימה 18" step 5 — the out-of-office banner, driven purely by the
+  // signed-in user's own settings (see OutOfOfficeBanner.test.tsx for the full
+  // isAutoResponderActive matrix; these two just confirm Emails.tsx actually wires
+  // the current user into it).
+  it("does not show the out-of-office banner when the current user's auto-responder is off", async () => {
+    renderPage();
+    await screen.findByText("עדכון דחוף");
+    expect(screen.queryByTestId("out-of-office-banner")).not.toBeInTheDocument();
+  });
+
+  it("shows the out-of-office banner when the current user's own auto-responder is active", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    useAuthMock.mockReturnValue({
+      user: { ...RECIPIENT_USER, signature: null, auto_reply_enabled: true, auto_reply_start: today, auto_reply_end: today, auto_reply_body: "בחופשה" },
+    });
+    renderPage();
+    await screen.findByText("עדכון דחוף");
+    expect(screen.getByTestId("out-of-office-banner")).toHaveTextContent("מענה אוטומטי מופעל כעת");
+  });
+
   it("shows unread rows bold and read rows at normal weight", async () => {
     renderPage();
     const unreadRow = await screen.findByTestId("email-row-10");

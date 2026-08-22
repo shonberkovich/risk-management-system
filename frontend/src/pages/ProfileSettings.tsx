@@ -2,6 +2,7 @@ import AddIcon from "@mui/icons-material/Add";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import FlightTakeoffIcon from "@mui/icons-material/FlightTakeoff";
 import SaveIcon from "@mui/icons-material/Save";
 import SettingsIcon from "@mui/icons-material/Settings";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,10 +14,12 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
@@ -139,6 +142,8 @@ export default function ProfileSettings() {
         </CardContent>
       </Card>
 
+      <OutOfOfficeSection />
+
       <EmailRulesSection />
 
       <Snackbar
@@ -152,6 +157,165 @@ export default function ProfileSettings() {
         </Alert>
       </Snackbar>
     </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Out of Office / Auto-Responder (TODO_SPEC.md "משימה 18" step 2 — "ממשק בהגדרות
+// המשתמש (Toggle להדלקה, בחירת תאריכים ביומן, עריכת טקסט ההודעה)"). Lives in this
+// same file/page as its own section, same "reuse ProfileSettings.tsx, there's room"
+// posture Task 17's Email Rules section above already follows — not a standalone
+// screen.
+// ---------------------------------------------------------------------------
+
+/** Date-range inputs: plain native `<input type="date">` TextFields, the same
+ * approach Task 13's scheduled-send popover settled on for its own `datetime-local`
+ * field (EmailComposeModal.tsx) and MitigationTaskDialog.tsx's `due_date` — no
+ * `@mui/x-date-pickers` dependency anywhere in this project, so this section doesn't
+ * introduce one either. */
+function OutOfOfficeSection() {
+  const { user, updateAutoResponder } = useAuth();
+  const [enabled, setEnabled] = useState(false);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedOpen, setSavedOpen] = useState(false);
+
+  // Loads the current settings into the form once the user is known — same
+  // "don't clobber text the user is mid-typing, only re-sync when the underlying
+  // value actually changes (e.g. after a save)" posture as the signature editor's
+  // own effect above.
+  useEffect(() => {
+    setEnabled(user?.auto_reply_enabled ?? false);
+    setStart(user?.auto_reply_start ?? "");
+    setEnd(user?.auto_reply_end ?? "");
+    setBody(user?.auto_reply_body ?? "");
+  }, [user?.auto_reply_enabled, user?.auto_reply_start, user?.auto_reply_end, user?.auto_reply_body]);
+
+  const dirty =
+    enabled !== (user?.auto_reply_enabled ?? false) ||
+    start !== (user?.auto_reply_start ?? "") ||
+    end !== (user?.auto_reply_end ?? "") ||
+    body !== (user?.auto_reply_body ?? "");
+
+  const dateRangeInvalid = enabled && start !== "" && end !== "" && start > end;
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateAutoResponder({
+        auto_reply_enabled: enabled,
+        auto_reply_start: start === "" ? null : start,
+        auto_reply_end: end === "" ? null : end,
+        auto_reply_body: body.trim() === "" ? null : body,
+      });
+      setSavedOpen(true);
+    } catch {
+      setError("שמירת הגדרות המענה האוטומטי נכשלה. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FlightTakeoffIcon color="primary" fontSize="small" />
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  מענה אוטומטי (מחוץ למשרד)
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  כשמופעל, כל שולח שיפנה אליכם בטווח התאריכים שנבחר יקבל תגובה אוטומטית
+                  אחת ביום עם ההודעה שלמטה.
+                </Typography>
+              </Box>
+            </Stack>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={enabled}
+                  disabled={saving}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                  inputProps={{ "aria-label": "הפעלת מענה אוטומטי", "data-testid": "auto-responder-toggle" }}
+                />
+              }
+              label={enabled ? "מופעל" : "כבוי"}
+            />
+          </Stack>
+
+          <Stack direction="row" spacing={2}>
+            <TextField
+              type="date"
+              label="מתאריך"
+              size="small"
+              fullWidth
+              disabled={saving}
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { "data-testid": "auto-responder-start" } }}
+            />
+            <TextField
+              type="date"
+              label="עד תאריך"
+              size="small"
+              fullWidth
+              disabled={saving}
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              error={dateRangeInvalid}
+              helperText={dateRangeInvalid ? "תאריך הסיום חייב להיות אחרי תאריך ההתחלה" : " "}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { "data-testid": "auto-responder-end" } }}
+            />
+          </Stack>
+
+          <TextField
+            label="הודעת המענה האוטומטי"
+            fullWidth
+            multiline
+            minRows={3}
+            disabled={saving}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={"לדוגמה:\nאני מחוץ למשרד ואחזור בתאריך ה-DD/MM. לעניינים דחופים ניתן לפנות ל..."}
+            slotProps={{ htmlInput: { "data-testid": "auto-responder-body" } }}
+          />
+
+          {error && <Alert severity="error">{error}</Alert>}
+
+          <Stack direction="row" justifyContent="flex-end">
+            <Button
+              variant="contained"
+              startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon fontSize="small" />}
+              disabled={!dirty || saving || dateRangeInvalid}
+              onClick={handleSave}
+              data-testid="save-auto-responder-button"
+            >
+              שמירה
+            </Button>
+          </Stack>
+        </Stack>
+      </CardContent>
+
+      <Snackbar
+        open={savedOpen}
+        autoHideDuration={3000}
+        onClose={() => setSavedOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="success" variant="filled" icon={<CheckCircleIcon fontSize="small" />}>
+          הגדרות המענה האוטומטי נשמרו בהצלחה.
+        </Alert>
+      </Snackbar>
+    </Card>
   );
 }
 

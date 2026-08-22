@@ -20,6 +20,14 @@ their existence is sensitive). A user_id carries no equivalent secret here — G
 there's nothing to hide by pretending user #7 doesn't exist; 403 (matches this app's
 general RBAC-failure convention, dependencies/permissions.require_roles) says plainly
 "that's not yours" instead of a misleading 404.
+
+`PUT /auto-responder` (TODO_SPEC.md "משימה 18" step 2) is this module's second
+self-service write endpoint, but takes a simpler shape than the signature one above:
+the spec's own literal path has no `{user_id}` segment at all, so — unlike
+`PATCH /{user_id}/signature`, which has to compare a path id against the caller —
+there's no id in the request for a caller to spoof in the first place. It always acts
+on `get_current_user`'s own row; "self-only" falls out of that by construction, no
+403 branch needed.
 """
 from datetime import datetime
 from html import escape
@@ -85,6 +93,35 @@ def list_users_admin(
     rather than widening GET /api/users itself, since that one is deliberately open and
     minimal for use as a name/role picker elsewhere in the UI (see module docstring)."""
     return db.scalars(select(models.User).order_by(models.User.full_name)).all()
+
+
+@router.put("/auto-responder", response_model=schemas.UserMeOut)
+def update_my_auto_responder(
+    payload: schemas.UserAutoResponderUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md "משימה 18" step 2. Self-only by construction (see module
+    docstring) — any authenticated, active user may set their own out-of-office
+    settings, same "not gated behind require_roles" posture as `update_my_signature`.
+
+    `auto_reply_body` is bleach-sanitized via the same `sanitize_body_html` every
+    signature write and outgoing email body already funnels through — this text
+    becomes a real Email.body_html once `services/email._maybe_send_auto_reply`
+    starts using it (see that function's docstring), so it gets the same XSS
+    treatment at the point it's saved, not just at send time. `None` (an
+    empty/cleared away-message) is left as `None`, matching
+    `update_my_signature`'s handling of a cleared signature."""
+    current_user.auto_reply_enabled = payload.auto_reply_enabled
+    current_user.auto_reply_start = payload.auto_reply_start
+    current_user.auto_reply_end = payload.auto_reply_end
+    current_user.auto_reply_body = (
+        sanitize_body_html(payload.auto_reply_body) if payload.auto_reply_body is not None else None
+    )
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.post("", response_model=schemas.UserAdminOut, status_code=201)

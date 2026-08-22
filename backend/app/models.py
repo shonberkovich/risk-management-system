@@ -37,6 +37,22 @@ class User(Base):
     # sanitizer. NULL = no signature configured; nothing is appended in that case.
     signature: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
+    # TODO_SPEC.md "משימה 18" — out-of-office / auto-responder settings. Disabled
+    # (auto_reply_enabled=False) by default so the feature is fully opt-in and never
+    # changes default send behavior for a user who hasn't configured it (see
+    # services/email.py's `_maybe_send_auto_reply`, the fan-out hook that reads these
+    # columns). The active window is an inclusive [auto_reply_start, auto_reply_end]
+    # Date range, both nullable so enabling the toggle before picking dates is a valid
+    # (if inert) intermediate state rather than a forced all-or-nothing write — the
+    # hook itself treats a missing start/end as "never in range", never as "always in
+    # range". auto_reply_body is bleach-sanitized via services/email.sanitize_body_html
+    # on every write (same convention PATCH /{user_id}/signature already uses for
+    # `signature` above), since it becomes the body_html of a real outgoing Email.
+    auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_reply_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    auto_reply_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    auto_reply_body: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
 
 class Region(Base):
     __tablename__ = "Regions"
@@ -393,7 +409,8 @@ class Email(Base):
     separate `Email_Threads` table would model an arbitrary reply tree (parent-of-
     reply) but the spec (task 3 step 4 / task 2's `EmailThreadOut`) only calls for
     flat "all messages in this thread" retrieval, so the cheaper self-FK is enough.
-    `status` is a plain free-text column (e.g. "SENT"/"SCHEDULED" — see task 13).
+    `status` is a plain free-text column (e.g. "SENT"/"SCHEDULED" — see task 13; also
+    "AUTO_REPLY" — see task 18 below).
     `scheduled_for`/`scheduled_recipients` (task 13, "השהיית שליחה וביטול שליחה")
     back the scheduled-send feature: `scheduled_for` is the future send time for
     a `status="SCHEDULED"` row (NULL for every normal, immediately-sent email).
@@ -415,6 +432,23 @@ class Email(Base):
     same fan-out helper a normal `send_email` uses) and flips `status` to
     `"SENT"`, at which point the message behaves exactly like one sent
     immediately. NULL for every non-scheduled email.
+
+    `status="AUTO_REPLY"` (TODO_SPEC.md "משימה 18") marks an out-of-office
+    auto-response `send_email` itself generated (`services/email.
+    _maybe_send_auto_reply`, called from `_fan_out_recipients` right next to the
+    Task 17 rules-engine hook) — chosen over a separate `is_auto_reply` boolean
+    column because `status` was already documented (see above) as an open,
+    growable free-text field for exactly this kind of "what kind of send was
+    this" marker, so no schema/migration is needed to add a value, only to add
+    the columns backing the feature itself (`User.auto_reply_*`). This is also
+    the loop-prevention flag: `_maybe_send_auto_reply` refuses to generate a
+    further auto-reply to a message whose own `status` is already
+    `"AUTO_REPLY"`, so a reply chain between two out-of-office users can only
+    ever produce one auto-reply, never bounce back and forth. An
+    `AUTO_REPLY` row is otherwise a completely normal, visible `Email` (fans out
+    to the original sender's INBOX like any other message, appears in the same
+    thread via `in_reply_to`) — this status only ever gates *sending a further
+    auto-reply*, never mailbox visibility.
 
     `body_html` deliberately stays a plain `UnicodeText`, not `EncryptedText`
     (TODO_SPEC.md "משימה 10" step 3, explicitly optional) — considered and decided
