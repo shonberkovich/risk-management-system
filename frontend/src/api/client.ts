@@ -1399,3 +1399,37 @@ const ENTITY_EMAILS_PATH: Record<EntityEmailEntityType, string> = {
 
 export const fetchEntityEmails = (entityType: EntityEmailEntityType, entityId: number) =>
   api.get<EntityLinkedEmail[]>(`/${ENTITY_EMAILS_PATH[entityType]}/${entityId}/emails`).then((r) => r.data);
+
+// --- Email Templates (TODO_SPEC.md "משימה 12", mirrors backend/app/schemas.py's
+// EmailTemplate* schemas — see routers/email_templates.py's module docstring for
+// the endpoint contracts and the client-side variable-substitution rationale) ---
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  created_by: number | null;
+  created_at: string;
+}
+
+export interface EmailTemplateCreate {
+  name: string;
+  subject_template: string;
+  body_template: string;
+}
+
+export interface EmailTemplateUpdate {
+  name?: string;
+  subject_template?: string;
+  body_template?: string;
+}
+
+// GET is open to any authenticated role (everyone composes email); create/
+// update/delete are ADMIN-only server-side (routers/email_templates.py).
+export const fetchEmailTemplates = () => api.get<EmailTemplate[]>("/email-templates").then((r) => r.data);
+export const createEmailTemplate = (payload: EmailTemplateCreate) =>
+  api.post<EmailTemplate>("/email-templates", payload).then((r) => r.data);
+export const updateEmailTemplate = (id: number, payload: EmailTemplateUpdate) =>
+  api.patch<EmailTemplate>(`/email-templates/${id}`, payload).then((r) => r.data);
+export const deleteEmailTemplate = (id: number) => api.delete(`/email-templates/${id}`).then(() => undefined);

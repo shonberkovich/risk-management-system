@@ -1,5 +1,6 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DescriptionIcon from "@mui/icons-material/Description";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -12,13 +13,25 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useState } from "react";
 
-import { fetchUsers, sendEmail, uploadEmailAttachments, type EmailCreate, type User } from "../api/client";
+import {
+  fetchEmailTemplates,
+  fetchUsers,
+  sendEmail,
+  uploadEmailAttachments,
+  type EmailCreate,
+  type EmailTemplate,
+  type User,
+} from "../api/client";
+import { applyEmailTemplate, type EmailTemplateVariables } from "../utils/emailTemplates";
 
 /** TODO_SPEC.md "משימה 8" — Compose modal for the internal email system.
  *
@@ -67,6 +80,13 @@ export interface EmailComposeModalProps {
   initialSubject?: string;
   initialBody?: string;
   inReplyTo?: number | null;
+  /** TODO_SPEC.md "משימה 12" step 4 — context to fill {{claim_number}}/
+   * {{client_name}}/... placeholders with when a template is picked via the
+   * "השתמש בתבנית" button below, e.g. when Compose was opened from a Claim's
+   * or Incident's detail page. A placeholder with no matching (or empty)
+   * value here is left visible/editable in the loaded text rather than
+   * silently dropped — see utils/emailTemplates.ts. */
+  templateContext?: EmailTemplateVariables;
 }
 
 /** A message this modal successfully created stays "sent" even if the follow-up
@@ -86,9 +106,15 @@ export default function EmailComposeModal({
   initialSubject,
   initialBody,
   inReplyTo,
+  templateContext,
 }: EmailComposeModalProps) {
   const queryClient = useQueryClient();
   const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers, enabled: open });
+  // Same "fetch once the modal is open" convention as `users` above, so the
+  // picker's list is already loaded (no extra spinner) the moment the
+  // "השתמש בתבנית" button is clicked.
+  const templates = useQuery({ queryKey: ["email-templates"], queryFn: fetchEmailTemplates, enabled: open });
+  const [templateMenuAnchor, setTemplateMenuAnchor] = useState<HTMLElement | null>(null);
 
   const [to, setTo] = useState<User[]>([]);
   const [cc, setCc] = useState<User[]>([]);
@@ -140,6 +166,21 @@ export default function EmailComposeModal({
     setPendingFiles((prev) => [...prev, ...Array.from(fileList)]);
   };
 
+  const openTemplateMenu = (event: MouseEvent<HTMLElement>) => setTemplateMenuAnchor(event.currentTarget);
+  const closeTemplateMenu = () => setTemplateMenuAnchor(null);
+
+  // TODO_SPEC.md "משימה 12" step 4/5: fills subject/body from the chosen
+  // template (variables substituted from `templateContext`, unresolved
+  // `{{...}}` placeholders left visible) — plain state writes into the same
+  // TextFields the user already types into, so nothing about "keep editing
+  // after loading a template" needs special-casing below.
+  const selectTemplate = (template: EmailTemplate) => {
+    const rendered = applyEmailTemplate(template, templateContext ?? {});
+    setSubject(rendered.subject);
+    setBody(rendered.body);
+    closeTemplateMenu();
+  };
+
   const removeFileAt = (idx: number) => setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const resetAndClose = () => {
@@ -150,6 +191,7 @@ export default function EmailComposeModal({
     setBody("");
     setPendingFiles([]);
     setSendState({ stage: "idle" });
+    setTemplateMenuAnchor(null);
     onClose();
   };
 
@@ -233,6 +275,29 @@ export default function EmailComposeModal({
             isOptionEqualToValue={(a, b) => a.user_id === b.user_id}
             renderInput={(params) => <TextField {...params} label="עותק מוסתר (BCC)" placeholder="אופציונלי" />}
           />
+
+          <Box>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<DescriptionIcon fontSize="small" />}
+              disabled={sending}
+              onClick={openTemplateMenu}
+            >
+              השתמש בתבנית
+            </Button>
+            <Menu anchorEl={templateMenuAnchor} open={templateMenuAnchor !== null} onClose={closeTemplateMenu}>
+              {templates.isLoading && <MenuItem disabled>טוען תבניות...</MenuItem>}
+              {!templates.isLoading && (templates.data ?? []).length === 0 && (
+                <MenuItem disabled>אין תבניות זמינות</MenuItem>
+              )}
+              {(templates.data ?? []).map((template) => (
+                <MenuItem key={template.id} onClick={() => selectTemplate(template)}>
+                  <ListItemText primary={template.name} secondary={template.subject_template} />
+                </MenuItem>
+              ))}
+            </Menu>
+          </Box>
 
           <TextField
             label="נושא"

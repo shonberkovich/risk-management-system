@@ -1258,3 +1258,34 @@ class EntityLinkedEmailOut(BaseModel):
     linked_by: UserOut
     linked_at: datetime
     auto_linked: bool
+
+
+# ---------------------------------------------------------------------------
+# Email Templates (TODO_SPEC.md "משימה 12", "תמיכה בתבניות מייל מוגדרות
+# מראש" — schemas for the EmailTemplate model added above)
+# ---------------------------------------------------------------------------
+
+
+class EmailTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    subject_template: str
+    body_template: str
+    created_by: int | None = None
+    created_at: datetime
+
+
+class EmailTemplateCreate(BaseModel):
+    name: str
+    subject_template: str
+    body_template: str
+
+
+class EmailTemplateUpdate(BaseModel):
+    """All fields optional — a PATCH may touch just the name, just the body, etc.
+    Same `exclude_unset` convention as RolePermissionUpdate/MitigationTaskUpdate
+    elsewhere in this file."""
+    name: str | None = None
+    subject_template: str | None = None
+    body_template: str | None = None

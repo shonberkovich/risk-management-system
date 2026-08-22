@@ -18,6 +18,7 @@ const {
   fetchUsersMock,
   sendEmailMock,
   uploadEmailAttachmentsMock,
+  fetchEmailTemplatesMock,
   linkEmailToEntityMock,
   fetchPropertiesMock,
   fetchIncidentsMock,
@@ -28,11 +29,14 @@ const {
   markEmailReadMock: vi.fn(),
   fetchEmailAttachmentSignedUrlMock: vi.fn(),
   // Emails.tsx renders EmailComposeModal (Task 8) even before it's opened, so
-  // its own api/client dependencies (users list + send/attach calls) need a
-  // mock here too, even though this file's tests never open the compose modal.
+  // its own api/client dependencies (users/templates list + send/attach calls)
+  // need a mock here too, even though this file's tests never open the
+  // compose modal (Task 12: EmailComposeModal fetches the template list as
+  // soon as it's open, same "fetch once open" convention as `users`).
   fetchUsersMock: vi.fn(),
   sendEmailMock: vi.fn(),
   uploadEmailAttachmentsMock: vi.fn(),
+  fetchEmailTemplatesMock: vi.fn(),
   // Task 11: the thread panel also renders EmailEntityLinkControl, which pulls
   // in its own api/client dependencies (link call + the three entity-picker
   // list fetchers) even before the user interacts with it.
@@ -50,6 +54,7 @@ vi.mock("../api/client", () => ({
   fetchUsers: fetchUsersMock,
   sendEmail: sendEmailMock,
   uploadEmailAttachments: uploadEmailAttachmentsMock,
+  fetchEmailTemplates: fetchEmailTemplatesMock,
   linkEmailToEntity: linkEmailToEntityMock,
   fetchProperties: fetchPropertiesMock,
   fetchIncidents: fetchIncidentsMock,

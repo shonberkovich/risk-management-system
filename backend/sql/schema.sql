@@ -16,6 +16,7 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Email_Templates', 'U') IS NOT NULL DROP TABLE dbo.Email_Templates;
 IF OBJECT_ID('dbo.Entity_Emails', 'U') IS NOT NULL DROP TABLE dbo.Entity_Emails;
 IF OBJECT_ID('dbo.Email_Attachments', 'U') IS NOT NULL DROP TABLE dbo.Email_Attachments;
 IF OBJECT_ID('dbo.Email_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Email_Recipients;
@@ -549,4 +550,23 @@ CREATE TABLE dbo.Entity_Emails (
 );
 GO
 CREATE INDEX IX_EntityEmails_Entity ON dbo.Entity_Emails(entity_type, entity_id);
+GO
+
+-- ============================================================================
+-- Email_Templates — reusable canned messages for the Compose modal
+-- (TODO_SPEC.md "משימה 12", "תמיכה בתבניות מייל מוגדרות מראש"). subject_template
+-- / body_template may contain {{variable}} placeholders (e.g. {{claim_number}},
+-- {{client_name}}); substitution happens client-side when a template is loaded
+-- into Compose — see app/routers/email_templates.py's module docstring.
+-- ============================================================================
+IF OBJECT_ID('dbo.Email_Templates', 'U') IS NOT NULL DROP TABLE dbo.Email_Templates;
+GO
+CREATE TABLE dbo.Email_Templates (
+    id                  BIGINT IDENTITY(1,1) PRIMARY KEY,
+    name                NVARCHAR(200) NOT NULL,
+    subject_template    NVARCHAR(500) NOT NULL,
+    body_template       NVARCHAR(MAX) NOT NULL,
+    created_by          BIGINT NULL REFERENCES dbo.Users(user_id),
+    created_at          DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
 GO
