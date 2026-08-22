@@ -1327,8 +1327,12 @@ export interface EmailCreate {
   in_reply_to?: number | null;
 }
 
-export const fetchEmails = (folder: EmailFolder = "INBOX", skip = 0, limit = 50) =>
-  api.get<EmailListItem[]>("/emails", { params: { folder, skip, limit } }).then((r) => r.data);
+/** `q` (TODO_SPEC.md "משימה 10" step 4) is an optional free-text search over
+ * subject/body/sender-name, mirrored from GET /api/emails' own `q` query param
+ * (routers/emails.py) — omitted entirely (not sent as an empty string) when blank,
+ * same convention `params` already gets from axios dropping `undefined` values. */
+export const fetchEmails = (folder: EmailFolder = "INBOX", skip = 0, limit = 50, q?: string) =>
+  api.get<EmailListItem[]>("/emails", { params: { folder, skip, limit, q: q || undefined } }).then((r) => r.data);
 export const fetchEmailThread = (emailId: number) =>
   api.get<EmailThread>(`/emails/${emailId}`).then((r) => r.data);
 export const sendEmail = (payload: EmailCreate) =>

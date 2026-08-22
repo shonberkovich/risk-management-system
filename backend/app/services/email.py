@@ -17,12 +17,50 @@ lands in the same thread as replying to the root.
 """
 from __future__ import annotations
 
+import bleach
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
 from app.schemas import EmailCreate
 from app.services import sse_manager, storage
+
+# TODO_SPEC.md "משימה 10" step 2 — XSS defense for Email.body_html. A small, fixed
+# subset of formatting tags (mirrors what EmailComposeModal.tsx's own
+# plainTextToHtml actually emits today — <p>/<br/> — plus a few more a future rich-
+# text editor is likely to add: bold/italic/underline/lists/links/quotes) and, for
+# <a>, only the href attribute. Everything else — script, style, iframe, event
+# handlers (onclick/onerror/...), inline style attributes, javascript:/data: hrefs —
+# is stripped outright by bleach.clean(strip=True), not merely HTML-escaped. Note
+# `strip=True` removes the *tag* but keeps a disallowed element's inner text as
+# plain inert content (e.g. "<script>alert(1)</script>" -> "alert(1)", visible but
+# non-executable) rather than deleting the text too — that's bleach's documented
+# behavior and is fine here: the point is "can never execute", not "must vanish".
+ALLOWED_BODY_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "ul", "ol", "li", "a", "blockquote"]
+ALLOWED_BODY_ATTRIBUTES = {"a": ["href"]}
+ALLOWED_BODY_PROTOCOLS = ["http", "https", "mailto"]
+
+
+def sanitize_body_html(html: str) -> str:
+    """The one sanitization call site every write *and* read of body_html funnels
+    through — see this module's docstring intro and routers/emails.py's
+    `_to_email_out` for why it's applied on both sides ("never trust one layer"):
+    `send_email` below sanitizes before the very first write, so newly-sent mail can
+    never contain unsafe markup in the database at all; the router re-sanitizes on
+    the way *out* of every read too, as defense-in-depth for the handful of rows
+    Tasks 3/5/6/7/8 already wrote (seed/test fixtures) before this function existed.
+    Deliberately not a one-off backfill migration script instead: those rows are
+    few, this call is cheap, and re-sanitizing on every read is self-healing forever
+    after — including for any future write path that might bypass send_email —
+    rather than a point-in-time fix that stale code could still undo."""
+    return bleach.clean(
+        html,
+        tags=ALLOWED_BODY_TAGS,
+        attributes=ALLOWED_BODY_ATTRIBUTES,
+        protocols=ALLOWED_BODY_PROTOCOLS,
+        strip=True,
+    )
+
 
 # recipient_type used for the sender's own folder=SENT copy of an email they sent.
 # EmailRecipient.recipient_type is otherwise only ever TO/CC/BCC (mirroring who the
@@ -58,7 +96,7 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
     email = models.Email(
         sender_id=sender_id,
         subject=email_in.subject,
-        body_html=email_in.body_html,
+        body_html=sanitize_body_html(email_in.body_html),
         thread_id=thread_id,
         status="SENT",
     )
@@ -215,17 +253,39 @@ def list_emails_for_user(
     folder: str,
     skip: int = 0,
     limit: int = 50,
+    q: str | None = None,
 ) -> list[models.EmailRecipient]:
     """Folder-scoped, paginated listing of `user_id`'s mailbox copies (newest
     email first) — owns the query GET /api/emails (Task 5) needs, so the router
-    doesn't have to duplicate it."""
-    return list(db.scalars(
+    doesn't have to duplicate it.
+
+    `q` (TODO_SPEC.md "משימה 10" step 4) is an optional free-text filter over
+    subject, body_html, and the sender's full_name — a plain `LIKE '%q%'` on each
+    column, OR'd together, same shape as the only other free-text search already in
+    this codebase (routers/incidents.py's `Incident.description.like(...)`); this
+    repo has no full-text-search extension configured, so a fancier ranked/indexed
+    search is out of scope here. Matches against the *stored* body_html (i.e.
+    against post-sanitization markup, tags included) — acceptable for a simple demo
+    search box; a reader wanting to search rendered text only would need to strip
+    tags first, which isn't worth the extra complexity for this task."""
+    query = (
         select(models.EmailRecipient)
         .join(models.Email, models.EmailRecipient.email_id == models.Email.email_id)
+        .join(models.User, models.Email.sender_id == models.User.user_id)
         .where(
             models.EmailRecipient.user_id == user_id,
             models.EmailRecipient.folder == folder,
         )
+    )
+    if q:
+        like = f"%{q}%"
+        query = query.where(
+            models.Email.subject.like(like)
+            | models.Email.body_html.like(like)
+            | models.User.full_name.like(like)
+        )
+    return list(db.scalars(
+        query
         .order_by(models.Email.created_at.desc(), models.Email.email_id.desc())
         .offset(skip)
         .limit(limit)

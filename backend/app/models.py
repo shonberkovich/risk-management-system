@@ -389,7 +389,27 @@ class Email(Base):
     reply) but the spec (task 3 step 4 / task 2's `EmailThreadOut`) only calls for
     flat "all messages in this thread" retrieval, so the cheaper self-FK is enough.
     `status` is a plain free-text column for now (e.g. "SENT"/"DRAFT"); task 13
-    adds a "SCHEDULED" status later — not built out here."""
+    adds a "SCHEDULED" status later — not built out here.
+
+    `body_html` deliberately stays a plain `UnicodeText`, not `EncryptedText`
+    (TODO_SPEC.md "משימה 10" step 3, explicitly optional) — considered and decided
+    against, for two reasons: (1) `services/encryption.py`'s own docstring scopes
+    `EncryptedText`/`EncryptedString` to columns that are "read-and-displayed-as-is,
+    never summed or filtered by value in SQL"; `body_html` is exactly the column
+    Task 10 step 4 adds a `LIKE`-based search over (`services/email.py`'s
+    `list_emails_for_user`, `q` param) — an encrypted column can't be filtered at
+    the DB layer at all (every row would need decrypting in Python first, which
+    defeats a `LIKE` query's whole point), so encrypting here would directly break
+    the very next step of this same task. (2) Per CLAUDE.md, this is a course demo
+    over an internal, general-purpose (not role-gated) mailbox — not a regulated
+    PII/financial column like `Claims.adjuster_name` or `Claim_Payments.
+    reference_number`, the kind of field this app *does* encrypt. RBAC (Task 5) plus
+    the Task 10 BCC/enumeration fixes above are this feature's real access-control
+    boundary; DB-at-rest encryption of the body would add real complexity (breaking
+    search, and every future feature that reads body_html — Task 15's AI summarizer
+    included) for a demo-scoped, low-sensitivity data class. If a future task needs
+    encryption here despite the search trade-off, `EncryptedText` is a drop-in swap
+    for `UnicodeText` (see encryption.py) — no other refactor required."""
     __tablename__ = "Emails"
 
     email_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

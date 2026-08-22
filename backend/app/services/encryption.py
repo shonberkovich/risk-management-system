@@ -30,6 +30,12 @@ Applied so far:
 All of the above are the same shape: sensitive, read-and-displayed-as-is, never summed
 or filtered by value in SQL — exactly what "encrypt at rest" is meant for.
 
+Considered and declined: `Emails.body_html` (TODO_SPEC.md "משימה 10" step 3,
+explicitly optional) — unlike everything above, it's exactly the column a `LIKE`
+search was added over in the same task (`services/email.py`'s `list_emails_for_user`,
+`q` param), so it fails the "never filtered by value in SQL" test this module is
+scoped to. See `models.Email`'s docstring for the full reasoning.
+
 Key rotation: `_fernet()` returns a `cryptography.fernet.MultiFernet` built from
 `[settings.field_encryption_key, *settings.field_encryption_key_previous_list]`. New writes
 always encrypt under the first (current) key — that's `MultiFernet`'s documented contract —

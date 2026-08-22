@@ -45,6 +45,24 @@ get_attachment_signed_url below) rather than standing up a third near-identical
 copy of that endpoint (media.py and documents.py already each have one) — that
 endpoint validates by signed token alone, not by entity type, so it works
 unmodified for any storage key including "emails/...".
+
+Task 10 RBAC re-audit: re-verified every endpoint below still 404s (not 403,
+never leaks existence) for a caller outside an email's mailbox — that part of
+Tasks 5/6's design held up. Found and fixed two real holes the original pass
+missed: (1) `EmailOut.recipients` leaked every recipient row — BCC included —
+to *any* viewer who could see the message at all, so a TO/CC recipient (or a
+second BCC'd recipient) could see who else was silently BCC'd; see
+`_visible_recipients`/`_to_email_out` below. (2) GET /attachments/{id}/signed-url
+returned a different 404 message for "no such attachment" ("Attachment not
+found") vs. "exists but isn't yours" ("Email not found"), letting a caller
+enumerate valid attachment_ids by message text alone even without ever gaining
+access to one — both branches now say "Attachment not found". No other holes
+found: list_emails only ever returns EmailListItemOut, which carries no
+recipients/EmailRecipient.id at all; mark-as-read/move-folder only ever touch/
+return the caller's own EmailRecipient row (services/email.py's
+_get_recipient_row is already keyed on (email_id, user_id), never on the
+surrogate id); and the thread-membership filter in get_email already scoped
+messages per viewer before this audit.
 """
 from __future__ import annotations
 
@@ -105,15 +123,44 @@ def _to_list_item(row: models.EmailRecipient) -> schemas.EmailListItemOut:
     )
 
 
+def _visible_recipients(email: models.Email, viewer_id: int) -> list[models.EmailRecipient]:
+    """Task 10 RBAC-audit fix: BCC is *blind* by definition — a recipient's BCC row
+    must never be visible to anyone except the email's sender and that BCC'd
+    recipient themselves, or every TO/CC recipient (and every other BCC'd
+    recipient) could see who was silently copied, which defeats the entire point of
+    BCC. Before this fix, `EmailOut.recipients` was populated straight from the
+    ORM's `email.recipients` relationship with no filtering at all, so *any* viewer
+    who could see the email (i.e. had their own Email_Recipients row for it) saw
+    every other recipient's row too, BCC included. The sender designed the
+    distribution list, so they alone see every row unfiltered; every other viewer
+    sees all TO/CC rows plus only their own row if they themselves were BCC'd."""
+    if viewer_id == email.sender_id:
+        return list(email.recipients)
+    return [r for r in email.recipients if r.recipient_type != "BCC" or r.user_id == viewer_id]
+
+
+def _to_email_out(email: models.Email, viewer_id: int) -> schemas.EmailOut:
+    """Builds the outward-facing EmailOut for `email` as seen by `viewer_id`:
+    BCC-filtered recipients (see _visible_recipients) plus a defense-in-depth
+    re-sanitization of body_html (Task 10 step 2 — see services/email.py's
+    sanitize_body_html docstring for why this runs on both the write path and
+    here, on every read)."""
+    out = schemas.EmailOut.model_validate(email)
+    out.recipients = [schemas.EmailRecipientOut.model_validate(r) for r in _visible_recipients(email, viewer_id)]
+    out.body_html = email_service.sanitize_body_html(out.body_html)
+    return out
+
+
 @router.get("", response_model=list[schemas.EmailListItemOut])
 def list_emails(
     folder: schemas.EmailFolder = "INBOX",
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    q: str | None = Query(None, description="חיפוש חופשי בנושא, בגוף ההודעה או בשם השולח"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    rows = email_service.list_emails_for_user(db, current_user.user_id, folder, skip=skip, limit=limit)
+    rows = email_service.list_emails_for_user(db, current_user.user_id, folder, skip=skip, limit=limit, q=q)
     return [_to_list_item(row) for row in rows]
 
 
@@ -142,7 +189,10 @@ def get_email(
     ).all())
     messages = [m for m in all_messages if m.email_id in visible_ids]
     root = next((m for m in messages if m.thread_id is None), messages[0])
-    return schemas.EmailThreadOut(root=root, messages=messages)
+
+    messages_out = [_to_email_out(m, current_user.user_id) for m in messages]
+    root_out = next(m for m in messages_out if m.email_id == root.email_id)
+    return schemas.EmailThreadOut(root=root_out, messages=messages_out)
 
 
 @router.post("", response_model=schemas.EmailOut, status_code=201)
@@ -159,7 +209,7 @@ def send_email(
         email = email_service.send_email(db, current_user.user_id, payload)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return email
+    return _to_email_out(email, current_user.user_id)
 
 
 @router.patch("/{email_id}/read", response_model=schemas.EmailRecipientOut)
@@ -214,12 +264,27 @@ def get_attachment_signed_url(
     current_user: models.User = Depends(get_current_user),
 ):
     attachment = db.get(models.EmailAttachment, attachment_id)
-    if attachment is None:
-        raise HTTPException(404, "Attachment not found")
     # Sender-or-recipient check (see module docstring) — same (email_id, user_id)
     # Email_Recipients lookup Task 5's other endpoints use, keyed off the
-    # attachment's parent email rather than duplicating that logic here.
-    _require_recipient_row(db, attachment.email_id, current_user.user_id)
+    # attachment's parent email rather than duplicating that logic here. Task 10
+    # RBAC-audit fix: both branches below now raise the exact same 404 message
+    # ("Attachment not found"). Before this fix, a nonexistent attachment_id and an
+    # existing-but-not-yours attachment_id produced *different* messages
+    # ("Attachment not found" vs. "Email not found") — a caller could tell the two
+    # apart and use that to enumerate which attachment_ids exist at all, even
+    # without ever gaining access to one. Collapsing them to one message (and one
+    # code path) removes that oracle, matching the "don't even confirm the id
+    # exists" posture the rest of this router already uses via _require_recipient_row.
+    if attachment is None:
+        raise HTTPException(404, "Attachment not found")
+    row = db.scalars(
+        select(models.EmailRecipient).where(
+            models.EmailRecipient.email_id == attachment.email_id,
+            models.EmailRecipient.user_id == current_user.user_id,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(404, "Attachment not found")
 
     signed = storage.generate_signed_url(attachment.file_path)
     return {

@@ -1,6 +1,7 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import SearchIcon from "@mui/icons-material/Search";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -8,15 +9,17 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import InputAdornment from "@mui/material/InputAdornment";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   fetchEmailAttachmentSignedUrl,
@@ -39,20 +42,20 @@ const FOLDER_LABELS: Record<EmailFolder, string> = {
   SPAM: "דואר זבל",
 };
 
-/** Renders body_html as plain text without dangerouslySetInnerHTML, as an interim
- * XSS stopgap: the backend doesn't sanitize body_html yet (Task 10 adds server-side
- * `bleach` sanitization), and no HTML sanitizer library is already a dependency here
- * (see frontend/package.json — nothing suitable, and this task's brief says not to
- * add a new heavy dependency just for this). DOMParser builds a detached document
- * (never inserted into the live DOM), so embedded <script>/event-handler markup
- * never executes; only .textContent is read back out, discarding every tag.
- * TODO Task 10: once body_html is sanitized server-side, this can render real HTML. */
-function stripHtml(html: string): string {
-  try {
-    return new DOMParser().parseFromString(html, "text/html").body.textContent?.trim() ?? "";
-  } catch {
-    return html;
-  }
+/** Renders body_html as real HTML via dangerouslySetInnerHTML (Task 10 step 2
+ * replaces Task 7's plain-text-only stopgap, now that the backend sanitizes
+ * body_html server-side on both the write path and the read path — see
+ * backend/app/services/email.py's `sanitize_body_html` docstring and
+ * routers/emails.py's `_to_email_out`). This is *not* "trust the wire because the
+ * backend said so" in general — it's specifically safe here because `/api/emails`
+ * is this same backend's own endpoint, there is no third-party or user-supplied
+ * origin in the loop, and every response from it has already been run through
+ * bleach.clean() with a small safe-tag allowlist (script/style/iframe/event
+ * handlers/javascript: hrefs all stripped) before this component ever sees it. A
+ * `dangerouslySetInnerHTML` fed exclusively by that sanitized output is an
+ * accepted, intentional use of the API — not a blanket trust of arbitrary HTML. */
+function EmailBody({ html }: { html: string }) {
+  return <Box sx={{ "& p": { m: 0, mb: 1 }, "& p:last-child": { mb: 0 } }} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function AttachmentChip({ attachmentId, fileName }: { attachmentId: number; fileName: string }) {
@@ -94,8 +97,8 @@ function EmailMessageCard({ message }: { message: Email }) {
           </Typography>
         </Stack>
 
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-          {stripHtml(message.body_html)}
+        <Typography variant="body2" component="div">
+          <EmailBody html={message.body_html} />
         </Typography>
 
         {message.attachments.length > 0 && (
@@ -139,13 +142,25 @@ export default function Emails() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
+  // TODO_SPEC.md "משימה 10" step 4: search box, debounced client-side so every
+  // keystroke doesn't fire its own request — `search` (raw input) updates
+  // immediately for a responsive textfield, `debouncedSearch` (what actually drives
+  // the query) settles 300ms after typing stops. Mirrors GET /api/emails' own `q`
+  // param (routers/emails.py / services/email.py's list_emails_for_user).
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
   // TODO_SPEC.md "משימה 9": useSSE (mounted once in Layout.tsx) invalidates every
   // ["emails", ...] query — this one included — the instant a `new_email` SSE event
   // arrives, so refetchInterval below is now just a slow fallback for when the SSE
   // connection itself happens to be down, not the primary refresh mechanism.
   const list = useQuery({
-    queryKey: ["emails", folder],
-    queryFn: () => fetchEmails(folder),
+    queryKey: ["emails", folder, debouncedSearch],
+    queryFn: () => fetchEmails(folder, 0, 50, debouncedSearch),
     staleTime: 15_000,
     refetchInterval: 120_000,
   });
@@ -200,6 +215,24 @@ export default function Emails() {
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
               {FOLDER_LABELS[folder]} ({list.data?.length ?? 0})
             </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="חיפוש לפי נושא, תוכן או שם שולח..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ mb: 1.5 }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" color="action" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+              data-testid="email-search-input"
+            />
             {list.isLoading ? (
               <CircularProgress size={20} />
             ) : (list.data ?? []).length > 0 ? (
@@ -230,7 +263,7 @@ export default function Emails() {
               </Table>
             ) : (
               <Typography variant="body2" color="text.secondary">
-                אין הודעות בתיקייה זו.
+                {debouncedSearch ? "לא נמצאו הודעות התואמות לחיפוש." : "אין הודעות בתיקייה זו."}
               </Typography>
             )}
           </CardContent>
