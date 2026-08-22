@@ -16,6 +16,9 @@ GO
 -- Drop all tables up front, in dependency order (children before parents),
 -- so re-running this script is always safe regardless of FK constraints.
 -- ============================================================================
+IF OBJECT_ID('dbo.Email_Attachments', 'U') IS NOT NULL DROP TABLE dbo.Email_Attachments;
+IF OBJECT_ID('dbo.Email_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Email_Recipients;
+IF OBJECT_ID('dbo.Emails', 'U') IS NOT NULL DROP TABLE dbo.Emails;
 IF OBJECT_ID('dbo.Agent_Actions_Log', 'U') IS NOT NULL DROP TABLE dbo.Agent_Actions_Log;
 IF OBJECT_ID('dbo.Agent_Sessions', 'U') IS NOT NULL DROP TABLE dbo.Agent_Sessions;
 IF OBJECT_ID('dbo.Audit_Log', 'U') IS NOT NULL DROP TABLE dbo.Audit_Log;
@@ -462,4 +465,61 @@ CREATE TABLE dbo.Agent_Actions_Log (
 );
 GO
 CREATE INDEX IX_Agent_Actions_Log_session_id ON dbo.Agent_Actions_Log(session_id);
+GO
+
+-- ============================================================================
+-- Emails / Email_Recipients / Email_Attachments — internal messaging system
+-- (TODO_SPEC.md, "משימה 1"). thread_id is a self-referencing FK to
+-- Emails.email_id pointing at the thread's root email (NULL on the root itself,
+-- set to the root's email_id on every reply) — see the Email model's docstring
+-- in app/models.py for the full rationale (flat "WHERE email_id = :root OR
+-- thread_id = :root" retrieval vs. a separate parent-chain Threads table).
+-- ============================================================================
+IF OBJECT_ID('dbo.Emails', 'U') IS NOT NULL DROP TABLE dbo.Emails;
+GO
+CREATE TABLE dbo.Emails (
+    email_id        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    sender_id       BIGINT NOT NULL REFERENCES dbo.Users(user_id),
+    subject         NVARCHAR(500) NOT NULL,
+    body_html       NVARCHAR(MAX) NOT NULL,
+    thread_id       BIGINT NULL REFERENCES dbo.Emails(email_id),
+    created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    status          NVARCHAR(20) NOT NULL DEFAULT 'SENT'   -- e.g. SENT/DRAFT; more statuses land in later tasks (see TODO_SPEC.md §13)
+);
+GO
+CREATE INDEX IX_Emails_Sender ON dbo.Emails(sender_id);
+GO
+CREATE INDEX IX_Emails_ThreadId ON dbo.Emails(thread_id);
+GO
+
+IF OBJECT_ID('dbo.Email_Recipients', 'U') IS NOT NULL DROP TABLE dbo.Email_Recipients;
+GO
+CREATE TABLE dbo.Email_Recipients (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    email_id        BIGINT NOT NULL REFERENCES dbo.Emails(email_id),
+    user_id         BIGINT NOT NULL REFERENCES dbo.Users(user_id),
+    recipient_type  NVARCHAR(10) NOT NULL
+        CHECK (recipient_type IN ('TO','CC','BCC')),
+    is_read         BIT NOT NULL DEFAULT 0,
+    folder          NVARCHAR(20) NOT NULL DEFAULT 'INBOX'
+        CHECK (folder IN ('INBOX','SENT','ARCHIVE','TRASH','SPAM'))   -- SENT: sender's own copy (see task 3 step 3), not in the spec's literal folder list
+);
+GO
+CREATE INDEX IX_EmailRecipients_Email ON dbo.Email_Recipients(email_id);
+GO
+CREATE INDEX IX_EmailRecipients_UserFolder ON dbo.Email_Recipients(user_id, folder);
+GO
+
+IF OBJECT_ID('dbo.Email_Attachments', 'U') IS NOT NULL DROP TABLE dbo.Email_Attachments;
+GO
+CREATE TABLE dbo.Email_Attachments (
+    id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    email_id        BIGINT NOT NULL REFERENCES dbo.Emails(email_id),
+    file_path       NVARCHAR(500) NOT NULL,
+    file_name       NVARCHAR(255) NOT NULL,
+    file_size       BIGINT NOT NULL,
+    content_type    NVARCHAR(100) NOT NULL
+);
+GO
+CREATE INDEX IX_EmailAttachments_Email ON dbo.Email_Attachments(email_id);
 GO
