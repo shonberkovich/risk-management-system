@@ -151,7 +151,7 @@ API בשרת: POST /api/emails/{id}/link, GET /api/{entity}/{id}/emails
 
 ==================================================
 
-[ ] משימה 12: תמיכה בתבניות מייל מוגדרות מראש (Email Templates)
+[x] משימה 12: תמיכה בתבניות מייל מוגדרות מראש (Email Templates)
 
 מהות המשימה: יצירת מערכת לניהול ושמירת תבניות למיילים נפוצים (כמו דרישת מסמכים משמאי, עדכון סטטוס תביעה), כולל משתנים דינמיים (Placeholders).
 מיקום במערכת: Backend (models.py, routers/email_templates.py) & Frontend (Compose Modal)
@@ -162,7 +162,7 @@ API בשרת: GET /api/email-templates, POST /api/email-templates
  שלב 3: בממשק כתיבת המייל (Compose), הוספת כפתור 'השתמש בתבנית' שפותח רשימה לבחירה.
  שלב 4: פיתוח מנגנון החלפת משתנים (למשל {{claim_number}} או {{client_name}}) בזמן טעינת התבנית.
  שלב 5: מתן אפשרות למשתמש לערוך את הטקסט לאחר טעינת התבנית ולפני השליחה.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור הפיתוח יכתב כאן לאחר הביצוע]
+✅ בוצע ב-branch `feature/email-templates`: מודל `EmailTemplate`/טבלת `Email_Templates` (מיגרציה `c33576291f9f`), CRUD מלא ב-`routers/email_templates.py` (GET פתוח לכל משתמש מחובר, POST/PATCH/DELETE ל-ADMIN בלבד, תואם ל-`role_permissions.py`). החלפת משתנים `{{...}}` בצד לקוח (`utils/emailTemplates.ts`, regex whitelist, לא `.format()`/eval) בזמן בחירת תבנית ב-`EmailComposeModal.tsx` — הטקסט נטען לשדות הרגילים וניתן לעריכה חופשית לפני שליחה. לא נבנה ממשק ניהול ייעודי לתבניות (ה-API זמין דרך Swagger). 512 טסטים בבקאנד + 151 בפרונט עברו.
 
 ==================================================
 
