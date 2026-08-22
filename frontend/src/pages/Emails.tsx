@@ -1,7 +1,9 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
@@ -25,6 +27,7 @@ import {
   type EmailFolder,
   type EmailListItem,
 } from "../api/client";
+import EmailComposeModal from "../components/EmailComposeModal";
 import EmailSidebar from "../components/EmailSidebar";
 import { formatDateTime } from "../format";
 
@@ -134,6 +137,7 @@ export default function Emails() {
   const queryClient = useQueryClient();
   const [folder, setFolder] = useState<EmailFolder>("INBOX");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const list = useQuery({
     queryKey: ["emails", folder],
@@ -163,17 +167,24 @@ export default function Emails() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <MailOutlineIcon color="primary" fontSize="large" />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            דואר
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            תיבת הדואר הפנימית של המערכת — התכתבויות בין עובדים.
-          </Typography>
-        </Box>
+      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+        <Stack direction="row" spacing={1} alignItems="center">
+          <MailOutlineIcon color="primary" fontSize="large" />
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              דואר
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              תיבת הדואר הפנימית של המערכת — התכתבויות בין עובדים.
+            </Typography>
+          </Box>
+        </Stack>
+        <Button variant="contained" startIcon={<EditIcon />} onClick={() => setComposeOpen(true)}>
+          כתיבת מייל
+        </Button>
       </Stack>
+
+      <EmailComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
         <Card variant="outlined" sx={{ flexShrink: 0, width: { xs: "100%", md: "auto" } }}>

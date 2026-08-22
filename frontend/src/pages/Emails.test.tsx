@@ -10,20 +10,35 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchEmailsMock, fetchEmailThreadMock, markEmailReadMock, fetchEmailAttachmentSignedUrlMock } = vi.hoisted(
-  () => ({
-    fetchEmailsMock: vi.fn(),
-    fetchEmailThreadMock: vi.fn(),
-    markEmailReadMock: vi.fn(),
-    fetchEmailAttachmentSignedUrlMock: vi.fn(),
-  }),
-);
+const {
+  fetchEmailsMock,
+  fetchEmailThreadMock,
+  markEmailReadMock,
+  fetchEmailAttachmentSignedUrlMock,
+  fetchUsersMock,
+  sendEmailMock,
+  uploadEmailAttachmentsMock,
+} = vi.hoisted(() => ({
+  fetchEmailsMock: vi.fn(),
+  fetchEmailThreadMock: vi.fn(),
+  markEmailReadMock: vi.fn(),
+  fetchEmailAttachmentSignedUrlMock: vi.fn(),
+  // Emails.tsx renders EmailComposeModal (Task 8) even before it's opened, so
+  // its own api/client dependencies (users list + send/attach calls) need a
+  // mock here too, even though this file's tests never open the compose modal.
+  fetchUsersMock: vi.fn(),
+  sendEmailMock: vi.fn(),
+  uploadEmailAttachmentsMock: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({
   fetchEmails: fetchEmailsMock,
   fetchEmailThread: fetchEmailThreadMock,
   markEmailRead: markEmailReadMock,
   fetchEmailAttachmentSignedUrl: fetchEmailAttachmentSignedUrlMock,
+  fetchUsers: fetchUsersMock,
+  sendEmail: sendEmailMock,
+  uploadEmailAttachments: uploadEmailAttachmentsMock,
 }));
 
 import Emails from "./Emails";
