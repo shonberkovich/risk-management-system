@@ -1364,6 +1364,28 @@ export const uploadEmailAttachments = (emailId: number, files: File[]) => {
 export const fetchEmailAttachmentSignedUrl = (attachmentId: number) =>
   api.get<SignedUrl>(`/emails/attachments/${attachmentId}/signed-url`).then((r) => r.data);
 
+// --- AI thread summarize/suggest-reply (TODO_SPEC.md "משימה 15", mirrors
+// backend/app/routers/emails.py's EmailSummaryOut/EmailReplySuggestionOut).
+// `emailId` may be any message id in the thread — the backend resolves it to
+// the thread root itself, same as GET /emails/{id}. Like every /api/ai/*
+// call, a 503 response means the backend has no ANTHROPIC_API_KEY configured
+// (CLAUDE.md's documented graceful-degradation pattern) — callers should
+// show a friendly message rather than a raw error for that status, same
+// convention as CopilotWidget.tsx's askQuestion error handling. ---
+
+export interface EmailSummary {
+  summary: string;
+}
+
+export interface EmailReplySuggestion {
+  draft: string;
+}
+
+export const summarizeEmailThread = (emailId: number) =>
+  api.post<EmailSummary>(`/emails/${emailId}/summarize`).then((r) => r.data);
+export const suggestEmailReply = (emailId: number) =>
+  api.post<EmailReplySuggestion>(`/emails/${emailId}/suggest-reply`).then((r) => r.data);
+
 // --- Scheduled send (TODO_SPEC.md "משימה 13", server-side half — mirrors
 // backend/app/schemas.py's EmailScheduleCreate/EmailScheduleOut; see
 // routers/emails.py's module docstring for the endpoint contracts. Client-side

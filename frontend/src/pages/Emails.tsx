@@ -1,6 +1,8 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import ReplyIcon from "@mui/icons-material/Reply";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import SearchIcon from "@mui/icons-material/Search";
 import Alert from "@mui/material/Alert";
@@ -21,6 +23,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useEffect, useState } from "react";
 
 import {
@@ -29,6 +32,8 @@ import {
   fetchEmails,
   fetchScheduledEmails,
   markEmailRead,
+  summarizeEmailThread,
+  suggestEmailReply,
   type Email,
   type EmailFolder,
   type EmailListItem,
@@ -38,6 +43,29 @@ import EmailEntityLinkControl from "../components/EmailEntityLinkControl";
 import EmailSidebar from "../components/EmailSidebar";
 import ScheduledEmailsDialog from "../components/ScheduledEmailsDialog";
 import { formatDateTime } from "../format";
+
+/** TODO_SPEC.md "משימה 15" — friendly copy for the AI endpoints' documented
+ * 503 ("AI features are not configured", CLAUDE.md's graceful-degradation
+ * pattern), mirroring CopilotWidget.tsx's own askQuestion error handling so
+ * every AI-backed surface in this app shows the same message for the same
+ * condition rather than each inventing its own wording. */
+function aiErrorMessage(err: unknown): string {
+  if (isAxiosError(err) && err.response?.status === 503) {
+    return "שירות ה-AI אינו מוגדר כרגע (חסר מפתח API בצד השרת).";
+  }
+  return "שגיאה בפנייה לשירות ה-AI. נסו שוב מאוחר יותר.";
+}
+
+/** Pre-fill payload for opening EmailComposeModal in reply mode (Task 8's
+ * `initialTo`/`initialSubject`/`initialBody`/`inReplyTo` props) — built by
+ * EmailAiThreadActions.suggest-reply below, but shaped generically enough
+ * that a future non-AI "השב" button could produce the same shape too. */
+interface ReplyDraft {
+  to: number[];
+  subject: string;
+  body: string;
+  inReplyTo: number;
+}
 
 const FOLDER_LABELS: Record<EmailFolder, string> = {
   INBOX: "דואר נכנס",
@@ -118,7 +146,103 @@ function EmailMessageCard({ message }: { message: Email }) {
   );
 }
 
-function EmailThreadView({ emailId }: { emailId: number }) {
+/** TODO_SPEC.md "משימה 15" — the ✨ "סכם עם AI" / "הצע תשובה" row shown above a
+ * thread's messages. Both actions POST to a per-thread AI endpoint
+ * (routers/emails.py's `_require_recipient_row`-gated summarize/suggest-reply
+ * — same mailbox-ownership check every other per-email operation in this app
+ * already goes through, so this can never become a way to read a thread the
+ * viewer isn't on) keyed on `rootEmailId`, which any message in the thread
+ * resolves to on the backend.
+ *
+ * Summarize renders its result as a small dismissible info banner (own local
+ * `dismissed` state, reset whenever a *new* summary successfully loads so
+ * re-summarizing after dismissing shows the fresh result). Suggest-reply
+ * never shows its result inline — spec step 4 requires the draft to always
+ * land in an *editable* compose box before it could be sent, never
+ * auto-inserted/auto-sent — so a successful call hands the draft straight to
+ * `onOpenReply`, which Emails.tsx wires to opening EmailComposeModal in reply
+ * mode (Task 8's initialTo/initialSubject/initialBody/inReplyTo props) with
+ * the draft text pre-filled into the body field.
+ *
+ * A 503 (AI not configured) is shown as the same friendly sentence
+ * CopilotWidget.tsx already uses for the identical condition elsewhere in
+ * this app (see aiErrorMessage above), never a raw axios error. */
+function EmailAiThreadActions({
+  rootEmailId,
+  lastMessage,
+  onOpenReply,
+}: {
+  rootEmailId: number;
+  lastMessage: Email;
+  onOpenReply: (draft: ReplyDraft) => void;
+}) {
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
+
+  const summarizeMutation = useMutation({
+    mutationFn: () => summarizeEmailThread(rootEmailId),
+    onSuccess: () => setSummaryDismissed(false),
+  });
+
+  const suggestReplyMutation = useMutation({
+    mutationFn: () => suggestEmailReply(rootEmailId),
+    onSuccess: (data) => {
+      const subject = lastMessage.subject.startsWith("Re:") ? lastMessage.subject : `Re: ${lastMessage.subject}`;
+      onOpenReply({
+        to: [lastMessage.sender.user_id],
+        subject,
+        body: data.draft,
+        inReplyTo: lastMessage.email_id,
+      });
+    },
+  });
+
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={
+            summarizeMutation.isPending ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />
+          }
+          disabled={summarizeMutation.isPending}
+          onClick={() => summarizeMutation.mutate()}
+          data-testid="summarize-thread-button"
+        >
+          {summarizeMutation.isPending ? "מסכם..." : "סכם עם AI"}
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={suggestReplyMutation.isPending ? <CircularProgress size={14} /> : <ReplyIcon fontSize="small" />}
+          disabled={suggestReplyMutation.isPending}
+          onClick={() => suggestReplyMutation.mutate()}
+          data-testid="suggest-reply-button"
+        >
+          {suggestReplyMutation.isPending ? "מכין טיוטה..." : "הצע תשובה"}
+        </Button>
+      </Stack>
+
+      {summarizeMutation.isSuccess && !summaryDismissed && (
+        <Alert severity="info" onClose={() => setSummaryDismissed(true)} data-testid="thread-summary-banner">
+          {summarizeMutation.data.summary}
+        </Alert>
+      )}
+      {summarizeMutation.isError && (
+        <Alert severity="warning" data-testid="thread-summary-error">
+          {aiErrorMessage(summarizeMutation.error)}
+        </Alert>
+      )}
+      {suggestReplyMutation.isError && (
+        <Alert severity="warning" data-testid="suggest-reply-error">
+          {aiErrorMessage(suggestReplyMutation.error)}
+        </Alert>
+      )}
+    </Stack>
+  );
+}
+
+function EmailThreadView({ emailId, onOpenReply }: { emailId: number; onOpenReply: (draft: ReplyDraft) => void }) {
   const thread = useQuery({ queryKey: ["email-thread", emailId], queryFn: () => fetchEmailThread(emailId) });
 
   if (thread.isLoading) {
@@ -128,8 +252,11 @@ function EmailThreadView({ emailId }: { emailId: number }) {
     return <Alert severity="error">שגיאה בטעינת ההודעה.</Alert>;
   }
 
+  const lastMessage = thread.data.messages[thread.data.messages.length - 1];
+
   return (
     <Stack spacing={2}>
+      <EmailAiThreadActions rootEmailId={thread.data.root.email_id} lastMessage={lastMessage} onOpenReply={onOpenReply} />
       <EmailEntityLinkControl emailId={thread.data.root.email_id} />
       {thread.data.messages.map((message) => (
         <EmailMessageCard key={message.email_id} message={message} />
@@ -147,6 +274,23 @@ export default function Emails() {
   const [folder, setFolder] = useState<EmailFolder>("INBOX");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+
+  // TODO_SPEC.md "משימה 15" step 4 — reply-mode pre-fill for EmailComposeModal
+  // (Task 8's initialTo/initialSubject/initialBody/inReplyTo props), set by
+  // EmailAiThreadActions' "הצע תשובה" once suggest-reply returns a draft.
+  // `null` means the next compose open is a fresh message, not a reply —
+  // cleared whenever "כתיבת מייל" itself is clicked, so a leftover draft from
+  // a previous reply never leaks into an unrelated fresh compose.
+  const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
+
+  const openComposeFresh = () => {
+    setReplyDraft(null);
+    setComposeOpen(true);
+  };
+  const openComposeReply = (draft: ReplyDraft) => {
+    setReplyDraft(draft);
+    setComposeOpen(true);
+  };
 
   // TODO_SPEC.md "משימה 13" step 6 — badge count for the "מיילים מתוזמנים" button
   // (see ScheduledEmailsDialog.tsx for the actual list/cancel UI). Same
@@ -228,7 +372,7 @@ export default function Emails() {
               מיילים מתוזמנים
             </Badge>
           </Button>
-          <Button variant="contained" startIcon={<EditIcon />} onClick={() => setComposeOpen(true)}>
+          <Button variant="contained" startIcon={<EditIcon />} onClick={openComposeFresh}>
             כתיבת מייל
           </Button>
         </Stack>
@@ -238,6 +382,10 @@ export default function Emails() {
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
         onReopen={() => setComposeOpen(true)}
+        initialTo={replyDraft?.to}
+        initialSubject={replyDraft?.subject}
+        initialBody={replyDraft?.body}
+        inReplyTo={replyDraft?.inReplyTo}
       />
       <ScheduledEmailsDialog open={scheduledDialogOpen} onClose={() => setScheduledDialogOpen(false)} />
 
@@ -308,7 +456,7 @@ export default function Emails() {
         <Card variant="outlined" sx={{ flex: 1, minWidth: 0, width: "100%" }}>
           <CardContent>
             {selectedId ? (
-              <EmailThreadView emailId={selectedId} />
+              <EmailThreadView emailId={selectedId} onOpenReply={openComposeReply} />
             ) : (
               <Typography variant="body2" color="text.secondary">
                 בחרו הודעה מהרשימה כדי לצפות בתוכן.
