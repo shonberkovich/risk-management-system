@@ -9,6 +9,7 @@ import Claims from "./pages/Claims";
 import Compliance from "./pages/Compliance";
 import Dashboard from "./pages/Dashboard";
 import Documents from "./pages/Documents";
+import Emails from "./pages/Emails";
 import IncidentDetail from "./pages/IncidentDetail";
 import IncidentReport from "./pages/IncidentReport";
 import Incidents from "./pages/Incidents";
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/simulation" element={<Simulation />} />
         <Route path="/retention" element={<Retention />} />
         <Route path="/documents" element={<Documents />} />
+        <Route path="/emails" element={<Emails />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/users" element={<Users />} />
