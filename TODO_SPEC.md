@@ -39,7 +39,7 @@ API בשרת: N/A
 ✅ בוצע ב-branch `feature/email-service`: נוצר `services/email.py` עם `send_email` (פיצול ל-INBOX לנמענים + עותק SENT לשולח, פתרון thread root מתוך `in_reply_to`), `get_thread`, `mark_as_read`/`move_to_folder`/`archive_email`/`trash_email` לפי מפתח `(email_id, user_id)`, ו-`list_emails_for_user` (עימוד לפי תיקייה). 9 טסטים חדשים, הסוויטה המלאה ירוקה (436 עברו).
 
 ==================================================
-[ ] משימה 4: שילוב SSE (Server-Sent Events) להתראות זמן אמת
+[x] משימה 4: שילוב SSE (Server-Sent Events) להתראות זמן אמת
 
 מהות המשימה: הקמת ערוץ פתוח בשרת כדי לדחוף התראות למשתמשים כאשר מתקבל מייל חדש ללא צורך בריענון (Polling).
 מיקום במערכת: Backend (app/routers/sse.py & app/services/sse_manager.py)
@@ -50,7 +50,7 @@ API בשרת: GET /api/sse/stream
  שלב 3: הוספת קריאת שידור (Broadcast) מה-`email.py service` ללקוחות הרלוונטיים (הנמענים) בסיום שליחת מייל.
  שלב 4: וידוא הרשאות - חיבור SSE דורש JWT תקין והתחברות מזוהה.
  שלב 5: התמודדות עם ניתוקים פתאומיים וניקוי חיבורים מתים.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-sse`: `services/sse_manager.py` (ConnectionManager עם תור asyncio לכל חיבור, תומך בכמה טאבים לאותו משתמש), `routers/sse.py` (`GET /api/sse/stream`, אימות JWT מ-query param כי EventSource לא שולח headers, heartbeat כל 20 שניות, ניקוי בכל מסלול יציאה ב-finally). `send_email` ב-services/email.py משדר `new_email` לכל נמען. הסוויטה המלאה ירוקה (448 עברו).
 
 ==================================================
 [ ] משימה 5: יצירת ה-API (Routers) של המיילים
