@@ -211,7 +211,7 @@ API בשרת: POST /api/emails/{id}/summarize, POST /api/emails/{id}/suggest-rep
 
 ==================================================
 
-[ ] משימה 16: תמיכה בריבוי תיבות ויצירת תיקיות מותאמות אישית (Custom Folders/Labels)
+[x] משימה 16: תמיכה בריבוי תיבות ויצירת תיקיות מותאמות אישית (Custom Folders/Labels)
 
 מהות המשימה: מעבר לתיקיות הבסיסיות (Inbox, Sent), המשתמש יוכל ליצור תגיות (Labels) או תיקיות משלו ולתייג מיילים (למשל: 'תביעות דחופות', 'אישור מנהל').
 מיקום במערכת: Backend (models.py, routers/folders.py) & Frontend (Sidebar, Tagging UI)
@@ -222,7 +222,7 @@ API בשרת: POST /api/folders, POST /api/emails/{id}/tags
  שלב 3: הוספת אופציה ב-Sidebar ('צור תיקייה/תגית חדשה') עם בחירת צבע.
  שלב 4: ממשק גרירה (Drag & Drop) או תפריט פעולות להוספת תגית למייל מתוך רשימת המיילים.
  שלב 5: עדכון חיפוש וסינון כדי לתמוך בצפייה רק במיילים תחת תגית מסוימת.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור הפיתוח יכתב כאן לאחר הביצוע]
+✅ בוצע ב-branch `feature/email-custom-folders`: מודלים `Label`/`EmailLabel` (מיגרציה `d8a1c4f6b2e9`), תגיות פר-משתמש, מקושרות ל-thread root (עקבי עם משימה 11). `POST/GET /api/folders`, `DELETE /api/folders/{id}`, `POST/DELETE /api/emails/{id}/tags[...]`. `GET /api/emails` תומך ב-`label_id` בנוסף ל-`folder`/`q` (AND-composed). UI: `EmailSidebar.tsx` עם יצירת תגית+צבע, ותפריט "⋮" בשורת המייל להוספת/הסרת תגיות. 574 טסטים בבקאנד + 184 בפרונט עברו.
 
 ==================================================
 
