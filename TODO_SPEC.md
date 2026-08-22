@@ -95,7 +95,7 @@ API בשרת: GET /api/emails
 ✅ בוצע ב-branch `feature/email-ui-inbox`: נוספו טיפוסי/פונקציות API ב-`client.ts`, `EmailSidebar.tsx` (תיקיות + badge לא-נקראו), עמוד `Emails.tsx` (רשימה + פאנל שרשור), נתיב `/emails` וקישור ב-`Navbar.tsx`. `body_html` מוצג כטקסט בלבד (DOMParser textContent) עד לסניטציה בצד שרת במשימה 10. `EmailListItemOut` לא כולל תקציר טקסט (נמנע N+1) — הוסבר בקוד. כל הטסטים ירוקים (125/125).
 
 ==================================================
-[ ] משימה 8: ממשק כתיבת מייל חדש (Compose)
+[x] משימה 8: ממשק כתיבת מייל חדש (Compose)
 
 מהות המשימה: טופס מתקדם לכתיבת הודעה, כולל בחירת נמענים חכמה ועורך עשיר.
 מיקום במערכת: Frontend (src/components/EmailComposeModal.tsx)
@@ -106,7 +106,7 @@ API בשרת: POST /api/emails
  שלב 3: שילוב עורך טקסט עשיר (לדוגמה React Quill) לכתיבת תוכן המייל.
  שלב 4: תמיכה בגרירת קבצים (Drag & Drop) לצרופות.
  שלב 5: חיבור טופס השליחה ל-API עם חיווי התקדמות (Loading) וסגירה בהצלחה.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-compose-ui`: `EmailComposeModal.tsx` עם Autocomplete לנמענים (To/CC/BCC), TextField רב-שורתי (אין react-quill בפרויקט, לא נוספה תלות חדשה — הטקסט נשמר כ-`<p>`/`<br/>` עם escaping), גרירת קבצים + כפתור בחירה, שליחה דו-שלבית (`sendEmail` ואז `uploadEmailAttachments`) עם retry-להעלאה בלבד במקרה כשלון אחרי שהמייל כבר נוצר. תמיכה במצב תגובה (`initialTo`/`initialSubject`/`initialBody`/`inReplyTo`) לשימוש עתידי במשימה 15. חובר לעמוד `Emails.tsx` עם כפתור "כתיבת מייל". כל הטסטים ירוקים (133/133).
 
 ==================================================
 [ ] משימה 9: חיבור ה-SSE לממשק הלקוח והתראות גלובליות
