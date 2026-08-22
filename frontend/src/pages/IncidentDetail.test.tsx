@@ -9,14 +9,23 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchIncidentDrilldownMock, fetchPropertyMock, fetchMediaSignedUrlMock, fetchDocumentSignedUrlMock, fetchDocumentsForEntityMock } =
-  vi.hoisted(() => ({
-    fetchIncidentDrilldownMock: vi.fn(),
-    fetchPropertyMock: vi.fn(),
-    fetchMediaSignedUrlMock: vi.fn(),
-    fetchDocumentSignedUrlMock: vi.fn(),
-    fetchDocumentsForEntityMock: vi.fn(),
-  }));
+const {
+  fetchIncidentDrilldownMock,
+  fetchPropertyMock,
+  fetchMediaSignedUrlMock,
+  fetchDocumentSignedUrlMock,
+  fetchDocumentsForEntityMock,
+  deleteIncidentMediaMock,
+  useAuthMock,
+} = vi.hoisted(() => ({
+  fetchIncidentDrilldownMock: vi.fn(),
+  fetchPropertyMock: vi.fn(),
+  fetchMediaSignedUrlMock: vi.fn(),
+  fetchDocumentSignedUrlMock: vi.fn(),
+  fetchDocumentsForEntityMock: vi.fn(),
+  deleteIncidentMediaMock: vi.fn(),
+  useAuthMock: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({
   fetchIncidentDrilldown: fetchIncidentDrilldownMock,
@@ -24,7 +33,9 @@ vi.mock("../api/client", () => ({
   fetchMediaSignedUrl: fetchMediaSignedUrlMock,
   fetchDocumentSignedUrl: fetchDocumentSignedUrlMock,
   fetchDocumentsForEntity: fetchDocumentsForEntityMock,
+  deleteIncidentMedia: deleteIncidentMediaMock,
 }));
+vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 
 import IncidentDetail from "./IncidentDetail";
 
@@ -86,6 +97,7 @@ describe("IncidentDetail", () => {
     fetchMediaSignedUrlMock.mockResolvedValue({ url: "x", download_url: "/x", storage_key: "x", expires_at: 0 });
     fetchDocumentSignedUrlMock.mockResolvedValue({ url: "x", download_url: "/x", storage_key: "x", expires_at: 0 });
     fetchDocumentsForEntityMock.mockResolvedValue([]);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "RISK_MANAGER" } });
   });
 
   it("shows a loading spinner before the drilldown resolves", () => {
@@ -143,6 +155,33 @@ describe("IncidentDetail", () => {
     expect(await screen.findByText("תמונות ומדיה מהשטח (1)")).toBeInTheDocument();
     expect(screen.getByText("32.0500, 34.7700")).toBeInTheDocument();
     expect(screen.getByText("מסמכים מצורפים לאירוע (1)")).toBeInTheDocument();
+  });
+
+  const MEDIA_ITEM = {
+    media_id: 1,
+    incident_id: 1,
+    file_path: "x.jpg",
+    file_type: "image/jpeg",
+    captured_at: "2026-03-01T10:00:00",
+    gps_latitude: null,
+    gps_longitude: null,
+  };
+
+  it("shows a media delete button for RISK_MANAGER", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "RISK_MANAGER" } });
+    fetchIncidentDrilldownMock.mockResolvedValue({ incident: INCIDENT, media: [MEDIA_ITEM], claims: [], documents: [] });
+    renderPage();
+
+    expect(await screen.findByLabelText("מחיקת מדיה")).toBeInTheDocument();
+  });
+
+  it("hides the media delete button for a non-delete role (PROPERTY_MANAGER)", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "PROPERTY_MANAGER" } });
+    fetchIncidentDrilldownMock.mockResolvedValue({ incident: INCIDENT, media: [MEDIA_ITEM], claims: [], documents: [] });
+    renderPage();
+
+    await screen.findByText("תמונות ומדיה מהשטח (1)");
+    expect(screen.queryByLabelText("מחיקת מדיה")).not.toBeInTheDocument();
   });
 
   it("renders a claim card with its payments table when a claim exists", async () => {

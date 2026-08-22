@@ -174,7 +174,7 @@ class PropertyCreate(BaseModel):
     """Payload for POST /api/properties. Mirrors Property's non-generated columns —
     property_id/created_at/updated_at are server-assigned, is_active defaults to True
     (a property is created active; use DELETE to deactivate)."""
-    property_code: str
+    property_code: str = Field(max_length=30)  # matches Properties.property_code NVARCHAR(30)
     name: str
     address: str
     region: str
@@ -192,7 +192,7 @@ class PropertyUpdate(BaseModel):
     same convention as MitigationTaskUpdate/PolicyUpdate) despite PUT's usual
     full-replace connotation — chosen to match how the other write routers in this
     codebase already use PUT/PATCH interchangeably for partial updates."""
-    property_code: str | None = None
+    property_code: str | None = Field(default=None, max_length=30)
     name: str | None = None
     address: str | None = None
     region: str | None = None

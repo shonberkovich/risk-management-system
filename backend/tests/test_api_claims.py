@@ -89,6 +89,35 @@ def test_create_claim_for_closed_incident_is_rejected(client, make_property, mak
     assert resp.status_code == 400
 
 
+def test_create_claim_payment_rejects_non_positive_amount(client, make_property, make_user, make_policy, make_claim):
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+    incident = client.post(
+        "/api/incidents",
+        json={
+            "property_id": prop.property_id,
+            "incident_timestamp": "2024-06-01T10:00:00",
+            "hazard_type": "FIRE",
+            "severity_level": "MEDIUM",
+            "operational_impact": "PARTIAL_SHUTDOWN",
+            "initial_estimated_loss": 200000,
+            "description": "x",
+        },
+        headers=auth_headers(reporter),
+    ).json()
+    policy = make_policy()
+    claim = make_claim(incident["incident_id"], policy.policy_id, claim_status="APPROVED", approved_amount=100_000)
+    manager = make_user(role="RISK_MANAGER")
+
+    for bad_amount in (0, -500):
+        resp = client.post(
+            f"/api/claims/{claim.claim_id}/payments",
+            json={"payment_date": "2024-06-05", "amount": bad_amount, "payment_type": "ADVANCE"},
+            headers=auth_headers(manager),
+        )
+        assert resp.status_code == 400, bad_amount
+
+
 def test_list_claims_is_readable_without_auth(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
     policy = make_policy()

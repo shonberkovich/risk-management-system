@@ -53,6 +53,13 @@ const DOC_TYPE_OPTIONS = Object.keys(DOCUMENT_TYPE_LABELS);
 // enforces server-side (_PROPERTIES_WRITE_ROLES) — mirrored here just to hide edit/deactivate
 // controls from roles that would get a 403 anyway, not as the actual enforcement.
 const PROPERTY_WRITE_ROLES = ["RISK_MANAGER", "PROPERTY_MANAGER", "ADMIN"];
+// Same RISK_MANAGER/ADMIN role set backend/app/routers/documents.py enforces server-side for
+// DELETE /api/documents/{id} (narrower than PROPERTY_WRITE_ROLES above — a PROPERTY_MANAGER can
+// upload/edit the property but not delete an attached document). Mirrored here so the delete
+// button isn't shown to a role that would get a 403 clicking it (bug found during E2E testing:
+// this used to reuse PROPERTY_WRITE_ROLES, which incorrectly showed the delete button to
+// PROPERTY_MANAGER).
+const DOCUMENT_DELETE_ROLES = ["RISK_MANAGER", "ADMIN"];
 // Same role set backend/app/routers/integrations.py enforces server-side for the
 // economics endpoints (_ECONOMICS_ROLES) — mirrored here to hide the BOI-drift block
 // from FIELD_WORKER (TODO_SPEC.md §14, "תצוגה מוסתרת ל-FIELD_WORKER"), not as the
@@ -123,6 +130,7 @@ export default function PropertyDetail() {
   const queryClient = useQueryClient();
   const { openWithProperty } = useAIAssistant();
   const canWrite = !!user && PROPERTY_WRITE_ROLES.includes(user.role);
+  const canDeleteDocument = !!user && DOCUMENT_DELETE_ROLES.includes(user.role);
   const canViewEconomics = !!user && ECONOMICS_VIEW_ROLES.includes(user.role);
   const canViewHazmat = !!user && HAZMAT_VIEW_ROLES.includes(user.role);
 
@@ -595,7 +603,7 @@ export default function PropertyDetail() {
           ) : (documents.data ?? []).length > 0 ? (
             <Stack spacing={0.75}>
               {(documents.data ?? []).map((d) => (
-                <DocumentRow key={d.document_id} doc={d} onDelete={handleDeleteDoc} canWrite={canWrite} />
+                <DocumentRow key={d.document_id} doc={d} onDelete={handleDeleteDoc} canWrite={canDeleteDocument} />
               ))}
             </Stack>
           ) : (

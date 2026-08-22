@@ -1,4 +1,5 @@
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import Alert from "@mui/material/Alert";
@@ -17,11 +18,13 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
+  deleteIncidentMedia,
   fetchDocumentSignedUrl,
   fetchDocumentsForEntity,
   fetchIncidentDrilldown,
@@ -31,6 +34,7 @@ import {
   type DocumentFile,
   type IncidentMedia,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import {
   CLAIM_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -43,6 +47,12 @@ import {
   formatDate,
   formatIls,
 } from "../format";
+
+// Same RISK_MANAGER/ADMIN set backend/app/routers/media.py enforces server-side
+// (inline require_roles("RISK_MANAGER", "ADMIN") on DELETE /api/media/{id}, same
+// narrower-than-canWrite set PropertyDetail.tsx's DOCUMENT_DELETE_ROLES uses for
+// the equivalent document-delete case) — gates the media thumbnail's delete button.
+const MEDIA_DELETE_ROLES = ["RISK_MANAGER", "ADMIN"];
 
 const INCIDENT_STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   NEW: "info",
@@ -66,15 +76,42 @@ const CLAIM_STATUS_COLOR: Record<string, "default" | "warning" | "success" | "er
 // a graceful fallback if the underlying file isn't actually on disk (true
 // for the illustrative seeded Documents rows, which point at fake external
 // s3_url values rather than real local storage keys).
-function MediaThumbnail({ media }: { media: IncidentMedia }) {
+function MediaThumbnail({ media, canDelete }: { media: IncidentMedia; canDelete: boolean }) {
   const signed = useQuery({
     queryKey: ["media-signed-url", media.media_id],
     queryFn: () => fetchMediaSignedUrl(media.media_id),
   });
   const isImage = media.file_type.startsWith("image/");
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteIncidentMedia(media.media_id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incident-drilldown", media.incident_id] }),
+  });
 
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ position: "relative" }}>
+      {canDelete && (
+        <Tooltip title="מחיקת מדיה">
+          <IconButton
+            size="small"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (window.confirm("למחוק את הקובץ הזה?")) deleteMutation.mutate();
+            }}
+            sx={{
+              position: "absolute",
+              top: 4,
+              insetInlineEnd: 4,
+              zIndex: 1,
+              bgcolor: "background.paper",
+              "&:hover": { bgcolor: "background.paper" },
+            }}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
       {isImage && signed.data ? (
         <Box
           component="img"
@@ -94,6 +131,11 @@ function MediaThumbnail({ media }: { media: IncidentMedia }) {
         {media.gps_latitude != null && media.gps_longitude != null && (
           <Typography variant="caption" display="block" color="text.secondary">
             {media.gps_latitude.toFixed(4)}, {media.gps_longitude.toFixed(4)}
+          </Typography>
+        )}
+        {deleteMutation.isError && (
+          <Typography variant="caption" display="block" color="error.main">
+            מחיקה נכשלה.
           </Typography>
         )}
       </CardContent>
@@ -235,6 +277,8 @@ export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const incidentId = Number(id);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canDeleteMedia = !!user && MEDIA_DELETE_ROLES.includes(user.role);
 
   const drilldown = useQuery({
     queryKey: ["incident-drilldown", incidentId],
@@ -340,7 +384,7 @@ export default function IncidentDetail() {
             <Grid container spacing={2}>
               {media.map((m) => (
                 <Grid item xs={6} sm={4} md={3} key={m.media_id}>
-                  <MediaThumbnail media={m} />
+                  <MediaThumbnail media={m} canDelete={canDeleteMedia} />
                 </Grid>
               ))}
             </Grid>

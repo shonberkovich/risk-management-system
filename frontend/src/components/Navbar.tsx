@@ -146,7 +146,13 @@ const NAV_ENTRIES: NavEntry[] = [
         to: "/policies",
         label: "פוליסות",
         icon: <ShieldIcon fontSize="small" />,
-        roles: ["RISK_MANAGER", "CFO"],
+        // Matches backend/app/routers/policies.py's _POLICIES_READ_ROLES (the actual
+        // server-side GET gate) rather than just the narrower write-role set: this is one
+        // of the few GET endpoints that *is* role-gated (financial disclosure — see
+        // dependencies/permissions.py's module docstring), so PROPERTY_MANAGER/
+        // RISK_OFFICER/ADJUSTER genuinely can read policy data and previously had no way
+        // to discover /policies from the nav (bug found during E2E nav-RBAC sweep).
+        roles: ["RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER"],
       },
       {
         kind: "link",
@@ -495,6 +501,7 @@ export default function Navbar() {
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
         PaperProps={{ sx: { width: 300, display: "flex", flexDirection: "column" } }}
+        data-testid="nav-drawer"
       >
         <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -529,13 +536,18 @@ export default function Navbar() {
                 to={entry.to}
                 selected={isActive(entry.to)}
                 onClick={() => setMobileOpen(false)}
+                data-testid={`nav-link-${entry.to}`}
               >
                 <ListItemIcon>{entry.icon}</ListItemIcon>
                 <ListItemText primary={entry.label} />
               </ListItemButton>
             ) : (
               <Fragment key={entry.key}>
-                <ListItemButton onClick={() => toggleMobileGroup(entry.key)} selected={isGroupActive(entry)}>
+                <ListItemButton
+                  onClick={() => toggleMobileGroup(entry.key)}
+                  selected={isGroupActive(entry)}
+                  data-testid={`nav-group-${entry.key}`}
+                >
                   <ListItemIcon>{entry.icon}</ListItemIcon>
                   <ListItemText primary={entry.label} primaryTypographyProps={{ fontWeight: 600 }} />
                   {expandedGroups.has(entry.key) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
@@ -550,6 +562,7 @@ export default function Navbar() {
                         selected={isActive(item.to)}
                         onClick={() => setMobileOpen(false)}
                         sx={{ pl: 5 }}
+                        data-testid={`nav-link-${item.to}`}
                       >
                         <ListItemIcon>{item.icon}</ListItemIcon>
                         <ListItemText primary={item.label} />
