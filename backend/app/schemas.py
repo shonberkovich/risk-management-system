@@ -1094,4 +1094,105 @@ class AgentActionLogOut(BaseModel):
     action_type: str
     payload: dict | list | str | None = None
     status: AgentActionStatus
+
+
+# ---------------------------------------------------------------------------
+# Internal Email System (TODO_SPEC.md "משימה 2" — schemas for the Email /
+# EmailRecipient / EmailAttachment models added in "משימה 1")
+# ---------------------------------------------------------------------------
+
+# Mirrors EmailRecipient.recipient_type (models.py: Unicode(10), free-text but only
+# ever TO/CC/BCC per Task 1's checklist).
+EmailRecipientType = Literal["TO", "CC", "BCC"]
+
+# Mirrors EmailRecipient.folder (models.py: Unicode(20)). Includes "SENT" alongside
+# Task 1's literal INBOX/ARCHIVE/TRASH/SPAM list — models.py's own EmailRecipient
+# docstring notes SENT is needed so a sender sees their own outgoing mail, and
+# MoveToFolder below reuses this same Literal so the constraint stays in one place.
+EmailFolder = Literal["INBOX", "ARCHIVE", "TRASH", "SPAM", "SENT"]
+
+# Email.status (models.py: Unicode(20), default "SENT") is deliberately left as a
+# plain str rather than a Literal here — the Email model's own docstring says it's
+# "plain free-text for now" and flags that Task 13 adds a "SCHEDULED" value later, so
+# constraining it in this task would just have to be loosened again then.
+
+
+class EmailCreate(BaseModel):
+    """Payload for POST /api/emails (Task 5). `to`/`cc`/`bcc` are recipient user_id
+    lists; the Task 3 service turns each into an Email_Recipients row with
+    folder=INBOX (plus a folder=SENT copy for the sender — see EmailFolder above).
+
+    Reply linkage: `in_reply_to` takes the email_id of the message being replied to,
+    not a thread_id directly. This matches the Email model's flat self-referencing
+    thread scheme (thread_id always points at the thread's root, never at an
+    intermediate reply — see the Email model's docstring in models.py), so the Task 3
+    service must resolve `in_reply_to` to *that* email's thread root (its own
+    thread_id if set, else its own email_id) before writing the new Email row's
+    thread_id. Leaving `in_reply_to` unset starts a new thread."""
+    to: list[int]
+    cc: list[int] = []
+    bcc: list[int] = []
+    subject: str
+    body_html: str
+    in_reply_to: int | None = None
+
+
+class EmailAttachmentOut(BaseModel):
+    """Enough to render an attachment chip and build a download link — Task 6 adds a
+    GET /api/emails/attachments/{id}/signed-url endpoint keyed on `id` alone, same
+    pattern as SignedUrlOut/DocumentOut above."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    file_name: str
+    file_size: int
+    content_type: str
+
+
+class EmailRecipientOut(BaseModel):
+    """One delivery record for display alongside an email: who it went to (with
+    name/role via UserOut), as which kind of recipient, and that copy's read/folder
+    state."""
+    model_config = ConfigDict(from_attributes=True)
+    user: UserOut
+    recipient_type: EmailRecipientType
+    is_read: bool
+    folder: EmailFolder
+
+
+class EmailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    email_id: int
+    subject: str
+    body_html: str
+    created_at: datetime
+    status: str
+    thread_id: int | None = None
+    sender: UserOut
+    recipients: list[EmailRecipientOut] = []
+    attachments: list[EmailAttachmentOut] = []
+
+
+class EmailThreadOut(BaseModel):
+    """Full-thread view for GET /api/emails/{id} (Task 5 step 2). `root` is the
+    thread's first Email (thread_id IS NULL); `messages` is every Email belonging to
+    the thread — the root plus all its replies — in chronological order. This mirrors
+    the flat `WHERE email_id = :root_id OR thread_id = :root_id` query documented on
+    the Email model: no parent-chain walk is needed since every reply's thread_id
+    already points straight at the root."""
+    root: EmailOut
+    messages: list[EmailOut]
+
+
+class MarkAsRead(BaseModel):
+    """Body for PATCH /api/emails/{id}/read (Task 5 step 4). Required (not
+    defaulted) since this schema exists specifically to set the flag one way or the
+    other — unread-again included, not just "mark read"."""
+    is_read: bool
+
+
+class MoveToFolder(BaseModel):
+    """Body for PATCH /api/emails/{id}/folder (Task 5 step 5) — e.g. move to
+    ARCHIVE/TRASH. Reuses the EmailFolder Literal so the set of valid folders is
+    defined once."""
+    folder: EmailFolder
     created_at: datetime
