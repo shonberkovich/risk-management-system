@@ -1554,3 +1554,50 @@ export const addLabelToEmail = (emailId: number, labelId: number) =>
   api.post<EmailLabelLink>(`/emails/${emailId}/tags`, { label_id: labelId }).then((r) => r.data);
 export const removeLabelFromEmail = (emailId: number, labelId: number) =>
   api.delete(`/emails/${emailId}/tags/${labelId}`).then(() => undefined);
+
+// --- Email Rules / Filters (TODO_SPEC.md "משימה 17", mirrors backend/app/schemas.py's
+// EmailRule* schemas — see routers/email_rules.py's module docstring for the endpoint
+// contracts and services/email_rules.py for how conditions/actions are matched/applied
+// server-side once a rule is saved. ---
+
+export type EmailRuleConditionField = "subject" | "sender" | "body";
+export type EmailRuleConditionOperator = "contains" | "equals";
+
+export interface EmailRuleCondition {
+  field: EmailRuleConditionField;
+  operator: EmailRuleConditionOperator;
+  value: string;
+}
+
+export type EmailRuleActionType = "add_label" | "move_to_folder" | "mark_as_read";
+
+/** `value` is action-specific: a Label.id (as a string) for `add_label`, one of
+ * `EmailFolder`'s values for `move_to_folder` ("TRASH" doubles as "move straight
+ * to trash", no separate action type), and unused/omitted for `mark_as_read`. */
+export interface EmailRuleAction {
+  type: EmailRuleActionType;
+  value?: string | null;
+}
+
+export interface EmailRuleCreate {
+  name: string;
+  conditions: EmailRuleCondition[];
+  actions: EmailRuleAction[];
+  is_active?: boolean;
+}
+
+export interface EmailRule {
+  id: number;
+  user_id: number;
+  name: string;
+  conditions: EmailRuleCondition[];
+  actions: EmailRuleAction[];
+  is_active: boolean;
+  created_at: string;
+}
+
+// GET/POST/DELETE /api/rules — the spec's own literal path (routers/email_rules.py),
+// scoped server-side to the signed-in user's own rules.
+export const fetchEmailRules = () => api.get<EmailRule[]>("/rules").then((r) => r.data);
+export const createEmailRule = (payload: EmailRuleCreate) => api.post<EmailRule>("/rules", payload).then((r) => r.data);
+export const deleteEmailRule = (id: number) => api.delete(`/rules/${id}`).then(() => undefined);

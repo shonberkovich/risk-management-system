@@ -1177,6 +1177,69 @@ class EmailLabelOut(BaseModel):
     label: LabelOut
 
 
+# ---------------------------------------------------------------------------
+# Email Rules / Filters (TODO_SPEC.md "משימה 17" — schemas for the EmailRule
+# model in models.py; see that model's docstring for why conditions/actions
+# are stored as JSON text rather than modeled as real columns/tables, and
+# services/email_rules.py's module docstring for how these are matched/applied).
+# ---------------------------------------------------------------------------
+
+EmailRuleConditionField = Literal["subject", "sender", "body"]
+EmailRuleConditionOperator = Literal["contains", "equals"]
+
+
+class EmailRuleCondition(BaseModel):
+    """One ANDed condition in an EmailRule.conditions list, e.g.
+    {"field": "subject", "operator": "contains", "value": "דחוף"} — the
+    spec's own worked example ("if the subject contains the word 'urgent'").
+    `sender` matches against the sending user's `email` address (see
+    services/email_rules.py's `_condition_matches`); `subject`/`body` match
+    against the message's own subject / sanitized body_html text."""
+    field: EmailRuleConditionField
+    operator: EmailRuleConditionOperator
+    value: str
+
+
+EmailRuleActionType = Literal["add_label", "move_to_folder", "mark_as_read"]
+
+
+class EmailRuleAction(BaseModel):
+    """One action in an EmailRule.actions list, applied (all of them) when
+    every condition matches. `value` is action-specific: for `add_label` it's
+    the acting user's own Label.id (as a string — see services/email_rules.py
+    for why label ownership is re-checked at apply time, not just at rule-save
+    time); for `move_to_folder` it's one of EmailFolder's values (TRASH
+    doubles as the spec step 4's "move straight to trash" shortcut — no
+    separate action type needed for it); `mark_as_read` ignores `value`
+    entirely."""
+    type: EmailRuleActionType
+    value: str | None = None
+
+
+class EmailRuleCreate(BaseModel):
+    """Body for POST /api/rules (Task 17 step 1, the spec's own literal path).
+    At least one condition and one action — a rule with none of either could
+    never usefully fire/do anything."""
+    name: str
+    conditions: list[EmailRuleCondition] = Field(min_length=1)
+    actions: list[EmailRuleAction] = Field(min_length=1)
+    is_active: bool = True
+
+
+class EmailRuleOut(BaseModel):
+    """GET /api/rules row shape. Not `from_attributes=True` off the ORM row
+    directly — EmailRule.conditions/actions are stored as raw JSON text (see
+    that model's docstring), so services/email_rules.to_email_rule_out
+    deserializes them into the structured lists below before building this."""
+    id: int
+    user_id: int
+    name: str
+    conditions: list[EmailRuleCondition]
+    actions: list[EmailRuleAction]
+    is_active: bool
+    created_at: datetime
+
+
 class EmailCreate(BaseModel):
     """Payload for POST /api/emails (Task 5). `to`/`cc`/`bcc` are recipient user_id
     lists; the Task 3 service turns each into an Email_Recipients row with
