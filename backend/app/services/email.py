@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.schemas import EmailCreate
+from app.services import sse_manager
 
 # recipient_type used for the sender's own folder=SENT copy of an email they sent.
 # EmailRecipient.recipient_type is otherwise only ever TO/CC/BCC (mirroring who the
@@ -90,6 +91,28 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
 
     db.commit()
     db.refresh(email)
+
+    # Real-time nudge (TODO_SPEC.md "משימה 4"): push a `new_email` event to every
+    # addressed recipient's open SSE connection(s), if any — see
+    # sse_manager.ConnectionManager's docstring for why this is a safe no-op for a
+    # recipient with no tab currently open. Deliberately excludes the sender (their
+    # own SENT copy isn't "new mail" for them) and keeps the payload minimal — just
+    # enough for the frontend to show a toast and invalidate its mailbox query,
+    # not the full email body. `thread_id` falls back to the email's own id so the
+    # frontend always has a thread to navigate to, matching how a fresh root has
+    # `thread_id = NULL` on the model (see models.Email's docstring).
+    event = {
+        "type": "new_email",
+        "email_id": email.email_id,
+        "thread_id": email.thread_id if email.thread_id is not None else email.email_id,
+        "subject": email.subject,
+        "sender_id": email.sender_id,
+        "created_at": email.created_at.isoformat(),
+    }
+    recipient_ids = {*email_in.to, *email_in.cc, *email_in.bcc}
+    for user_id in recipient_ids:
+        sse_manager.broadcast(user_id, event)
+
     return email
 
 

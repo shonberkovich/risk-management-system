@@ -37,14 +37,17 @@ _UNAUTHORIZED = HTTPException(
 )
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-    db: Session = Depends(get_db),
-) -> models.User:
-    if credentials is None:
-        raise _UNAUTHORIZED
+def get_user_from_access_token(token: str, db: Session) -> models.User:
+    """Decodes `token` as an access token and loads the matching active user, or
+    raises the same 401 `get_current_user` would. Factored out so a caller whose
+    token doesn't arrive as an `Authorization` header can still reuse the exact
+    same verification — routers/sse.py needs this because browsers' `EventSource`
+    can't set custom request headers, so that endpoint's token travels as a
+    `?token=` query param instead; this function is what lets it enforce the same
+    validity/active-user checks as every other endpoint rather than
+    reimplementing them."""
     try:
-        payload = decode_token(credentials.credentials, expected_type="access")
+        payload = decode_token(token, expected_type="access")
     except TokenError:
         raise _UNAUTHORIZED
     user = db.scalar(select(models.User).where(models.User.user_id == int(payload["sub"])))
@@ -54,6 +57,15 @@ def get_current_user(
         # immediately instead of waiting for the token to expire on its own.
         raise _UNAUTHORIZED
     return user
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.User:
+    if credentials is None:
+        raise _UNAUTHORIZED
+    return get_user_from_access_token(credentials.credentials, db)
 
 
 def require_roles(*roles: str):
