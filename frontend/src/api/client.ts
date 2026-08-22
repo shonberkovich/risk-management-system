@@ -1355,6 +1355,49 @@ export const uploadEmailAttachments = (emailId: number, files: File[]) => {
 export const fetchEmailAttachmentSignedUrl = (attachmentId: number) =>
   api.get<SignedUrl>(`/emails/attachments/${attachmentId}/signed-url`).then((r) => r.data);
 
+// --- Scheduled send (TODO_SPEC.md "משימה 13", server-side half — mirrors
+// backend/app/schemas.py's EmailScheduleCreate/EmailScheduleOut; see
+// routers/emails.py's module docstring for the endpoint contracts. Client-side
+// undo-send, the other half of this task, has no API surface at all — see
+// EmailComposeModal.tsx.) ---
+
+export interface EmailScheduleCreate {
+  to: number[];
+  cc?: number[];
+  bcc?: number[];
+  subject: string;
+  body_html: string;
+  in_reply_to?: number | null;
+  /** ISO 8601 with an explicit UTC offset — build via `new Date(...).toISOString()`,
+   * never a bare `datetime-local` input value (which carries no timezone and would
+   * be misinterpreted by the backend). Must be strictly in the future or the
+   * backend 422s (schemas.EmailScheduleCreate's own validator). */
+  scheduled_for: string;
+}
+
+/** A still-pending scheduled email (status is always "SCHEDULED" for anything
+ * this shape represents — GET /api/emails/scheduled never returns an
+ * already-sent one). `to`/`cc`/`bcc` are resolved User objects, not just ids —
+ * see schemas.EmailScheduleOut's docstring for why (no Email_Recipients rows
+ * exist yet to read them from). */
+export interface EmailScheduleOut {
+  email_id: number;
+  subject: string;
+  body_html: string;
+  created_at: string;
+  scheduled_for: string;
+  status: string;
+  to: User[];
+  cc: User[];
+  bcc: User[];
+}
+
+export const scheduleEmail = (payload: EmailScheduleCreate) =>
+  api.post<EmailScheduleOut>("/emails/schedule", payload).then((r) => r.data);
+export const fetchScheduledEmails = () => api.get<EmailScheduleOut[]>("/emails/scheduled").then((r) => r.data);
+export const cancelScheduledEmail = (emailId: number) =>
+  api.delete(`/emails/cancel-schedule/${emailId}`).then(() => undefined);
+
 // --- Contextual entity linking (TODO_SPEC.md "משימה 11", mirrors backend/app/schemas.py's
 // EntityEmail* schemas — see routers/emails.py's link_email_to_entity / routers/incidents.py
 // (claims.py/properties.py)'s list_*_emails module docstrings for the endpoint contracts) ---

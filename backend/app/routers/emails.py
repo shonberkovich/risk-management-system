@@ -63,6 +63,16 @@ return the caller's own EmailRecipient row (services/email.py's
 _get_recipient_row is already keyed on (email_id, user_id), never on the
 surrogate id); and the thread-membership filter in get_email already scoped
 messages per viewer before this audit.
+
+Task 13 ("השהיית שליחה וביטול שליחה") adds three endpoints: POST /schedule,
+GET /scheduled, DELETE /cancel-schedule/{id}. All three are scoped to the
+current user's own sent/scheduled mail (sender_id), not the usual
+Email_Recipients mailbox-ownership check above — a still-SCHEDULED email has
+no Email_Recipients rows at all (see models.Email's / services/email.py's
+schedule_email docstrings for the full design), so there's nothing for
+`_require_recipient_row` to look up until it actually sends. Undo-send (the
+other half of this task) is pure frontend (EmailComposeModal.tsx) and has no
+backend surface at all.
 """
 from __future__ import annotations
 
@@ -160,6 +170,32 @@ def _to_email_out(email: models.Email, viewer_id: int) -> schemas.EmailOut:
     return out
 
 
+def _to_schedule_out(db: Session, email: models.Email) -> schemas.EmailScheduleOut:
+    """Builds EmailScheduleOut for a still-SCHEDULED `email` (Task 13 step 3/6).
+    Unlike `_to_email_out`, `to`/`cc`/`bcc` can't come from `email.recipients`
+    (there are no Email_Recipients rows yet — see models.Email's/schedule_
+    email's docstrings) — they're resolved here from the JSON-serialized
+    `scheduled_recipients` column against the Users table instead."""
+    recipients = email_service.deserialize_scheduled_recipients(email.scheduled_recipients)
+
+    def _users(ids: list[int]) -> list[models.User]:
+        if not ids:
+            return []
+        return list(db.scalars(select(models.User).where(models.User.user_id.in_(ids))).all())
+
+    return schemas.EmailScheduleOut(
+        email_id=email.email_id,
+        subject=email.subject,
+        body_html=email_service.sanitize_body_html(email.body_html),
+        created_at=email.created_at,
+        scheduled_for=email.scheduled_for,
+        status=email.status,
+        to=[schemas.UserOut.model_validate(u) for u in _users(recipients["to"])],
+        cc=[schemas.UserOut.model_validate(u) for u in _users(recipients["cc"])],
+        bcc=[schemas.UserOut.model_validate(u) for u in _users(recipients["bcc"])],
+    )
+
+
 @router.get("", response_model=list[schemas.EmailListItemOut])
 def list_emails(
     folder: schemas.EmailFolder = "INBOX",
@@ -171,6 +207,70 @@ def list_emails(
 ):
     rows = email_service.list_emails_for_user(db, current_user.user_id, folder, skip=skip, limit=limit, q=q)
     return [_to_list_item(row) for row in rows]
+
+
+@router.post("/schedule", response_model=schemas.EmailScheduleOut, status_code=201)
+def schedule_email(
+    payload: schemas.EmailScheduleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md task 13 step 3 — like POST /api/emails, but the message is
+    held as `status="SCHEDULED"` until `scheduled_for` arrives instead of
+    being delivered right away. Registered ahead of GET /{email_id} below (a
+    static path takes precedence over a same-shape dynamic one for the same
+    HTTP method — moot here since they're different methods, but kept
+    consistent with the GET /scheduled placement right below, which does
+    share GET /{email_id}'s single-segment shape)."""
+    for user_id in {*payload.to, *payload.cc, *payload.bcc}:
+        if db.get(models.User, user_id) is None:
+            raise HTTPException(404, f"Recipient user_id {user_id} not found")
+
+    try:
+        email = email_service.schedule_email(db, current_user.user_id, payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return _to_schedule_out(db, email)
+
+
+@router.get("/scheduled", response_model=list[schemas.EmailScheduleOut])
+def list_scheduled_emails(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md task 13 step 6 — the current user's own still-pending
+    scheduled emails (never anyone else's — schedule_email/list_scheduled_
+    emails_for_user both scope strictly to sender_id, and a scheduled email
+    has no Email_Recipients rows for anyone to be "the recipient" of yet).
+    Registered before GET /{email_id} (both are single-segment GETs under
+    this router) so "/scheduled" is never even attempted as an `email_id`
+    path param — it would fail int-conversion and fall through to this route
+    either way, but an explicit static-before-dynamic order is the standard,
+    unambiguous FastAPI convention."""
+    rows = email_service.list_scheduled_emails_for_user(db, current_user.user_id)
+    return [_to_schedule_out(db, email) for email in rows]
+
+
+@router.delete("/cancel-schedule/{email_id}", status_code=204)
+def cancel_schedule(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """TODO_SPEC.md task 13 step 5 — the spec's own literal path. Only the
+    sender may cancel (services.email.cancel_scheduled_email's "not found"
+    covers both "no such email" and "exists but isn't yours", same
+    non-disclosure convention as _require_recipient_row above), and only
+    while still SCHEDULED with scheduled_for still in the future ("not
+    cancellable" -> 409: the poller may already be processing it, or already
+    has)."""
+    try:
+        email_service.cancel_scheduled_email(db, email_id, current_user.user_id)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "not found":
+            raise HTTPException(404, "Email not found") from exc
+        raise HTTPException(409, "לא ניתן לבטל: המייל כבר נשלח או שמועד השליחה כבר הגיע") from exc
 
 
 @router.get("/{email_id}", response_model=schemas.EmailThreadOut)
