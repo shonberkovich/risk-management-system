@@ -25,7 +25,7 @@ API בשרת: N/A
 ✅ בוצע ב-branch `feature/email-schemas`: נוספו `EmailCreate`/`EmailOut`/`EmailThreadOut`/`EmailRecipientOut`/`EmailAttachmentOut`/`MarkAsRead`/`MoveToFolder` ב-`schemas.py`, עם `EmailRecipientType`/`EmailFolder` כ-`Literal` משותפים. `EmailCreate` משתמש ב-`in_reply_to` (email_id של ההודעה שעליה עונים); ה-service (משימה 3) יפתור אותו ל-thread root.
 
 ==================================================
-[ ] משימה 3: פיתוח שירות (Service) הליבה לשליחה וניהול מיילים
+[x] משימה 3: פיתוח שירות (Service) הליבה לשליחה וניהול מיילים
 
 מהות המשימה: מימוש הלוגיקה העסקית לשמירת מייל חדש, חלוקתו לתיקיות הנמענים והשולח, וניהול שרשורים.
 מיקום במערכת: Backend (app/services/email.py)
@@ -36,7 +36,7 @@ API בשרת: N/A
  שלב 3: הוספת עותק של המייל לשולח עצמו עם folder=SENT.
  שלב 4: זיהוי תגובות (Replies) ושיוך לאותו `thread_id`.
  שלב 5: פונקציות עזר - העברה לארכיון, העברה לאשפה, סימון כנקרא.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-service`: נוצר `services/email.py` עם `send_email` (פיצול ל-INBOX לנמענים + עותק SENT לשולח, פתרון thread root מתוך `in_reply_to`), `get_thread`, `mark_as_read`/`move_to_folder`/`archive_email`/`trash_email` לפי מפתח `(email_id, user_id)`, ו-`list_emails_for_user` (עימוד לפי תיקייה). 9 טסטים חדשים, הסוויטה המלאה ירוקה (436 עברו).
 
 ==================================================
 [ ] משימה 4: שילוב SSE (Server-Sent Events) להתראות זמן אמת
