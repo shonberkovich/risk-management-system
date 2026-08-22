@@ -1112,9 +1112,10 @@ EmailRecipientType = Literal["TO", "CC", "BCC"]
 EmailFolder = Literal["INBOX", "ARCHIVE", "TRASH", "SPAM", "SENT"]
 
 # Email.status (models.py: Unicode(20), default "SENT") is deliberately left as a
-# plain str rather than a Literal here — the Email model's own docstring says it's
-# "plain free-text for now" and flags that Task 13 adds a "SCHEDULED" value later, so
-# constraining it in this task would just have to be loosened again then.
+# plain str rather than a Literal here — SENT and SCHEDULED (task 13) are the only two
+# values any code path in this repo actually writes today, but keeping this a plain str
+# (rather than Literal["SENT", "SCHEDULED"]) avoids yet another schema change if a future
+# task adds e.g. a real DRAFT status.
 
 
 class EmailCreate(BaseModel):
@@ -1213,6 +1214,60 @@ class EmailListItemOut(BaseModel):
     thread_id: int | None = None
     is_read: bool
     folder: EmailFolder
+
+
+# ---------------------------------------------------------------------------
+# Scheduled send (TODO_SPEC.md "משימה 13": "השהיית שליחה וביטול שליחה" — the
+# server-side half; client-side undo-send is pure frontend, no schema needed)
+# ---------------------------------------------------------------------------
+
+
+class EmailScheduleCreate(BaseModel):
+    """Payload for POST /api/emails/schedule (Task 13 step 3) — same shape as
+    EmailCreate plus `scheduled_for`, a required future send time. Recipients
+    are *not* delivered to anyone's Email_Recipients row at creation time —
+    see models.Email's docstring for why `scheduled_for`/`scheduled_recipients`
+    exist and services.email.schedule_email for how they're used."""
+    to: list[int]
+    cc: list[int] = []
+    bcc: list[int] = []
+    subject: str
+    body_html: str
+    in_reply_to: int | None = None
+    scheduled_for: datetime
+
+    @field_validator("scheduled_for")
+    @classmethod
+    def _validate_scheduled_for(cls, v: datetime) -> datetime:
+        """Must be strictly in the future (relative to server time in UTC) —
+        FastAPI turns this ValueError into a 422, same convention as
+        _reject_future_timestamp above for Incidents (that one rejects a
+        *future* incident_timestamp; this one rejects a *past*/now
+        scheduled_for — opposite direction, same shape)."""
+        now_utc = datetime.now(timezone.utc)
+        compare_v = v if v.tzinfo is not None else v.replace(tzinfo=timezone.utc)
+        if compare_v <= now_utc:
+            raise ValueError("scheduled_for must be in the future")
+        return v
+
+
+class EmailScheduleOut(BaseModel):
+    """Response shape for POST /api/emails/schedule, GET /api/emails/scheduled
+    (Task 13 step 3/6). Not `from_attributes`-driven off the ORM object alone
+    like EmailOut — `to`/`cc`/`bcc` here come from resolving the Email row's
+    `scheduled_recipients` JSON against the Users table (there are no
+    Email_Recipients rows yet to read them from, by design; see
+    models.Email's docstring), so routers/emails.py's `_to_schedule_out`
+    builds this by hand rather than via `model_validate(email)`."""
+    email_id: int
+    subject: str
+    body_html: str
+    created_at: datetime
+    scheduled_for: datetime
+    status: str
+    to: list[UserOut]
+    cc: list[UserOut]
+    bcc: list[UserOut]
 
 
 # ---------------------------------------------------------------------------

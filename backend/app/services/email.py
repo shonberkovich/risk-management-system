@@ -17,14 +17,16 @@ lands in the same thread as replying to the root.
 """
 from __future__ import annotations
 
+import json
 import re
+from datetime import datetime, timezone
 
 import bleach
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models
-from app.schemas import EmailCreate, EntityLinkedEmailOut
+from app.schemas import EmailCreate, EmailScheduleCreate, EntityLinkedEmailOut
 from app.services import sse_manager, storage
 
 # TODO_SPEC.md "משימה 10" step 2 — XSS defense for Email.body_html. A small, fixed
@@ -85,6 +87,61 @@ def _resolve_thread_root_id(db: Session, in_reply_to: int) -> int:
     return parent.thread_id if parent.thread_id is not None else parent.email_id
 
 
+def _fan_out_recipients(
+    db: Session, email: models.Email, to: list[int], cc: list[int], bcc: list[int], sender_id: int
+) -> None:
+    """Creates one Email_Recipients row per (recipient_type, user_id) plus the
+    sender's own folder=SENT copy — the exact fan-out `send_email` always did
+    inline, factored out (Task 13) so `process_due_scheduled_emails` can reuse
+    it verbatim: a scheduled email that finally sends must end up with the
+    same Email_Recipients shape as one sent immediately, not a parallel
+    implementation that could drift from it."""
+    for recipient_type, user_ids in (("TO", to), ("CC", cc), ("BCC", bcc)):
+        for user_id in user_ids:
+            db.add(models.EmailRecipient(
+                email_id=email.email_id,
+                user_id=user_id,
+                recipient_type=recipient_type,
+                folder="INBOX",
+                is_read=False,
+            ))
+
+    # The sender's own copy: it's their outgoing mail, not something unread waiting
+    # for them, so is_read=True and it lives in SENT rather than INBOX.
+    db.add(models.EmailRecipient(
+        email_id=email.email_id,
+        user_id=sender_id,
+        recipient_type=SENDER_COPY_RECIPIENT_TYPE,
+        folder="SENT",
+        is_read=True,
+    ))
+
+
+def _broadcast_new_email_event(email: models.Email, recipient_ids: set[int]) -> None:
+    """Real-time nudge (TODO_SPEC.md "משימה 4"): push a `new_email` event to every
+    addressed recipient's open SSE connection(s), if any — see
+    sse_manager.ConnectionManager's docstring for why this is a safe no-op for a
+    recipient with no tab currently open. Deliberately excludes the sender (their
+    own SENT copy isn't "new mail" for them) and keeps the payload minimal — just
+    enough for the frontend to show a toast and invalidate its mailbox query,
+    not the full email body. `thread_id` falls back to the email's own id so the
+    frontend always has a thread to navigate to, matching how a fresh root has
+    `thread_id = NULL` on the model (see models.Email's docstring). Shared by
+    `send_email` and `process_due_scheduled_emails` (Task 13) so a scheduled
+    email that finally sends triggers the exact same live nudge an
+    immediately-sent one does."""
+    event = {
+        "type": "new_email",
+        "email_id": email.email_id,
+        "thread_id": email.thread_id if email.thread_id is not None else email.email_id,
+        "subject": email.subject,
+        "sender_id": email.sender_id,
+        "created_at": email.created_at.isoformat(),
+    }
+    for user_id in recipient_ids:
+        sse_manager.broadcast(user_id, event)
+
+
 def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Email:
     """Creates the Email row, resolves thread linkage, and fans the message out
     to every recipient's INBOX plus the sender's own SENT copy. Commits and
@@ -105,29 +162,7 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
     db.add(email)
     db.flush()  # assigns email.email_id so the recipient rows below can reference it
 
-    for recipient_type, user_ids in (
-        ("TO", email_in.to),
-        ("CC", email_in.cc),
-        ("BCC", email_in.bcc),
-    ):
-        for user_id in user_ids:
-            db.add(models.EmailRecipient(
-                email_id=email.email_id,
-                user_id=user_id,
-                recipient_type=recipient_type,
-                folder="INBOX",
-                is_read=False,
-            ))
-
-    # The sender's own copy: it's their outgoing mail, not something unread waiting
-    # for them, so is_read=True and it lives in SENT rather than INBOX.
-    db.add(models.EmailRecipient(
-        email_id=email.email_id,
-        user_id=sender_id,
-        recipient_type=SENDER_COPY_RECIPIENT_TYPE,
-        folder="SENT",
-        is_read=True,
-    ))
+    _fan_out_recipients(db, email, email_in.to, email_in.cc, email_in.bcc, sender_id)
 
     db.commit()
     db.refresh(email)
@@ -137,28 +172,175 @@ def send_email(db: Session, sender_id: int, email_in: EmailCreate) -> models.Ema
     # docstring for why a failed/no-match scan is silent, not an error).
     autodetect_entity_links(db, email)
 
-    # Real-time nudge (TODO_SPEC.md "משימה 4"): push a `new_email` event to every
-    # addressed recipient's open SSE connection(s), if any — see
-    # sse_manager.ConnectionManager's docstring for why this is a safe no-op for a
-    # recipient with no tab currently open. Deliberately excludes the sender (their
-    # own SENT copy isn't "new mail" for them) and keeps the payload minimal — just
-    # enough for the frontend to show a toast and invalidate its mailbox query,
-    # not the full email body. `thread_id` falls back to the email's own id so the
-    # frontend always has a thread to navigate to, matching how a fresh root has
-    # `thread_id = NULL` on the model (see models.Email's docstring).
-    event = {
-        "type": "new_email",
-        "email_id": email.email_id,
-        "thread_id": email.thread_id if email.thread_id is not None else email.email_id,
-        "subject": email.subject,
-        "sender_id": email.sender_id,
-        "created_at": email.created_at.isoformat(),
-    }
     recipient_ids = {*email_in.to, *email_in.cc, *email_in.bcc}
-    for user_id in recipient_ids:
-        sse_manager.broadcast(user_id, event)
+    _broadcast_new_email_event(email, recipient_ids)
 
     return email
+
+
+# ---------------------------------------------------------------------------
+# Scheduled send (TODO_SPEC.md "משימה 13", server-side half)
+# ---------------------------------------------------------------------------
+
+
+def _to_naive_utc(dt: datetime) -> datetime:
+    """Normalizes a possibly tz-aware `datetime` to this repo's naive-always-UTC
+    storage convention (see models.py's `_utcnow` docstring). A tz-naive input
+    is trusted to already be UTC (schemas.EmailScheduleCreate's own validator
+    treats a naive `scheduled_for` as UTC when checking "is this in the
+    future" too, so this stays consistent with what was actually validated)."""
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+def serialize_scheduled_recipients(to: list[int], cc: list[int], bcc: list[int]) -> str:
+    """JSON-encodes the intended to/cc/bcc user_id lists for `Email.
+    scheduled_recipients` — see models.Email's docstring for why this is a
+    JSON text column rather than Email_Recipients rows until the message
+    actually sends."""
+    return json.dumps({"to": to, "cc": cc, "bcc": bcc})
+
+
+def deserialize_scheduled_recipients(raw: str | None) -> dict[str, list[int]]:
+    """Inverse of `serialize_scheduled_recipients`. `raw=None`/empty decodes to
+    all-empty lists rather than raising — defensive for any row that
+    somehow predates this column (there shouldn't be any, since it's only
+    ever set by `schedule_email`, but a missing/malformed value degrading to
+    "no recipients" is safer than a 500 here)."""
+    if not raw:
+        return {"to": [], "cc": [], "bcc": []}
+    data = json.loads(raw)
+    return {"to": data.get("to", []), "cc": data.get("cc", []), "bcc": data.get("bcc", [])}
+
+
+def schedule_email(db: Session, sender_id: int, email_in: EmailScheduleCreate) -> models.Email:
+    """TODO_SPEC.md task 13 step 3 (POST /api/emails/schedule). Creates the
+    Email row immediately, with `status="SCHEDULED"`, so it shows up in the
+    sender's own "scheduled" list (GET /api/emails/scheduled) right away and
+    can be cancelled — but deliberately does *not* create any
+    Email_Recipients rows yet: a not-yet-sent scheduled email must be
+    invisible to its recipients until it actually sends (this task's own
+    spec wording), and a recipient's mailbox view is entirely driven by
+    their own Email_Recipients row for a given email_id (see
+    EmailRecipient's/Email's docstrings). The intended to/cc/bcc are instead
+    JSON-serialized into `scheduled_recipients`; `process_due_scheduled_emails`
+    is what turns them into real Email_Recipients rows once `scheduled_for`
+    arrives. This design needs no new table, no change to Email_Recipients'
+    folder CHECK constraint, and no special-casing in
+    `list_emails_for_user`/the inbox query at all — the row simply doesn't
+    exist yet from any recipient's point of view."""
+    thread_id = (
+        _resolve_thread_root_id(db, email_in.in_reply_to)
+        if email_in.in_reply_to is not None
+        else None
+    )
+
+    email = models.Email(
+        sender_id=sender_id,
+        subject=email_in.subject,
+        body_html=sanitize_body_html(email_in.body_html),
+        thread_id=thread_id,
+        status="SCHEDULED",
+        scheduled_for=_to_naive_utc(email_in.scheduled_for),
+        scheduled_recipients=serialize_scheduled_recipients(email_in.to, email_in.cc, email_in.bcc),
+    )
+    db.add(email)
+    db.commit()
+    db.refresh(email)
+    return email
+
+
+def list_scheduled_emails_for_user(db: Session, user_id: int) -> list[models.Email]:
+    """Every still-pending scheduled email `user_id` themselves sent (Task 13
+    step 6's "somewhere the user can see/manage their scheduled-but-not-yet-
+    sent emails") — scoped to `sender_id`, not Email_Recipients, since a
+    scheduled email has no Email_Recipients rows at all yet (see
+    schedule_email's docstring)."""
+    return list(db.scalars(
+        select(models.Email)
+        .where(models.Email.sender_id == user_id, models.Email.status == "SCHEDULED")
+        .order_by(models.Email.scheduled_for)
+    ).all())
+
+
+def cancel_scheduled_email(db: Session, email_id: int, user_id: int) -> None:
+    """TODO_SPEC.md task 13 step 5 (DELETE /api/emails/cancel-schedule/{id}).
+    Deletes the Email row outright rather than moving it to some DRAFT-like
+    state — this codebase has no drafts feature at all today (see models.
+    Email's docstring: status is only ever SENT/SCHEDULED), so inventing a
+    whole draft status and UI just for this one cancel path would be a
+    bigger, less honest change than deleting an unsent message that was
+    never delivered to anyone (no Email_Recipients rows exist for it yet —
+    see schedule_email — so there's nothing else to clean up; any staged
+    Email_Attachments rows cascade-delete with it, same
+    ondelete="CASCADE" as every other Email child table).
+
+    Raises ValueError for the router to translate into the right HTTP status:
+      - "not found" — no such email, or the caller isn't its sender (404,
+        same not-yours-vs-doesn't-exist non-disclosure convention as
+        routers/emails.py's `_require_recipient_row`)
+      - "not cancellable" — the email isn't SCHEDULED anymore, or its
+        scheduled_for has already passed (the poller may already be about to
+        process it, or already has) (409)."""
+    email = db.get(models.Email, email_id)
+    if email is None or email.sender_id != user_id:
+        raise ValueError("not found")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if email.status != "SCHEDULED" or email.scheduled_for is None or email.scheduled_for <= now:
+        raise ValueError("not cancellable")
+    db.delete(email)
+    db.commit()
+
+
+def process_due_scheduled_emails(db: Session, now: datetime | None = None) -> list[models.Email]:
+    """TODO_SPEC.md task 13 step 4 — the actual "flip a due SCHEDULED email to
+    sent" logic. Deliberately a plain, synchronous function taking a Session
+    (no asyncio, no sleep/poll loop in here at all) so a test can call it
+    directly against an in-memory DB and assert on the result without any
+    real wall-clock wait — `services/scheduler.py` is the thin
+    asyncio-sleep-and-call-this-in-a-loop wrapper actually used in
+    production; this function is the only place the "is it due, and what
+    happens when it is" logic lives, so testing it here also covers the
+    production path exactly.
+
+    `now` defaults to the real current UTC time; tests pass a fixed value
+    instead so "is this email due" is deterministic. For every Email row
+    still `status == "SCHEDULED"` whose `scheduled_for` is at or before
+    `now`: parses `scheduled_recipients`, fans the recipients out via the
+    same `_fan_out_recipients` helper `send_email` uses (so a scheduled email
+    that finally sends is indistinguishable, Email_Recipients-shape-wise,
+    from one sent immediately), flips `status` to `SENT`, runs the same
+    autodetect_entity_links + SSE new_email broadcast a normal send does, and
+    commits. Processes one row at a time (not one big transaction) so a
+    problem with a single due email can't block every other due email in the
+    same poll tick."""
+    if now is None:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    due = db.scalars(
+        select(models.Email).where(
+            models.Email.status == "SCHEDULED",
+            models.Email.scheduled_for.is_not(None),
+            models.Email.scheduled_for <= now,
+        )
+    ).all()
+
+    processed: list[models.Email] = []
+    for email in due:
+        recipients = deserialize_scheduled_recipients(email.scheduled_recipients)
+        _fan_out_recipients(db, email, recipients["to"], recipients["cc"], recipients["bcc"], email.sender_id)
+        email.status = "SENT"
+        db.add(email)
+        db.commit()
+        db.refresh(email)
+
+        autodetect_entity_links(db, email)
+
+        recipient_ids = {*recipients["to"], *recipients["cc"], *recipients["bcc"]}
+        _broadcast_new_email_event(email, recipient_ids)
+
+        processed.append(email)
+
+    return processed
 
 
 def add_attachments(

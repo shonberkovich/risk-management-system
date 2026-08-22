@@ -486,7 +486,9 @@ CREATE TABLE dbo.Emails (
     body_html       NVARCHAR(MAX) NOT NULL,
     thread_id       BIGINT NULL REFERENCES dbo.Emails(email_id),
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    status          NVARCHAR(20) NOT NULL DEFAULT 'SENT'   -- e.g. SENT/DRAFT; more statuses land in later tasks (see TODO_SPEC.md §13)
+    status          NVARCHAR(20) NOT NULL DEFAULT 'SENT',  -- SENT or SCHEDULED (TODO_SPEC.md §13)
+    scheduled_for        DATETIME2 NULL,       -- future send time for status='SCHEDULED' rows; NULL otherwise (§13)
+    scheduled_recipients NVARCHAR(MAX) NULL    -- JSON {"to":[...],"cc":[...],"bcc":[...]} until it actually sends (§13); see app/models.py's Email docstring
 );
 GO
 CREATE INDEX IX_Emails_Sender ON dbo.Emails(sender_id);

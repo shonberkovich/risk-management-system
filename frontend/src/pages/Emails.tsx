@@ -1,8 +1,10 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import EditIcon from "@mui/icons-material/Edit";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import SearchIcon from "@mui/icons-material/Search";
 import Alert from "@mui/material/Alert";
+import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -25,6 +27,7 @@ import {
   fetchEmailAttachmentSignedUrl,
   fetchEmailThread,
   fetchEmails,
+  fetchScheduledEmails,
   markEmailRead,
   type Email,
   type EmailFolder,
@@ -33,6 +36,7 @@ import {
 import EmailComposeModal from "../components/EmailComposeModal";
 import EmailEntityLinkControl from "../components/EmailEntityLinkControl";
 import EmailSidebar from "../components/EmailSidebar";
+import ScheduledEmailsDialog from "../components/ScheduledEmailsDialog";
 import { formatDateTime } from "../format";
 
 const FOLDER_LABELS: Record<EmailFolder, string> = {
@@ -144,6 +148,19 @@ export default function Emails() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
+  // TODO_SPEC.md "משימה 13" step 6 — badge count for the "מיילים מתוזמנים" button
+  // (see ScheduledEmailsDialog.tsx for the actual list/cancel UI). Same
+  // ["scheduled-emails"] query key that dialog and EmailComposeModal's
+  // post-schedule invalidation use, so the badge and the dialog's own list
+  // never disagree.
+  const [scheduledDialogOpen, setScheduledDialogOpen] = useState(false);
+  const scheduledCount = useQuery({
+    queryKey: ["scheduled-emails"],
+    queryFn: fetchScheduledEmails,
+    select: (items) => items.length,
+    staleTime: 15_000,
+  });
+
   // TODO_SPEC.md "משימה 10" step 4: search box, debounced client-side so every
   // keystroke doesn't fire its own request — `search` (raw input) updates
   // immediately for a responsive textfield, `debouncedSearch` (what actually drives
@@ -200,12 +217,29 @@ export default function Emails() {
             </Typography>
           </Box>
         </Stack>
-        <Button variant="contained" startIcon={<EditIcon />} onClick={() => setComposeOpen(true)}>
-          כתיבת מייל
-        </Button>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button
+            variant="outlined"
+            startIcon={<ScheduleIcon />}
+            onClick={() => setScheduledDialogOpen(true)}
+            data-testid="scheduled-emails-button"
+          >
+            <Badge badgeContent={scheduledCount.data ?? 0} color="primary" sx={{ "& .MuiBadge-badge": { left: -14 } }}>
+              מיילים מתוזמנים
+            </Badge>
+          </Button>
+          <Button variant="contained" startIcon={<EditIcon />} onClick={() => setComposeOpen(true)}>
+            כתיבת מייל
+          </Button>
+        </Stack>
       </Stack>
 
-      <EmailComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
+      <EmailComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onReopen={() => setComposeOpen(true)}
+      />
+      <ScheduledEmailsDialog open={scheduledDialogOpen} onClose={() => setScheduledDialogOpen(false)} />
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
         <Card variant="outlined" sx={{ flexShrink: 0, width: { xs: "100%", md: "auto" } }}>

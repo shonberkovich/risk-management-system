@@ -1,34 +1,43 @@
 /**
- * Tests for EmailComposeModal (TODO_SPEC.md "משימה 8"): opening the modal,
- * filling recipients/subject/body, adding + removing a pending attachment via
- * the file-input fallback (jsdom can't fire real OS drag-and-drop, but the
- * component's onDrop handler is exercised directly with a synthetic
- * DataTransfer-shaped event — same code path a real drop takes), a successful
- * send calling sendEmail then uploadEmailAttachments in order, and an error
- * path (attachment upload failing after the email itself was sent) that keeps
- * the modal open with the pending attachment still listed instead of losing it.
+ * Tests for EmailComposeModal (TODO_SPEC.md "משימה 8"/"משימה 13"): opening the
+ * modal, filling recipients/subject/body, adding + removing a pending
+ * attachment via the file-input fallback (jsdom can't fire real OS
+ * drag-and-drop, but the component's onDrop handler is exercised directly
+ * with a synthetic DataTransfer-shaped event — same code path a real drop
+ * takes), the template picker, and reply pre-fill.
+ *
+ * TODO_SPEC.md "משימה 13" adds: undo-send (clicking "שליחה" stages the send
+ * behind a 10s window and closes immediately without calling the API; the
+ * window elapsing fires the real send+upload; clicking "בטל שליחה" within
+ * the window cancels it and restores the draft) and scheduled send (the
+ * "שלח במועד אחר" popover calls the schedule endpoint, never the normal
+ * send).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchUsersMock, sendEmailMock, uploadEmailAttachmentsMock, fetchEmailTemplatesMock } = vi.hoisted(() => ({
-  fetchUsersMock: vi.fn(),
-  sendEmailMock: vi.fn(),
-  uploadEmailAttachmentsMock: vi.fn(),
-  fetchEmailTemplatesMock: vi.fn(),
-}));
+const { fetchUsersMock, sendEmailMock, scheduleEmailMock, uploadEmailAttachmentsMock, fetchEmailTemplatesMock } =
+  vi.hoisted(() => ({
+    fetchUsersMock: vi.fn(),
+    sendEmailMock: vi.fn(),
+    scheduleEmailMock: vi.fn(),
+    uploadEmailAttachmentsMock: vi.fn(),
+    fetchEmailTemplatesMock: vi.fn(),
+  }));
 
 vi.mock("../api/client", () => ({
   fetchUsers: fetchUsersMock,
   sendEmail: sendEmailMock,
+  scheduleEmail: scheduleEmailMock,
   uploadEmailAttachments: uploadEmailAttachmentsMock,
   fetchEmailTemplates: fetchEmailTemplatesMock,
 }));
 
-import EmailComposeModal from "./EmailComposeModal";
+import EmailComposeModal, { type EmailComposeModalProps } from "./EmailComposeModal";
 
 const USERS = [
   { user_id: 1, full_name: "יוסי כהן", role: "RISK_MANAGER" },
@@ -54,14 +63,35 @@ const TEMPLATES = [
   },
 ];
 
-function renderModal(props: Partial<React.ComponentProps<typeof EmailComposeModal>> = {}) {
+function renderModal(props: Partial<EmailComposeModalProps> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   const onClose = vi.fn();
-  const utils = render(<EmailComposeModal open onClose={onClose} {...props} />, { wrapper });
-  return { ...utils, onClose, client };
+  const onReopen = vi.fn();
+  const utils = render(<EmailComposeModal open onClose={onClose} onReopen={onReopen} {...props} />, { wrapper });
+  return { ...utils, onClose, onReopen, client };
+}
+
+/** Renders EmailComposeModal behind a real, stateful `open` toggle (wired to
+ * onClose/onReopen exactly like Emails.tsx wires it) — needed for the
+ * undo-send tests below, which must exercise the actual reopen-with-restored-
+ * draft mechanism (EmailComposeModal.tsx's `restoringDraftRef`), not just the
+ * component's internal state while a fixed `open` prop never toggles. */
+function renderControlledModal(props: Partial<EmailComposeModalProps> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function Wrapper() {
+    const [open, setOpen] = useState(true);
+    return (
+      <EmailComposeModal open={open} onClose={() => setOpen(false)} onReopen={() => setOpen(true)} {...props} />
+    );
+  }
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const utils = render(<Wrapper />, { wrapper });
+  return { ...utils, client };
 }
 
 // Clicks to open the dropdown and picks the option by its accessible name, rather
@@ -69,11 +99,11 @@ function renderModal(props: Partial<React.ComponentProps<typeof EmailComposeModa
 // seed users the untyped dropdown already shows every option, and avoiding
 // per-keystroke typing sidesteps flakiness from MUI Autocomplete's own re-renders
 // racing with userEvent's keystroke pacing under load.
-async function selectRecipient(label: string, name: string) {
+async function selectRecipient(label: string, name: string, ue: ReturnType<typeof userEvent.setup> = userEvent) {
   const field = screen.getByLabelText(label);
-  await userEvent.click(field);
+  await ue.click(field);
   const option = await screen.findByRole("option", { name });
-  await userEvent.click(option);
+  await ue.click(option);
 }
 
 function makeFile(name: string, content = "hello", type = "text/plain") {
@@ -85,6 +115,10 @@ describe("EmailComposeModal", () => {
     vi.clearAllMocks();
     fetchUsersMock.mockResolvedValue(USERS);
     fetchEmailTemplatesMock.mockResolvedValue(TEMPLATES);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("opens with empty fields and the send button disabled until required fields are filled", async () => {
@@ -130,102 +164,6 @@ describe("EmailComposeModal", () => {
     const pending = await screen.findByTestId("compose-pending-attachments");
     expect(within(pending).getByText(/photo\.png/)).toBeInTheDocument();
   });
-
-  it(
-    "sends the email then uploads pending attachments in order, then closes and resets on success",
-    async () => {
-      const { onClose, client } = renderModal();
-      const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-
-      sendEmailMock.mockResolvedValue({ email_id: 42 });
-      uploadEmailAttachmentsMock.mockResolvedValue([]);
-
-      await selectRecipient("אל", "יוסי כהן");
-      await userEvent.type(screen.getByLabelText("נושא"), "נושא הבדיקה");
-      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף ההודעה");
-
-      const file = makeFile("attachment.txt");
-      const input = screen.getByTestId("compose-dropzone").querySelector("input[type=file]") as HTMLInputElement;
-      await userEvent.upload(input, file);
-
-      await userEvent.click(screen.getByRole("button", { name: "שליחה" }));
-
-      await waitFor(() => expect(sendEmailMock).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(uploadEmailAttachmentsMock).toHaveBeenCalledTimes(1));
-
-      const sendOrder = sendEmailMock.mock.invocationCallOrder[0];
-      const uploadOrder = uploadEmailAttachmentsMock.mock.invocationCallOrder[0];
-      expect(sendOrder).toBeLessThan(uploadOrder);
-
-      expect(sendEmailMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: [1],
-          subject: "נושא הבדיקה",
-          body_html: expect.stringContaining("גוף ההודעה"),
-        }),
-      );
-      expect(uploadEmailAttachmentsMock).toHaveBeenCalledWith(42, [file]);
-
-      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["emails"] });
-    },
-    20_000,
-  );
-
-  it(
-    "on an attachment-upload failure after a successful send, keeps the modal open with an error and the pending attachment still listed (does not lose the draft or re-send)",
-    async () => {
-      const { onClose } = renderModal();
-      sendEmailMock.mockResolvedValue({ email_id: 99 });
-      uploadEmailAttachmentsMock.mockRejectedValue(new Error("network error"));
-
-      await selectRecipient("אל", "דנה לוי");
-      await userEvent.type(screen.getByLabelText("נושא"), "נושא");
-      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
-
-      const file = makeFile("file.txt");
-      const input = screen.getByTestId("compose-dropzone").querySelector("input[type=file]") as HTMLInputElement;
-      await userEvent.upload(input, file);
-
-      await userEvent.click(screen.getByRole("button", { name: "שליחה" }));
-
-      expect(
-        await screen.findByText(
-          "המייל נשלח בהצלחה, אך העלאת הקבצים המצורפים נכשלה. ניתן ללחוץ שוב על 'שליחה' כדי לנסות להעלות את הקבצים בלבד.",
-        ),
-      ).toBeInTheDocument();
-      expect(onClose).not.toHaveBeenCalled();
-      expect(await screen.findByTestId("compose-pending-attachments")).toBeInTheDocument();
-      expect(screen.getByText(/file\.txt/)).toBeInTheDocument();
-
-      // Retrying must not re-send the already-created email — only retry the upload.
-      uploadEmailAttachmentsMock.mockResolvedValueOnce([]);
-      await userEvent.click(screen.getByRole("button", { name: "שליחה" }));
-      await waitFor(() => expect(uploadEmailAttachmentsMock).toHaveBeenCalledTimes(2));
-      expect(sendEmailMock).toHaveBeenCalledTimes(1);
-      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    },
-    20_000,
-  );
-
-  it(
-    "on a send failure (before any email is created), keeps the modal open with an error and does not call uploadEmailAttachments",
-    async () => {
-      const { onClose } = renderModal();
-      sendEmailMock.mockRejectedValue(new Error("network error"));
-
-      await selectRecipient("אל", "יוסי כהן");
-      await userEvent.type(screen.getByLabelText("נושא"), "נושא");
-      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
-
-      await userEvent.click(screen.getByRole("button", { name: "שליחה" }));
-
-      expect(await screen.findByText("שליחת המייל נכשלה. בדקו את החיבור ונסו שוב.")).toBeInTheDocument();
-      expect(onClose).not.toHaveBeenCalled();
-      expect(uploadEmailAttachmentsMock).not.toHaveBeenCalled();
-    },
-    20_000,
-  );
 
   it("pre-fills recipients/subject/body when opened in reply mode via initialTo/initialSubject/initialBody", async () => {
     renderModal({ initialTo: [2], initialSubject: "Re: תביעה מס' 5", initialBody: "טיוטת תשובה", inReplyTo: 7 });
@@ -280,6 +218,214 @@ describe("EmailComposeModal", () => {
 
       await userEvent.type(subjectField, " - דחוף");
       expect(subjectField).toHaveValue("עדכון סטטוס - CLM-042 - דחוף");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Undo-send (TODO_SPEC.md "משימה 13" step 1)
+  // -------------------------------------------------------------------------
+  describe("undo-send", () => {
+    it("clicking שליחה closes the dialog immediately and does NOT call sendEmail right away", async () => {
+      // `shouldAdvanceTime: true` lets fake time keep pace with real elapsed time
+      // automatically — without it, @testing-library's `findBy*`/`waitFor` (which
+      // poll via `setTimeout` internally) would never resolve once that same
+      // `setTimeout` is faked. `vi.advanceTimersByTimeAsync` below still jumps the
+      // clock forward instantly for the component's own 10s undo timer.
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      const { onClose } = renderModal();
+
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "נושא");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      // The countdown snackbar is now the only visible trace of the pending send.
+      expect(await screen.findByTestId("undo-send-snackbar")).toBeInTheDocument();
+    });
+
+    it("lets the undo window elapse: sendEmail then uploadEmailAttachments fire for real, in order", async () => {
+      // `shouldAdvanceTime: true` lets fake time keep pace with real elapsed time
+      // automatically — without it, @testing-library's `findBy*`/`waitFor` (which
+      // poll via `setTimeout` internally) would never resolve once that same
+      // `setTimeout` is faked. `vi.advanceTimersByTimeAsync` below still jumps the
+      // clock forward instantly for the component's own 10s undo timer.
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      sendEmailMock.mockResolvedValue({ email_id: 42 });
+      uploadEmailAttachmentsMock.mockResolvedValue([]);
+
+      renderModal();
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "נושא הבדיקה");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "גוף ההודעה");
+
+      const file = makeFile("attachment.txt");
+      const input = screen.getByTestId("compose-dropzone").querySelector("input[type=file]") as HTMLInputElement;
+      await ue.upload(input, file);
+
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+      expect(sendEmailMock).not.toHaveBeenCalled();
+
+      // No real wall-clock wait — advance the fake clock past the 10s undo window.
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(sendEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: [1],
+          subject: "נושא הבדיקה",
+          body_html: expect.stringContaining("גוף ההודעה"),
+        }),
+      );
+      expect(uploadEmailAttachmentsMock).toHaveBeenCalledTimes(1);
+      expect(uploadEmailAttachmentsMock).toHaveBeenCalledWith(42, [file]);
+      const sendOrder = sendEmailMock.mock.invocationCallOrder[0];
+      const uploadOrder = uploadEmailAttachmentsMock.mock.invocationCallOrder[0];
+      expect(sendOrder).toBeLessThan(uploadOrder);
+    });
+
+    it("clicking בטל שליחה within the window cancels the send (sendEmail is never called) and reopens the dialog with the draft restored", async () => {
+      // `shouldAdvanceTime: true` lets fake time keep pace with real elapsed time
+      // automatically — without it, @testing-library's `findBy*`/`waitFor` (which
+      // poll via `setTimeout` internally) would never resolve once that same
+      // `setTimeout` is faked. `vi.advanceTimersByTimeAsync` below still jumps the
+      // clock forward instantly for the component's own 10s undo timer.
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      renderControlledModal();
+
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "טיוטה חשובה");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "תוכן שלא לאבד");
+
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+
+      // The dialog was told to close (MUI's own exit transition timing is not
+      // this test's concern) — the countdown snackbar is now the visible surface.
+      const undoButton = await screen.findByTestId("undo-send-button");
+      await ue.click(undoButton);
+
+      // Reopened, with the draft intact — not reset to blank.
+      expect(await screen.findByLabelText("נושא")).toHaveValue("טיוטה חשובה");
+      expect(screen.getByLabelText("תוכן ההודעה")).toHaveValue("תוכן שלא לאבד");
+      expect(screen.getByText("יוסי כהן")).toBeInTheDocument(); // recipient chip survived too
+
+      // Even after the original window would have elapsed, nothing was ever sent.
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("undo-send-snackbar")).not.toBeInTheDocument();
+    });
+
+    it("a deferred send failure after the window elapses does not throw (no UI left to show it in)", async () => {
+      // `shouldAdvanceTime: true` lets fake time keep pace with real elapsed time
+      // automatically — without it, @testing-library's `findBy*`/`waitFor` (which
+      // poll via `setTimeout` internally) would never resolve once that same
+      // `setTimeout` is faked. `vi.advanceTimersByTimeAsync` below still jumps the
+      // clock forward instantly for the component's own 10s undo timer.
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+        shouldAdvanceTime: true,
+      });
+      const ue = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+      sendEmailMock.mockRejectedValue(new Error("network error"));
+      renderModal();
+
+      await selectRecipient("אל", "יוסי כהן", ue);
+      await ue.type(screen.getByLabelText("נושא"), "נושא");
+      await ue.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+      await ue.click(screen.getByRole("button", { name: "שליחה" }));
+
+      await expect(vi.advanceTimersByTimeAsync(10_000)).resolves.not.toThrow();
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      expect(uploadEmailAttachmentsMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Scheduled send (TODO_SPEC.md "משימה 13" steps 3/4/6 — frontend half)
+  // -------------------------------------------------------------------------
+  describe("scheduled send", () => {
+    function futureDatetimeLocal(minutesFromNow = 60): string {
+      const d = new Date(Date.now() + minutesFromNow * 60_000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    it("'שלח במועד אחר' calls scheduleEmail with the chosen datetime, never the normal sendEmail", async () => {
+      scheduleEmailMock.mockResolvedValue({ email_id: 7 });
+      renderModal();
+
+      await selectRecipient("אל", "יוסי כהן");
+      await userEvent.type(screen.getByLabelText("נושא"), "עדכון מתוזמן");
+      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף ההודעה המתוזמנת");
+
+      await userEvent.click(screen.getByRole("button", { name: "שלח במועד אחר" }));
+      const datetimeInput = await screen.findByLabelText("מועד שליחה");
+      fireEvent.change(datetimeInput, { target: { value: futureDatetimeLocal(120) } });
+
+      await userEvent.click(screen.getByRole("button", { name: "תזמן שליחה" }));
+
+      await waitFor(() => expect(scheduleEmailMock).toHaveBeenCalledTimes(1));
+      expect(scheduleEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: [1],
+          subject: "עדכון מתוזמן",
+          body_html: expect.stringContaining("גוף ההודעה המתוזמנת"),
+          scheduled_for: expect.any(String),
+        }),
+      );
+      expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+
+    it("uploads pending attachments after a successful schedule call", async () => {
+      scheduleEmailMock.mockResolvedValue({ email_id: 55 });
+      uploadEmailAttachmentsMock.mockResolvedValue([]);
+      const { onClose } = renderModal();
+
+      await selectRecipient("אל", "יוסי כהן");
+      await userEvent.type(screen.getByLabelText("נושא"), "נושא");
+      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+
+      const file = makeFile("doc.pdf");
+      const input = screen.getByTestId("compose-dropzone").querySelector("input[type=file]") as HTMLInputElement;
+      await userEvent.upload(input, file);
+
+      await userEvent.click(screen.getByRole("button", { name: "שלח במועד אחר" }));
+      const datetimeInput = await screen.findByLabelText("מועד שליחה");
+      fireEvent.change(datetimeInput, { target: { value: futureDatetimeLocal(60) } });
+      await userEvent.click(screen.getByRole("button", { name: "תזמן שליחה" }));
+
+      await waitFor(() => expect(uploadEmailAttachmentsMock).toHaveBeenCalledWith(55, [file]));
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    });
+
+    it("rejects a past datetime client-side without calling scheduleEmail", async () => {
+      renderModal();
+      await selectRecipient("אל", "יוסי כהן");
+      await userEvent.type(screen.getByLabelText("נושא"), "נושא");
+      await userEvent.type(screen.getByLabelText("תוכן ההודעה"), "גוף");
+
+      await userEvent.click(screen.getByRole("button", { name: "שלח במועד אחר" }));
+      const datetimeInput = await screen.findByLabelText("מועד שליחה");
+      const pastValue = futureDatetimeLocal(-120);
+      fireEvent.change(datetimeInput, { target: { value: pastValue } });
+
+      await userEvent.click(screen.getByRole("button", { name: "תזמן שליחה" }));
+
+      expect(await screen.findByText("יש לבחור מועד עתידי.")).toBeInTheDocument();
+      expect(scheduleEmailMock).not.toHaveBeenCalled();
     });
   });
 });

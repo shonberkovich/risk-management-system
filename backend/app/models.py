@@ -388,8 +388,28 @@ class Email(Base):
     separate `Email_Threads` table would model an arbitrary reply tree (parent-of-
     reply) but the spec (task 3 step 4 / task 2's `EmailThreadOut`) only calls for
     flat "all messages in this thread" retrieval, so the cheaper self-FK is enough.
-    `status` is a plain free-text column for now (e.g. "SENT"/"DRAFT"); task 13
-    adds a "SCHEDULED" status later — not built out here.
+    `status` is a plain free-text column (e.g. "SENT"/"SCHEDULED" — see task 13).
+    `scheduled_for`/`scheduled_recipients` (task 13, "השהיית שליחה וביטול שליחה")
+    back the scheduled-send feature: `scheduled_for` is the future send time for
+    a `status="SCHEDULED"` row (NULL for every normal, immediately-sent email).
+    `scheduled_recipients` is a JSON-serialized `{"to": [...], "cc": [...],
+    "bcc": [...]}` of the intended recipient user_ids — same "structured data
+    as NVARCHAR(MAX) JSON text" convention this file already uses for
+    `Agent_Sessions.context_data`/`Notification_Log.property_ids` (SQL Server
+    LocalDB has no native JSON/array column type). It exists specifically so a
+    scheduled email's Email row can be created up front (so the sender sees it
+    in a "scheduled" list right away, and can cancel it) *without* creating any
+    `Email_Recipients` rows until it actually sends: a recipient's mailbox view
+    is entirely driven by their own `Email_Recipients` row for a given
+    `email_id` (see `EmailRecipient`'s docstring and
+    `services/email.list_emails_for_user`), so an email with zero such rows is
+    simply invisible to everyone but the sender — no extra folder value, no
+    CHECK-constraint change, and no special-casing needed in the inbox query
+    at all. `services/email.process_due_scheduled_emails` is what finally
+    turns `scheduled_recipients` into real `Email_Recipients` rows (via the
+    same fan-out helper a normal `send_email` uses) and flips `status` to
+    `"SENT"`, at which point the message behaves exactly like one sent
+    immediately. NULL for every non-scheduled email.
 
     `body_html` deliberately stays a plain `UnicodeText`, not `EncryptedText`
     (TODO_SPEC.md "משימה 10" step 3, explicitly optional) — considered and decided
@@ -419,6 +439,8 @@ class Email(Base):
     thread_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Emails.email_id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     status: Mapped[str] = mapped_column(Unicode(20), default="SENT")
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scheduled_recipients: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
     sender: Mapped["User"] = relationship()
     thread_root: Mapped["Email | None"] = relationship(remote_side="Email.email_id", back_populates="replies")

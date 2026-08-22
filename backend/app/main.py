@@ -1,3 +1,7 @@
+import asyncio
+import contextlib
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
@@ -29,8 +33,28 @@ from app.routers import (
     sse,
     users,
 )
+from app.services.scheduler import start_scheduled_email_poller
 
-app = FastAPI(title="RMIS API", description="Risk Management Information System", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # TODO_SPEC.md "משימה 13" step 4 — starts the scheduled-email poller (see
+    # app/services/scheduler.py for why this beats a per-email asyncio.sleep,
+    # and why it's skipped entirely under pytest). `poller_task` is None under
+    # pytest, in which case there's nothing to cancel on shutdown either.
+    poller_task = start_scheduled_email_poller()
+    try:
+        yield
+    finally:
+        if poller_task is not None:
+            poller_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await poller_task
+
+
+app = FastAPI(
+    title="RMIS API", description="Risk Management Information System", version="0.1.0", lifespan=lifespan
+)
 
 # Restricted to known frontend origins (settings.cors_origins) — never "*" with
 # allow_credentials=True, which browsers reject anyway and which would defeat the point

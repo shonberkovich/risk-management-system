@@ -17,12 +17,15 @@ const {
   fetchEmailAttachmentSignedUrlMock,
   fetchUsersMock,
   sendEmailMock,
+  scheduleEmailMock,
   uploadEmailAttachmentsMock,
   fetchEmailTemplatesMock,
   linkEmailToEntityMock,
   fetchPropertiesMock,
   fetchIncidentsMock,
   fetchClaimsMock,
+  fetchScheduledEmailsMock,
+  cancelScheduledEmailMock,
 } = vi.hoisted(() => ({
   fetchEmailsMock: vi.fn(),
   fetchEmailThreadMock: vi.fn(),
@@ -35,6 +38,7 @@ const {
   // soon as it's open, same "fetch once open" convention as `users`).
   fetchUsersMock: vi.fn(),
   sendEmailMock: vi.fn(),
+  scheduleEmailMock: vi.fn(),
   uploadEmailAttachmentsMock: vi.fn(),
   fetchEmailTemplatesMock: vi.fn(),
   // Task 11: the thread panel also renders EmailEntityLinkControl, which pulls
@@ -44,6 +48,11 @@ const {
   fetchPropertiesMock: vi.fn(),
   fetchIncidentsMock: vi.fn(),
   fetchClaimsMock: vi.fn(),
+  // Task 13: Emails.tsx itself fetches the scheduled-count badge unconditionally
+  // (not just when ScheduledEmailsDialog is open), so this needs a mock even for
+  // tests that never open that dialog.
+  fetchScheduledEmailsMock: vi.fn(),
+  cancelScheduledEmailMock: vi.fn(),
 }));
 
 vi.mock("../api/client", () => ({
@@ -53,12 +62,15 @@ vi.mock("../api/client", () => ({
   fetchEmailAttachmentSignedUrl: fetchEmailAttachmentSignedUrlMock,
   fetchUsers: fetchUsersMock,
   sendEmail: sendEmailMock,
+  scheduleEmail: scheduleEmailMock,
   uploadEmailAttachments: uploadEmailAttachmentsMock,
   fetchEmailTemplates: fetchEmailTemplatesMock,
   linkEmailToEntity: linkEmailToEntityMock,
   fetchProperties: fetchPropertiesMock,
   fetchIncidents: fetchIncidentsMock,
   fetchClaims: fetchClaimsMock,
+  fetchScheduledEmails: fetchScheduledEmailsMock,
+  cancelScheduledEmail: cancelScheduledEmailMock,
 }));
 
 import Emails from "./Emails";
@@ -114,6 +126,7 @@ describe("Emails", () => {
     );
     fetchEmailThreadMock.mockResolvedValue(THREAD);
     markEmailReadMock.mockResolvedValue({ user: RECIPIENT_USER, recipient_type: "TO", is_read: true, folder: "INBOX" });
+    fetchScheduledEmailsMock.mockResolvedValue([]);
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -181,5 +194,54 @@ describe("Emails", () => {
       expect(fetchEmailsMock).toHaveBeenCalledWith("INBOX", 0, 50, "תקציב");
     });
     expect(fetchEmailsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scheduled emails management (TODO_SPEC.md "משימה 13" step 6)
+  // ---------------------------------------------------------------------------
+  describe("scheduled emails", () => {
+    const SCHEDULED_ITEM = {
+      email_id: 20,
+      subject: "עדכון עתידי",
+      body_html: "<p>x</p>",
+      created_at: "2026-08-20T10:00:00Z",
+      scheduled_for: "2026-08-25T10:00:00Z",
+      status: "SCHEDULED",
+      to: [RECIPIENT_USER],
+      cc: [],
+      bcc: [],
+    };
+
+    it("shows a badge with the scheduled-email count next to the button", async () => {
+      fetchScheduledEmailsMock.mockResolvedValue([SCHEDULED_ITEM]);
+      renderPage();
+
+      const button = await screen.findByTestId("scheduled-emails-button");
+      await waitFor(() => expect(within(button).getByText("1")).toBeInTheDocument());
+    });
+
+    it("opens the scheduled-emails dialog listing pending emails, and cancels one", async () => {
+      fetchScheduledEmailsMock.mockResolvedValue([SCHEDULED_ITEM]);
+      renderPage();
+
+      await userEvent.click(await screen.findByTestId("scheduled-emails-button"));
+
+      expect(await screen.findByText("עדכון עתידי")).toBeInTheDocument();
+      expect(fetchScheduledEmailsMock).toHaveBeenCalled();
+
+      fetchScheduledEmailsMock.mockResolvedValue([]);
+      await userEvent.click(screen.getByLabelText("ביטול תזמון: עדכון עתידי"));
+
+      await waitFor(() => expect(cancelScheduledEmailMock).toHaveBeenCalledWith(20));
+      expect(await screen.findByText("אין מיילים המתוזמנים לשליחה עתידית.")).toBeInTheDocument();
+    });
+
+    it("shows an empty state when there are no scheduled emails", async () => {
+      fetchScheduledEmailsMock.mockResolvedValue([]);
+      renderPage();
+
+      await userEvent.click(await screen.findByTestId("scheduled-emails-button"));
+      expect(await screen.findByText("אין מיילים המתוזמנים לשליחה עתידית.")).toBeInTheDocument();
+    });
   });
 });
