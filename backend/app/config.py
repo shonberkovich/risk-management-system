@@ -1,9 +1,19 @@
+from pathlib import Path
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Resolved relative to this file (backend/app/config.py -> backend/.env), not to the process's
+# current working directory: pydantic-settings' env_file lookup is cwd-relative by default, and
+# uvicorn's --app-dir flag only adjusts sys.path for imports, not the actual process cwd. When
+# uvicorn is launched from the repo root (e.g. via .claude/launch.json, which has no per-config
+# "cwd" field) a bare ".env" silently resolves to a nonexistent <repo-root>/.env and every setting
+# quietly falls back to its default — no error, just e.g. openweathermap_api_key looking unset.
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     # --- Deployment environment ---
     # "development" (default, local course laptop) | "staging" | "production". Nothing reads
