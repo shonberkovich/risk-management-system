@@ -12,7 +12,7 @@ API בשרת: N/A
 ✅ בוצע ב-branch `feature/email-db-schema`: נוספו מודלים `Email`/`EmailRecipient`/`EmailAttachment` ב-`models.py` (טבלאות `Emails`/`Email_Recipients`/`Email_Attachments`), עם `thread_id` כ-FK עצמי המצביע על הודעת השורש של השרשור, `folder` כולל גם `SENT` (לעותק אצל השולח). עודכן `sql/schema.sql` בהתאם, ונוצרה/הוחלה מיגרציית Alembic `f65d3748905b`.
 
 ==================================================
-[ ] משימה 2: פיתוח שכבת הנתונים (Schemas & Pydantic Models)
+[x] משימה 2: פיתוח שכבת הנתונים (Schemas & Pydantic Models)
 
 מהות המשימה: הגדרת הסכמות לאימות קלט והחזרת נתונים (Request/Response) עבור פעולות המייל.
 מיקום במערכת: Backend (app/schemas.py)
@@ -22,7 +22,7 @@ API בשרת: N/A
  שלב 2: יצירת סכמת `EmailOut` המחזירה את פרטי המייל עם שמות השולח והנמענים (ממבוסס על `UserOut`).
  שלב 3: יצירת סכמת `EmailThreadOut` לתצוגת שרשור הודעות מקובץ.
  שלב 4: הוספת סכמות לניהול סטטוס (כמו `MarkAsRead`, `MoveToFolder`).
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-schemas`: נוספו `EmailCreate`/`EmailOut`/`EmailThreadOut`/`EmailRecipientOut`/`EmailAttachmentOut`/`MarkAsRead`/`MoveToFolder` ב-`schemas.py`, עם `EmailRecipientType`/`EmailFolder` כ-`Literal` משותפים. `EmailCreate` משתמש ב-`in_reply_to` (email_id של ההודעה שעליה עונים); ה-service (משימה 3) יפתור אותו ל-thread root.
 
 ==================================================
 [ ] משימה 3: פיתוח שירות (Service) הליבה לשליחה וניהול מיילים
