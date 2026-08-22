@@ -81,7 +81,7 @@ API בשרת: POST /api/emails/{id}/attachments, GET /api/emails/attachments/{id
 ✅ בוצע ב-branch `feature/email-attachments`: `POST /api/emails/{id}/attachments` (multipart, נפרד מ-`POST /api/emails` שנשאר JSON טהור) עם `services/email.add_attachments` שמשתמש ב-`storage.upload_file` הקיים. `GET /api/emails/attachments/{id}/signed-url` משתמש באותה בדיקת הרשאה (`_require_recipient_row`) כמו משימה 5. הורדה בפועל דרך `GET /api/media/download` הקיים. הגבלת 25MB לקובץ. 472 טסטים עברו.
 
 ==================================================
-[ ] משימה 7: פיתוח ממשק משתמש (React) - תיבת דואר וניווט
+[x] משימה 7: פיתוח ממשק משתמש (React) - תיבת דואר וניווט
 
 מהות המשימה: בניית מסך ראשי המציג רשימת מיילים, עם תפריט צדדי לניווט בתיקיות.
 מיקום במערכת: Frontend (src/pages/Email/EmailDashboard.tsx, EmailSidebar.tsx)
@@ -92,7 +92,7 @@ API בשרת: GET /api/emails
  שלב 3: פיתוח `EmailList` טבלאי המציג שולח, נושא, תקציר הטקסט ותאריך.
  שלב 4: חיבור הנתונים ל-React Query עם ריענון אוטומטי (Invalidation).
  שלב 5: יישום עיצוב ויזואלי להפרדה בין מיילים שנקראו לכאלה שלא.
-✅ בוצע ב-branch [שם-הבראנץ']: [תיאור קצר של מה שבוצע יתווסף כאן]
+✅ בוצע ב-branch `feature/email-ui-inbox`: נוספו טיפוסי/פונקציות API ב-`client.ts`, `EmailSidebar.tsx` (תיקיות + badge לא-נקראו), עמוד `Emails.tsx` (רשימה + פאנל שרשור), נתיב `/emails` וקישור ב-`Navbar.tsx`. `body_html` מוצג כטקסט בלבד (DOMParser textContent) עד לסניטציה בצד שרת במשימה 10. `EmailListItemOut` לא כולל תקציר טקסט (נמנע N+1) — הוסבר בקוד. כל הטסטים ירוקים (125/125).
 
 ==================================================
 [ ] משימה 8: ממשק כתיבת מייל חדש (Compose)
