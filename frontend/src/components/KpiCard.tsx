@@ -8,7 +8,8 @@ import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 import type { ReactNode } from "react";
 
-import { accent, ease, fonts, neon } from "../ui/tokens";
+import { ease, fonts } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 /** Glass KPI tile: a glowing accent orb + hairline in the tile's accent color, an
  * oversized tabular figure, and a 3D lean toward the cursor (`.rmis-tilt`, driven by
@@ -29,7 +30,9 @@ export default function KpiCard({
   icon?: ReactNode;
   accentColor?: string;
 }) {
+  const { accent, neon, mode } = useTokens();
   const tone = accent(accentColor);
+  const isDark = mode === "dark";
 
   return (
     <Box className="rmis-tilt" sx={{ height: "100%", perspective: "1000px" }}>
@@ -50,7 +53,7 @@ export default function KpiCard({
           backgroundImage: `radial-gradient(130% 120% at 0% 0%, ${alpha(tone, 0.16)} 0%, transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 40%)`,
           "&:hover": {
             borderColor: alpha(tone, 0.45),
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 70px -34px ${alpha(tone, 0.85)}`,
+            boxShadow: `inset 0 1px 0 ${isDark ? "rgba(255,255,255,0.08)" : "#fff"}, 0 30px 70px -34px ${alpha(tone, isDark ? 0.85 : 0.55)}`,
           },
         }}
       >
@@ -100,7 +103,7 @@ export default function KpiCard({
                   lineHeight: 1.05,
                   letterSpacing: "-0.03em",
                   color: "text.primary",
-                  textShadow: `0 0 28px ${alpha(tone, 0.45)}`,
+                  textShadow: `0 0 28px ${alpha(tone, isDark ? 0.45 : 0.22)}`,
                   fontVariantNumeric: "tabular-nums",
                   overflowWrap: "anywhere",
                   transform: "translateZ(30px)",
@@ -135,7 +138,7 @@ export default function KpiCard({
                   color: tone,
                   bgcolor: alpha(tone, 0.1),
                   border: `1px solid ${alpha(tone, 0.3)}`,
-                  boxShadow: `0 0 26px -8px ${alpha(tone, 0.9)}, inset 0 1px 0 rgba(255,255,255,0.08)`,
+                  boxShadow: `0 0 26px -8px ${alpha(tone, isDark ? 0.9 : 0.6)}, inset 0 1px 0 ${isDark ? "rgba(255,255,255,0.08)" : "#fff"}`,
                   transform: "translateZ(40px)",
                   "& .MuiSvgIcon-root": {
                     fontSize: 24,

@@ -741,3 +741,212 @@ path.leaflet-interactive:hover {
 .leaflet-tile-pane {
   filter: invert(1) hue-rotate(200deg) brightness(0.82) contrast(0.92) saturate(0.55);
 }
+
+/* ==========================================================================
+   Light mode — "Porcelain Aurora"
+   Everything above is the dark baseline; these rules re-skin it when
+   ui/ColorMode.tsx (or the pre-paint script in index.html) sets
+   <html data-theme="light">.
+   ========================================================================== */
+
+:root[data-theme="light"] {
+  --ink-void: #f3f4fa;
+  --ink-abyss: #eceef7;
+  --ink-midnight: #ffffff;
+  --ink-line: rgba(30, 38, 96, 0.09);
+  --ink-line-strong: rgba(30, 38, 96, 0.17);
+  --ink-text: #0b1030;
+  --ink-dim: #4a5277;
+  --ink-mute: #7d84a6;
+
+  --neon-violet: #6650f2;
+  --neon-cyan: #0aa597;
+  --neon-sky: #0a8fc6;
+  --neon-magenta: #cf35ae;
+  --neon-critical: #e2245b;
+  --neon-high: #e0631a;
+  --neon-medium: #c98a00;
+  --neon-low: #0c9a6a;
+
+  color-scheme: light;
+}
+
+:root[data-theme="light"] ::selection {
+  background: rgba(102, 80, 242, 0.22);
+  color: #0b1030;
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(102, 80, 242, 0.35), rgba(10, 165, 151, 0.3));
+  background-clip: padding-box;
+}
+
+/* Backdrop: pastel aurora over porcelain, a faint violet grid floor. */
+:root[data-theme="light"] .rmis-backdrop {
+  background:
+    radial-gradient(120% 80% at 50% -10%, #e6e3ff 0%, rgba(243, 244, 250, 0) 60%),
+    linear-gradient(180deg, #f7f8fd 0%, #eef0f8 100%);
+}
+:root[data-theme="light"] .rmis-backdrop__mesh {
+  opacity: 0.75;
+  filter: blur(90px) saturate(120%);
+}
+:root[data-theme="light"] .rmis-orb {
+  mix-blend-mode: multiply;
+}
+:root[data-theme="light"] .rmis-orb--violet {
+  background: radial-gradient(circle at 30% 30%, rgba(139, 123, 255, 0.42), rgba(139, 123, 255, 0) 65%);
+}
+:root[data-theme="light"] .rmis-orb--cyan {
+  background: radial-gradient(circle at 60% 40%, rgba(46, 230, 214, 0.32), rgba(46, 230, 214, 0) 65%);
+}
+:root[data-theme="light"] .rmis-orb--magenta {
+  background: radial-gradient(circle at 50% 50%, rgba(244, 95, 209, 0.22), rgba(244, 95, 209, 0) 65%);
+}
+:root[data-theme="light"] .rmis-orb--sky {
+  background: radial-gradient(circle at 50% 50%, rgba(76, 201, 240, 0.3), rgba(76, 201, 240, 0) 65%);
+}
+:root[data-theme="light"] .rmis-backdrop__floor {
+  opacity: 0.5;
+}
+:root[data-theme="light"] .rmis-backdrop__floor::before {
+  background-image:
+    linear-gradient(rgba(102, 80, 242, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(102, 80, 242, 0.16) 1px, transparent 1px);
+}
+:root[data-theme="light"] .rmis-backdrop__dots {
+  background-image: radial-gradient(rgba(11, 16, 48, 0.09) 1px, transparent 1.2px);
+}
+:root[data-theme="light"] .rmis-backdrop__grain {
+  opacity: 0.04;
+  filter: invert(1);
+}
+:root[data-theme="light"] .rmis-backdrop__vignette {
+  background: radial-gradient(140% 100% at 50% 40%, transparent 60%, rgba(214, 218, 240, 0.55) 100%);
+}
+
+/* Display titles: deep-ink → violet → sky gradient. */
+:root[data-theme="light"] .rmis-main .MuiTypography-h5:not(.MuiPaper-root .MuiTypography-h5):not(.rmis-plain),
+:root[data-theme="light"] .rmis-display {
+  background: linear-gradient(100deg, #0b1030 0%, #2b2378 36%, #6650f2 70%, #0a8fc6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Cursor spotlight, toned for light glass. */
+:root[data-theme="light"] .MuiCard-root::before,
+:root[data-theme="light"] .rmis-spot::before {
+  background: radial-gradient(
+    520px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(102, 80, 242, 0.1),
+    rgba(10, 165, 151, 0.04) 40%,
+    transparent 70%
+  );
+}
+:root[data-theme="light"] .MuiCard-root::after,
+:root[data-theme="light"] .rmis-spot::after {
+  background: radial-gradient(
+    380px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(102, 80, 242, 0.75),
+    rgba(10, 165, 151, 0.4) 35%,
+    transparent 70%
+  );
+}
+
+/* Recharts */
+:root[data-theme="light"] .recharts-cartesian-axis-line,
+:root[data-theme="light"] .recharts-cartesian-axis-tick-line {
+  stroke: rgba(30, 38, 96, 0.18) !important;
+}
+:root[data-theme="light"] .recharts-cartesian-grid line {
+  stroke: rgba(30, 38, 96, 0.09) !important;
+}
+:root[data-theme="light"] .recharts-default-tooltip {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(102, 80, 242, 0.25) !important;
+  box-shadow: 0 20px 50px -16px rgba(30, 38, 96, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+}
+:root[data-theme="light"] .recharts-pie-label-line {
+  stroke: rgba(30, 38, 96, 0.25) !important;
+}
+:root[data-theme="light"] .recharts-line-curve {
+  filter: drop-shadow(0 4px 6px rgba(102, 80, 242, 0.35));
+}
+
+/* Leaflet: original light OSM tiles, white glass controls/popups. */
+:root[data-theme="light"] .leaflet-tile-pane {
+  filter: saturate(0.85) contrast(0.98);
+}
+:root[data-theme="light"] .leaflet-container {
+  background: #e9ecf6 !important;
+  box-shadow: inset 0 0 40px rgba(30, 38, 96, 0.08);
+}
+:root[data-theme="light"] .leaflet-bar a {
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+:root[data-theme="light"] .leaflet-bar a:hover {
+  background: rgba(102, 80, 242, 0.14) !important;
+  color: #0b1030 !important;
+}
+:root[data-theme="light"] .leaflet-bar,
+:root[data-theme="light"] .leaflet-control-layers {
+  box-shadow: 0 10px 30px -12px rgba(30, 38, 96, 0.35) !important;
+}
+:root[data-theme="light"] .leaflet-popup-content-wrapper,
+:root[data-theme="light"] .leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(102, 80, 242, 0.25);
+}
+:root[data-theme="light"] .leaflet-popup-content-wrapper {
+  box-shadow: 0 24px 60px -18px rgba(30, 38, 96, 0.4), 0 0 40px -14px rgba(102, 80, 242, 0.3) !important;
+}
+:root[data-theme="light"] .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+:root[data-theme="light"] path.leaflet-interactive:hover {
+  filter: drop-shadow(0 0 8px rgba(102, 80, 242, 0.45));
+}
+
+/* 3D Risk Core on porcelain */
+:root[data-theme="light"] .rmis-core__ring {
+  border-color: rgba(102, 80, 242, 0.5);
+  box-shadow: 0 0 18px rgba(102, 80, 242, 0.18), inset 0 0 18px rgba(102, 80, 242, 0.1);
+}
+:root[data-theme="light"] .rmis-core__ring--lat {
+  border-color: rgba(10, 165, 151, 0.45);
+  box-shadow: 0 0 14px rgba(10, 165, 151, 0.15);
+}
+:root[data-theme="light"] .rmis-core__orbit {
+  border-color: rgba(30, 38, 96, 0.2);
+}
+:root[data-theme="light"] .rmis-core__panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55));
+  border-color: rgba(30, 38, 96, 0.12);
+  box-shadow: 0 12px 30px -8px rgba(30, 38, 96, 0.3), inset 0 1px 0 #fff;
+}
+:root[data-theme="light"] .rmis-core__panel::after {
+  background: rgba(11, 16, 48, 0.28);
+  box-shadow: 0 8px 0 rgba(11, 16, 48, 0.14);
+}
+
+/* ==========================================================================
+   Mode switch: one clean swap inside a circular reveal (View Transitions API),
+   with per-element color transitions suspended for the duration.
+   ========================================================================== */
+
+.rmis-theme-switching *,
+.rmis-theme-switching *::before,
+.rmis-theme-switching *::after {
+  transition: none !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}

@@ -13,12 +13,13 @@ import {
 
 import type { LossRatioTrendPoint } from "../api/client";
 import { formatIlsCompact, formatPercent } from "../format";
-import { neon, seriesPalette } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 const TARGET_LOSS_RATIO = 0.35; // organizational target, matches the KpiCard subtext on the dashboard
 
 export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoint[] }) {
   const theme = useTheme();
+  const { neon, seriesPalette } = useTokens();
   const chartData = data.map((d) => ({ ...d, percent: d.loss_ratio * 100 }));
 
   return (

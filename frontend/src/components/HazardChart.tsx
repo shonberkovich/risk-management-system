@@ -4,12 +4,11 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 
 import type { HazardDistributionItem } from "../api/client";
 import { HAZARD_LABELS } from "../format";
-import { neon, seriesPalette } from "../ui/tokens";
-
-const COLORS = seriesPalette;
+import { useTokens } from "../ui/useTokens";
 
 export default function HazardChart({ data }: { data: HazardDistributionItem[] }) {
   const theme = useTheme();
+  const { seriesPalette: COLORS } = useTokens();
   const chartData = data.map((d) => ({ name: HAZARD_LABELS[d.hazard_type] ?? d.hazard_type, value: d.count, percent: d.percent }));
 
   return (

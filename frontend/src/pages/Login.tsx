@@ -24,7 +24,9 @@ import { isAxiosError } from "axios";
 import { useAuth } from "../auth/AuthContext";
 import AmbientBackdrop from "../components/AmbientBackdrop";
 import RiskCore3D from "../components/RiskCore3D";
-import { ease, fonts, gradients, ink, neon } from "../ui/tokens";
+import ThemeToggle from "../components/ThemeToggle";
+import { ease, fonts } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 const FEATURES: { icon: ReactNode; title: string; description: string }[] = [
   {
@@ -44,8 +46,6 @@ const FEATURES: { icon: ReactNode; title: string; description: string }[] = [
   },
 ];
 
-const FEATURE_TONES = [neon.violet, neon.cyan, neon.medium];
-
 /** Login screen (TODO_SPEC.md follow-up: "מסך רישום/התחברות מעוצב ונוח") — a
  * two-panel layout (branding + feature highlights on the right, the actual
  * form on the left) on wide screens, collapsing to a single centered card on
@@ -57,6 +57,9 @@ const FEATURE_TONES = [neon.violet, neon.cyan, neon.medium];
  * presentation-only. */
 export default function Login() {
   const theme = useTheme();
+  const { ink, neon, gradients } = useTokens();
+  const isDark = theme.palette.mode === "dark";
+  const FEATURE_TONES = [neon.violet, neon.cyan, neon.medium];
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,6 +95,10 @@ export default function Login() {
     >
       <AmbientBackdrop />
 
+      <Box sx={{ position: "absolute", top: { xs: 12, md: 24 }, insetInlineStart: { xs: 12, md: 24 }, zIndex: 2 }}>
+        <ThemeToggle />
+      </Box>
+
       <Fade in timeout={700}>
         <Box
           sx={{
@@ -125,7 +132,7 @@ export default function Login() {
                     position: "absolute",
                     inset: "1.5px",
                     borderRadius: "13.5px",
-                    background: `radial-gradient(circle at 30% 20%, #20275a, ${ink.void} 80%)`,
+                    background: "radial-gradient(circle at 30% 20%, #20275a, #02030A 80%)",
                   },
                 }}
               >
@@ -230,7 +237,7 @@ export default function Login() {
                       p: 2,
                       borderRadius: "18px",
                       border: `1px solid ${ink.line}`,
-                      bgcolor: "rgba(13, 19, 44, 0.45)",
+                      bgcolor: isDark ? "rgba(13, 19, 44, 0.45)" : "rgba(255, 255, 255, 0.6)",
                       backdropFilter: "blur(18px) saturate(150%)",
                       transform: "perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))",
                       transition: `transform 0.7s ${ease.out}, border-color 0.4s`,
@@ -280,12 +287,12 @@ export default function Login() {
               justifySelf: "center",
               p: { xs: 3, sm: 4.5 },
               borderRadius: { xs: "24px", sm: "30px" },
-              bgcolor: "rgba(10, 15, 36, 0.55)",
+              bgcolor: isDark ? "rgba(10, 15, 36, 0.55)" : "rgba(255, 255, 255, 0.72)",
               backgroundImage: `radial-gradient(120% 70% at 50% 0%, ${alpha(neon.violet, 0.2)} 0%, transparent 60%)`,
               backdropFilter: "blur(28px) saturate(170%)",
               WebkitBackdropFilter: "blur(28px) saturate(170%)",
               border: `1px solid ${ink.lineStrong}`,
-              boxShadow: `0 40px 120px -40px rgba(0,0,0,0.95), 0 0 90px -40px ${alpha(neon.violet, 0.8)}, inset 0 1px 0 rgba(255,255,255,0.08)`,
+              boxShadow: `0 40px 120px -40px ${isDark ? "rgba(0,0,0,0.95)" : "rgba(30,38,96,0.4)"}, 0 0 90px -40px ${alpha(neon.violet, isDark ? 0.8 : 0.45)}, inset 0 1px 0 ${isDark ? "rgba(255,255,255,0.08)" : "#fff"}`,
               animation: `rmis-dialog-in 1s ${ease.out} 0.1s both`,
             }}
           >

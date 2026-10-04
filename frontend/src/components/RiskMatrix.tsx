@@ -1,6 +1,7 @@
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
 import { Fragment } from "react";
 
 import type { RiskMatrixCell } from "../api/client";
@@ -10,8 +11,10 @@ const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינ
 const PROB_ORDER = ["high", "medium", "low"] as const; // top row = highest probability
 const SEV_ORDER = ["low", "medium", "high"] as const;
 
-function cellColor(prob: string, sev: string, count: number) {
-  if (count === 0) return "rgba(238, 241, 255, 0.04)";
+// Filled cells keep the bright (dark-set) neon in both modes — with dark numerals they
+// read as lit tiles on porcelain as well as on black; only the empty well changes.
+function cellColor(prob: string, sev: string, count: number, emptyColor = "rgba(238, 241, 255, 0.04)") {
+  if (count === 0) return emptyColor;
   const riskLevel = (PROB_ORDER.indexOf(prob as any) === 0 ? 2 : PROB_ORDER.indexOf(prob as any) === 1 ? 1 : 0) +
     (SEV_ORDER.indexOf(sev as any));
   if (riskLevel >= 3) return neon.critical;
@@ -28,6 +31,8 @@ export default function RiskMatrix({
   selectedCell?: RiskMatrixCell | null;
   onSelectCell?: (cell: RiskMatrixCell | null) => void;
 }) {
+  const isDark = useTheme().palette.mode === "dark";
+  const emptyWell = isDark ? "rgba(238, 241, 255, 0.04)" : "rgba(30, 38, 96, 0.04)";
   const getCell = (prob: string, sev: string) => cells.find((c) => c.probability_band === prob && c.severity_band === sev);
 
   return (
@@ -70,12 +75,12 @@ export default function RiskMatrix({
                     sx={{
                       position: "relative",
                       overflow: "hidden",
-                      bgcolor: cellColor(prob, sev, count),
+                      bgcolor: cellColor(prob, sev, count, emptyWell),
                       backgroundImage:
                         count > 0
                           ? "linear-gradient(145deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0) 45%, rgba(0,0,0,0.22) 100%)"
                           : "none",
-                      border: count > 0 ? "1px solid rgba(255,255,255,0.22)" : "1px dashed rgba(148,163,255,0.16)",
+                      border: count > 0 ? "1px solid rgba(255,255,255,0.22)" : `1px dashed ${isDark ? "rgba(148,163,255,0.16)" : "rgba(30,38,96,0.18)"}`,
                       borderRadius: "14px",
                       height: { xs: 52, sm: 60 },
                       display: "flex",
