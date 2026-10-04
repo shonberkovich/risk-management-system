@@ -13,6 +13,7 @@ import {
 
 import type { LossRatioTrendPoint } from "../api/client";
 import { formatIlsCompact, formatPercent } from "../format";
+import { neon, seriesPalette } from "../ui/tokens";
 
 const TARGET_LOSS_RATIO = 0.35; // organizational target, matches the KpiCard subtext on the dashboard
 
@@ -35,7 +36,7 @@ export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoin
             <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
             <XAxis dataKey="year" tick={{ fontSize: 12 }} />
             <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} width={44} />
-            <ReferenceLine y={TARGET_LOSS_RATIO * 100} stroke="#2e7d32" strokeDasharray="4 4" label={{ value: "יעד", fontSize: 11, fill: "#2e7d32" }} />
+            <ReferenceLine y={TARGET_LOSS_RATIO * 100} stroke={neon.low} strokeDasharray="4 4" label={{ value: "יעד", fontSize: 11, fill: neon.low }} />
             <Tooltip
               contentStyle={{ direction: "rtl", fontFamily: theme.typography.fontFamily }}
               formatter={(_value, _name, item) => [
@@ -44,7 +45,14 @@ export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoin
               ]}
               labelFormatter={(year) => `שנת ${year}`}
             />
-            <Line type="monotone" dataKey="percent" stroke="#1e5b8a" strokeWidth={2} dot={{ r: 4 }} />
+            <Line
+              type="monotone"
+              dataKey="percent"
+              stroke={neon.violet}
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: "#050817", stroke: neon.cyan, strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: neon.cyan, stroke: "#fff", strokeWidth: 2 }}
+            />
           </LineChart>
         </ResponsiveContainer>
       )}

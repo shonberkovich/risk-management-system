@@ -16,6 +16,7 @@ import {
 
 import type { CashflowSummary } from "../api/client";
 import { formatIlsCompact } from "../format";
+import { neon, seriesPalette } from "../ui/tokens";
 
 const monthLabel = (month: string) => {
   if (month === "unscheduled") return "לא מתוזמן";
@@ -73,6 +74,12 @@ export default function CashflowChart({ data }: { data: CashflowSummary }) {
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="rmis-cashflow-bar" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={neon.cyan} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={neon.violet} stopOpacity={0.35} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} />
             <YAxis tickFormatter={(v) => formatIlsCompact(v)} tick={{ fontSize: 12 }} width={60} />
@@ -87,8 +94,8 @@ export default function CashflowChart({ data }: { data: CashflowSummary }) {
             <Legend
               formatter={(value) => (value === "expected_receipts" ? "תקבולים צפויים" : "רזרבות פתוחות")}
             />
-            <Bar dataKey="expected_receipts" fill="#1e5b8a" radius={[4, 4, 0, 0]} />
-            <Line type="monotone" dataKey="open_reserves" stroke="#c0521f" strokeWidth={2} dot={{ r: 3 }} />
+            <Bar dataKey="expected_receipts" fill="url(#rmis-cashflow-bar)" radius={[8, 8, 2, 2]} maxBarSize={44} />
+            <Line type="monotone" dataKey="open_reserves" stroke={neon.magenta} strokeWidth={2.5} dot={{ r: 3, fill: neon.magenta }} />
           </ComposedChart>
         </ResponsiveContainer>
       )}

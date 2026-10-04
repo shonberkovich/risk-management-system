@@ -9,6 +9,7 @@ import type { User } from "../api/client";
 import { useSSE } from "../hooks/useSSE";
 import type { NewEmailPayload } from "../hooks/useSSE";
 import AIAssistant from "./AIAssistant/AIAssistant";
+import AmbientBackdrop from "./AmbientBackdrop";
 import { AIAssistantProvider } from "./AIAssistant/AIAssistantContext";
 import Navbar from "./Navbar";
 
@@ -49,9 +50,10 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <AIAssistantProvider>
-      <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+      <AmbientBackdrop />
+      <Box className="rmis-shell">
         <Navbar />
-        <Box component="main" sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
+        <Box component="main" className="rmis-main">
           {children}
         </Box>
         <AIAssistant />

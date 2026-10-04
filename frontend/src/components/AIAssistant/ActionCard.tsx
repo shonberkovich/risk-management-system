@@ -54,7 +54,7 @@ export default function ActionCard({
   return (
     <Paper
       variant="outlined"
-      sx={{ p: 1.5, maxWidth: "90%", borderColor: "warning.main", bgcolor: "#fff8e1" }}
+      sx={{ p: 1.5, maxWidth: "90%", borderColor: "warning.main", bgcolor: "rgba(255, 200, 87, 0.08)" }}
     >
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
         <WarningAmberIcon fontSize="small" color="warning" />

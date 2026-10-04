@@ -176,9 +176,25 @@ export default function AIAssistant() {
         <Fab
           color="primary"
           onClick={() => setOpen(true)}
-          sx={{ position: "fixed", bottom: 24, insetInlineEnd: 24, zIndex: 1300 }}
+          sx={{
+            position: "fixed",
+            bottom: { xs: 16, md: 28 },
+            insetInlineEnd: { xs: 16, md: 28 },
+            zIndex: 1300,
+            width: 60,
+            height: 60,
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              inset: -6,
+              borderRadius: "50%",
+              border: "1px solid rgba(139,123,255,0.45)",
+              animation: "rmis-ping 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+              pointerEvents: "none",
+            },
+          }}
         >
-          <SmartToyIcon />
+          <SmartToyIcon sx={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.7))" }} />
         </Fab>
       </Tooltip>
     );
@@ -189,25 +205,53 @@ export default function AIAssistant() {
       elevation={8}
       sx={{
         position: "fixed",
-        bottom: 24,
-        insetInlineEnd: 24,
-        width: { xs: "calc(100vw - 32px)", sm: 420 },
-        height: 560,
-        maxHeight: "75vh",
+        bottom: { xs: 12, md: 24 },
+        insetInlineEnd: { xs: 12, md: 24 },
+        width: { xs: "calc(100vw - 24px)", sm: 440 },
+        height: 600,
+        maxHeight: { xs: "80dvh", md: "78vh" },
         display: "flex",
         flexDirection: "column",
-        borderRadius: 2,
+        borderRadius: "26px",
         overflow: "hidden",
         zIndex: 1300,
+        bgcolor: "rgba(8, 12, 30, 0.78)",
+        backgroundImage: "radial-gradient(120% 50% at 50% 0%, rgba(139,123,255,0.22) 0%, transparent 60%)",
+        backdropFilter: "blur(28px) saturate(170%)",
+        WebkitBackdropFilter: "blur(28px) saturate(170%)",
+        border: "1px solid rgba(148,163,255,0.22)",
+        boxShadow: "0 40px 100px -30px rgba(0,0,0,0.95), 0 0 80px -30px rgba(139,123,255,0.7)",
+        animation: "rmis-dialog-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
+        transformOrigin: "bottom left",
       }}
     >
       <Stack
         direction="row"
         alignItems="center"
         spacing={1}
-        sx={{ px: 2, py: 1.5, bgcolor: "primary.main", color: "primary.contrastText" }}
+        sx={{
+          px: 2,
+          py: 1.75,
+          color: "text.primary",
+          borderBottom: "1px solid rgba(148,163,255,0.14)",
+          backgroundImage: "linear-gradient(90deg, rgba(139,123,255,0.18), rgba(46,230,214,0.08))",
+        }}
       >
-        <SmartToyIcon fontSize="small" />
+        <Box
+          sx={{
+            width: 30,
+            height: 30,
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundImage: "linear-gradient(135deg, #8B7BFF, #2EE6D6)",
+            boxShadow: "0 0 18px -4px rgba(139,123,255,0.9)",
+            color: "#fff",
+          }}
+        >
+          <SmartToyIcon fontSize="small" />
+        </Box>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, flexGrow: 1 }}>
           עוזר AI — RMIS
         </Typography>
@@ -243,7 +287,15 @@ export default function AIAssistant() {
                   key={sq}
                   variant="outlined"
                   onClick={() => send(sq)}
-                  sx={{ p: 1, cursor: "pointer", fontSize: 13, "&:hover": { bgcolor: "grey.50" } }}
+                  sx={{
+                    px: 1.5,
+                    py: 1.1,
+                    cursor: "pointer",
+                    fontSize: 13,
+                    borderRadius: "14px",
+                    transition: "background-color 0.3s, border-color 0.3s, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+                    "&:hover": { bgcolor: "rgba(139,123,255,0.1)", borderColor: "rgba(139,123,255,0.45)", transform: "translateX(-4px)" },
+                  }}
                 >
                   {sq}
                 </Paper>
@@ -256,7 +308,16 @@ export default function AIAssistant() {
               turn.role === "user" ? (
                 <Stack key={i} direction="row" spacing={1} justifyContent="flex-end">
                   <Paper
-                    sx={{ px: 1.5, py: 1, bgcolor: "primary.main", color: "primary.contrastText", maxWidth: "85%" }}
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      maxWidth: "85%",
+                      color: "#fff",
+                      border: 0,
+                      borderRadius: "16px 16px 4px 16px",
+                      backgroundImage: "linear-gradient(120deg, #6E5BFF, #4CC9F0)",
+                      boxShadow: "0 10px 26px -12px rgba(139,123,255,0.9)",
+                    }}
                   >
                     <Typography variant="body2">{turn.text}</Typography>
                   </Paper>
@@ -282,7 +343,7 @@ export default function AIAssistant() {
                     ) : turn.actionCard ? (
                       <ActionCard actionId={turn.actionCard.actionId} proposal={turn.actionCard.proposal} />
                     ) : (
-                      <Paper variant="outlined" sx={{ px: 1.5, py: 1, bgcolor: "grey.50" }}>
+                      <Paper variant="outlined" sx={{ px: 1.5, py: 1, bgcolor: "rgba(255,255,255,0.04)", borderRadius: "16px 16px 16px 4px" }}>
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                           <StreamedAnswer text={turn.text} />
                         </Typography>

@@ -4,8 +4,9 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 
 import type { HazardDistributionItem } from "../api/client";
 import { HAZARD_LABELS } from "../format";
+import { neon, seriesPalette } from "../ui/tokens";
 
-const COLORS = ["#1e5b8a", "#c62828", "#e69413", "#2e7d32", "#8e44ad", "#607d8b"];
+const COLORS = seriesPalette;
 
 export default function HazardChart({ data }: { data: HazardDistributionItem[] }) {
   const theme = useTheme();
@@ -16,11 +17,23 @@ export default function HazardChart({ data }: { data: HazardDistributionItem[] }
       <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
         התפלגות נזקים לפי סוג
       </Typography>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={240}>
         <PieChart>
-          <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} label={(d) => `${d.percent}%`}>
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            innerRadius={46}
+            outerRadius={78}
+            paddingAngle={3}
+            cornerRadius={6}
+            stroke="none"
+            label={(d) => `${d.percent}%`}
+          >
             {chartData.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              <Cell key={i} fill={COLORS[i % COLORS.length]} style={{ filter: `drop-shadow(0 0 6px ${COLORS[i % COLORS.length]}66)` }} />
             ))}
           </Pie>
           <Tooltip contentStyle={{ direction: "rtl", fontFamily: theme.typography.fontFamily }} />

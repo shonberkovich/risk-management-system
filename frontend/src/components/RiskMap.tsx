@@ -12,9 +12,9 @@ import type { GeographicExposureCluster, Incident, Property, PropertyMapPoint } 
 import { HAZARD_LABELS, formatIlsCompact } from "../format";
 
 const COLOR_MAP: Record<PropertyMapPoint["status_color"], string> = {
-  red: "#c62828",
-  yellow: "#e69413",
-  green: "#2e7d32",
+  red: "#FF4D79",
+  yellow: "#FFC857",
+  green: "#2BE4A7",
 };
 
 const ACTIVE_INCIDENT_STATUSES = new Set(["NEW", "UNDER_INVESTIGATION", "CLAIM_FILED"]);
@@ -124,7 +124,7 @@ export default function RiskMap({
         ref={mapRef}
         center={center}
         zoom={7}
-        style={{ height: 420, width: "100%", borderRadius: 8, overflow: "hidden" }}
+        style={{ height: "clamp(320px, 52vh, 520px)", width: "100%", borderRadius: 18, overflow: "hidden" }}
         scrollWheelZoom={false}
       >
         <TileLayer
@@ -138,7 +138,7 @@ export default function RiskMap({
               key={`flood-${p.property_id}`}
               center={[p.latitude, p.longitude]}
               radius={(p.risk_profile?.flood_risk_score ?? 0) * HAZARD_ZONE_METERS_PER_SCORE}
-              pathOptions={{ color: "#1565c0", fillColor: "#1565c0", fillOpacity: 0.12, weight: 1 }}
+              pathOptions={{ color: "#4CC9F0", fillColor: "#4CC9F0", fillOpacity: 0.14, weight: 1 }}
             />
           ))}
 
@@ -148,7 +148,7 @@ export default function RiskMap({
               key={`fire-${p.property_id}`}
               center={[p.latitude, p.longitude]}
               radius={(p.risk_profile?.fire_risk_score ?? 0) * HAZARD_ZONE_METERS_PER_SCORE}
-              pathOptions={{ color: "#d84315", fillColor: "#d84315", fillOpacity: 0.12, weight: 1 }}
+              pathOptions={{ color: "#FF8A4C", fillColor: "#FF8A4C", fillOpacity: 0.14, weight: 1 }}
             />
           ))}
 
@@ -162,8 +162,8 @@ export default function RiskMap({
               // a floor keeps small/tight clusters visible at portfolio zoom.
               radius={Math.max(c.radius_km * 1000, 1500)}
               pathOptions={{
-                color: "#8e24aa",
-                fillColor: "#8e24aa",
+                color: "#F45FD1",
+                fillColor: "#F45FD1",
                 fillOpacity: 0.08,
                 weight: 2,
                 dashArray: "6 4",
@@ -195,7 +195,7 @@ export default function RiskMap({
                 key={p.property_id}
                 center={[p.latitude, p.longitude]}
                 radius={10}
-                pathOptions={{ color: COLOR_MAP[p.status_color], fillColor: COLOR_MAP[p.status_color], fillOpacity: 0.8 }}
+                pathOptions={{ color: "#ffffff", weight: 1.5, fillColor: COLOR_MAP[p.status_color], fillOpacity: 0.9 }}
                 eventHandlers={{
                   click: () => selectProperty(p.property_id),
                 }}
@@ -263,7 +263,7 @@ export default function RiskMap({
                 key={`incident-${inc.incident_id}`}
                 center={coords}
                 radius={6}
-                pathOptions={{ color: "#6a1b9a", fillColor: "#ce93d8", fillOpacity: 0.9, weight: 2 }}
+                pathOptions={{ color: "#8B7BFF", fillColor: "#C9C2FF", fillOpacity: 0.9, weight: 2 }}
                 eventHandlers={{
                   click: () => mapRef.current?.closePopup(),
                 }}

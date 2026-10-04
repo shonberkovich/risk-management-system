@@ -128,7 +128,7 @@ export default function Incidents() {
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card variant="outlined" sx={{ height: "100%", borderTop: "4px solid #1e5b8a" }}>
+          <Card variant="outlined" sx={{ height: "100%", borderTop: "2px solid #8B7BFF" }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Stack spacing={0.5}>
@@ -145,7 +145,7 @@ export default function Incidents() {
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card variant="outlined" sx={{ height: "100%", borderTop: "4px solid #c62828" }}>
+          <Card variant="outlined" sx={{ height: "100%", borderTop: "2px solid #FF4D79" }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Stack spacing={0.5}>
@@ -162,7 +162,7 @@ export default function Incidents() {
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card variant="outlined" sx={{ height: "100%", borderTop: "4px solid #e69413" }}>
+          <Card variant="outlined" sx={{ height: "100%", borderTop: "2px solid #FFC857" }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Stack spacing={0.5}>
@@ -179,7 +179,7 @@ export default function Incidents() {
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card variant="outlined" sx={{ height: "100%", borderTop: "4px solid #2e7d32" }}>
+          <Card variant="outlined" sx={{ height: "100%", borderTop: "2px solid #2BE4A7" }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Stack spacing={0.5}>

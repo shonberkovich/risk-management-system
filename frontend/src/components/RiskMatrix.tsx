@@ -4,18 +4,19 @@ import Typography from "@mui/material/Typography";
 import { Fragment } from "react";
 
 import type { RiskMatrixCell } from "../api/client";
+import { ease, fonts, neon } from "../ui/tokens";
 
 const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
 const PROB_ORDER = ["high", "medium", "low"] as const; // top row = highest probability
 const SEV_ORDER = ["low", "medium", "high"] as const;
 
 function cellColor(prob: string, sev: string, count: number) {
-  if (count === 0) return "#eef1f4";
+  if (count === 0) return "rgba(238, 241, 255, 0.04)";
   const riskLevel = (PROB_ORDER.indexOf(prob as any) === 0 ? 2 : PROB_ORDER.indexOf(prob as any) === 1 ? 1 : 0) +
     (SEV_ORDER.indexOf(sev as any));
-  if (riskLevel >= 3) return "#c62828";
-  if (riskLevel >= 2) return "#e69413";
-  return "#f2c14e";
+  if (riskLevel >= 3) return neon.critical;
+  if (riskLevel >= 2) return neon.high;
+  return neon.medium;
 }
 
 export default function RiskMatrix({
@@ -34,7 +35,7 @@ export default function RiskMatrix({
       <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
         מטריצת סיכונים — הסתברות מול חומרה
       </Typography>
-      <Box sx={{ display: "grid", gridTemplateColumns: "70px repeat(3, 1fr)", gap: 0.5 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: "64px repeat(3, 1fr)", gap: 1 }}>
         <Box />
         {SEV_ORDER.map((sev) => (
           <Typography key={sev} variant="caption" textAlign="center" sx={{ fontWeight: 600 }}>
@@ -67,21 +68,48 @@ export default function RiskMatrix({
                     data-testid={`risk-matrix-cell-${prob}-${sev}`}
                     data-count={count}
                     sx={{
+                      position: "relative",
+                      overflow: "hidden",
                       bgcolor: cellColor(prob, sev, count),
-                      borderRadius: 1,
-                      height: 56,
+                      backgroundImage:
+                        count > 0
+                          ? "linear-gradient(145deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0) 45%, rgba(0,0,0,0.22) 100%)"
+                          : "none",
+                      border: count > 0 ? "1px solid rgba(255,255,255,0.22)" : "1px dashed rgba(148,163,255,0.16)",
+                      borderRadius: "14px",
+                      height: { xs: 52, sm: 60 },
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: count > 0 ? "pointer" : "default",
-                      transition: "transform 0.15s",
-                      outline: isSelected ? "3px solid" : "none",
-                      outlineColor: "primary.main",
-                      outlineOffset: "2px",
-                      "&:hover": count > 0 ? { transform: "scale(1.05)" } : undefined,
+                      boxShadow:
+                        count > 0
+                          ? `0 10px 30px -10px ${cellColor(prob, sev, count)}, inset 0 1px 0 rgba(255,255,255,0.35)`
+                          : "none",
+                      transition: `transform 0.5s ${ease.spring}, box-shadow 0.5s ${ease.out}, filter 0.4s`,
+                      outline: isSelected ? "2px solid" : "none",
+                      outlineColor: "#fff",
+                      outlineOffset: "3px",
+                      ...(isSelected && { transform: "translateY(-3px) scale(1.04)", filter: "brightness(1.12)" }),
+                      "&:hover":
+                        count > 0
+                          ? {
+                              transform: "perspective(400px) translateZ(18px) rotateX(6deg)",
+                              filter: "brightness(1.15)",
+                              boxShadow: `0 20px 40px -10px ${cellColor(prob, sev, count)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
+                            }
+                          : undefined,
                     }}
                   >
-                    <Typography sx={{ fontWeight: 800, color: count > 0 ? "white" : "text.disabled" }}>
+                    <Typography
+                      sx={{
+                        fontFamily: fonts.numeric,
+                        fontSize: "1.25rem",
+                        fontWeight: 700,
+                        color: count > 0 ? "rgba(5, 8, 23, 0.92)" : "text.disabled",
+                        textShadow: count > 0 ? "0 1px 0 rgba(255,255,255,0.35)" : "none",
+                      }}
+                    >
                       {count}
                     </Typography>
                   </Box>

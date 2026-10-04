@@ -13,6 +13,7 @@ import {
 
 import type { HistogramBucket } from "../api/client";
 import { formatIlsCompact } from "../format";
+import { neon, seriesPalette } from "../ui/tokens";
 
 /** Histogram of simulated portfolio/property loss totals, with vertical reference
  * lines marking VaR95/VaR99 so the reader can see where those percentiles sit
@@ -43,6 +44,12 @@ export default function SimulationDistributionChart({
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="rmis-sim-bar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={neon.cyan} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={neon.violet} stopOpacity={0.4} />
+          </linearGradient>
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
         <XAxis dataKey="label" tick={{ fontSize: 11 }} />
         <YAxis tick={{ fontSize: 12 }} width={40} allowDecimals={false} />
@@ -55,17 +62,17 @@ export default function SimulationDistributionChart({
         />
         <ReferenceLine
           x={chartData.reduce((closest, d) => (Math.abs((d.bucket_min + d.bucket_max) / 2 - var95) < Math.abs((closest.bucket_min + closest.bucket_max) / 2 - var95) ? d : closest)).label}
-          stroke="#e69413"
+          stroke={neon.medium}
           strokeDasharray="4 4"
-          label={{ value: "VaR 95%", fontSize: 11, fill: "#e69413", position: "top" }}
+          label={{ value: "VaR 95%", fontSize: 11, fill: neon.medium, position: "top" }}
         />
         <ReferenceLine
           x={chartData.reduce((closest, d) => (Math.abs((d.bucket_min + d.bucket_max) / 2 - var99) < Math.abs((closest.bucket_min + closest.bucket_max) / 2 - var99) ? d : closest)).label}
-          stroke="#c0521f"
+          stroke={neon.critical}
           strokeDasharray="4 4"
-          label={{ value: "VaR 99%", fontSize: 11, fill: "#c0521f", position: "top" }}
+          label={{ value: "VaR 99%", fontSize: 11, fill: neon.critical, position: "top" }}
         />
-        <Bar dataKey="count" fill="#1e5b8a" />
+        <Bar dataKey="count" fill="url(#rmis-sim-bar)" radius={[6, 6, 1, 1]} />
       </BarChart>
     </ResponsiveContainer>
   );

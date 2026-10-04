@@ -60,6 +60,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../format";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
+import { ease, fonts, gradients, ink, neon } from "../ui/tokens";
 
 interface NavLeaf {
   kind: "link";
@@ -239,6 +240,15 @@ const NAV_ENTRIES: NavEntry[] = [
   },
 ];
 
+/** Glass "pill" treatment shared by the toolbar icon buttons. */
+const NAV_ICON_SX = {
+  color: "text.primary",
+  width: { xs: 34, sm: 40 },
+  height: { xs: 34, sm: 40 },
+  bgcolor: "rgba(255,255,255,0.035)",
+  border: "1px solid rgba(148, 163, 255, 0.12)",
+} as const;
+
 // Same read-role set as routers/notifications.py's _NOTIFICATIONS_ROLES.
 const NOTIFICATIONS_ROLES = ["RISK_MANAGER", "CFO"];
 
@@ -258,14 +268,21 @@ function ConnectionStatus() {
       <Tooltip title="מחובר לרשת">
         <Chip
           icon={<WifiIcon fontSize="small" />}
-          label="מקוון"
+          label={
+            <Stack direction="row" alignItems="center" spacing={0.75} component="span">
+              <span className="rmis-pulse" />
+              <span>מקוון</span>
+            </Stack>
+          }
           size="small"
           sx={{
-            height: 26,
-            bgcolor: alpha("#ffffff", 0.14),
-            color: "#fff",
-            fontWeight: 500,
-            "& .MuiChip-icon": { color: "#fff" },
+            height: 28,
+            px: 0.5,
+            bgcolor: alpha(neon.low, 0.08),
+            border: `1px solid ${alpha(neon.low, 0.28)}`,
+            color: neon.low,
+            fontWeight: 600,
+            "& .MuiChip-icon": { color: neon.low, display: "none" },
           }}
         />
       </Tooltip>
@@ -360,59 +377,137 @@ export default function Navbar() {
         position="sticky"
         elevation={0}
         sx={{
-          bgcolor: alpha(theme.palette.primary.main, scrolled ? 0.94 : 0.82),
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          borderBottom: `1px solid ${alpha("#ffffff", 0.08)}`,
-          boxShadow: scrolled ? "0 4px 24px rgba(0,0,0,0.18)" : "none",
-          transition: "background-color 0.25s ease, box-shadow 0.25s ease",
+          top: { xs: 8, md: 14 },
+          mx: { xs: 1, sm: 1.5, md: 2.5 },
+          width: "auto",
+          overflow: "hidden",
+          isolation: "isolate",
+          borderRadius: { xs: "18px", md: "22px" },
+          color: "text.primary",
+          bgcolor: scrolled ? "rgba(7, 10, 26, 0.78)" : "rgba(10, 15, 36, 0.48)",
+          backgroundImage: `linear-gradient(90deg, ${alpha(neon.violet, 0.1)} 0%, transparent 35%, transparent 65%, ${alpha(neon.cyan, 0.08)} 100%)`,
+          backdropFilter: "blur(24px) saturate(170%)",
+          WebkitBackdropFilter: "blur(24px) saturate(170%)",
+          border: `1px solid ${scrolled ? ink.lineStrong : ink.line}`,
+          boxShadow: scrolled
+            ? `0 24px 60px -24px rgba(0,0,0,0.9), 0 0 50px -30px ${alpha(neon.violet, 0.8)}, inset 0 1px 0 rgba(255,255,255,0.07)`
+            : "inset 0 1px 0 rgba(255,255,255,0.06)",
+          transition: `background-color 0.5s ${ease.out}, box-shadow 0.5s ${ease.out}, border-color 0.5s ${ease.out}`,
+          // Thin aurora "scanline" along the bottom edge of the floating bar.
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            insetInline: "8%",
+            bottom: 0,
+            height: "1px",
+            background: `linear-gradient(90deg, transparent, ${alpha(neon.violet, 0.9)}, ${alpha(neon.cyan, 0.9)}, transparent)`,
+            opacity: scrolled ? 1 : 0.55,
+            transition: `opacity 0.5s ${ease.out}`,
+            pointerEvents: "none",
+          },
         }}
       >
-        <Toolbar sx={{ gap: 2, minHeight: 64 }}>
+        <Toolbar sx={{ gap: { xs: 0.5, sm: 2 }, minHeight: { xs: 56, md: 68 }, px: { xs: 1, sm: 2 } }}>
           {/* Brand & identity */}
           <Box
             component={Link}
             to="/"
-            sx={{ display: "flex", alignItems: "center", gap: 1.25, textDecoration: "none", color: "inherit", flexShrink: 0 }}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: { xs: 1, sm: 1.5 },
+              textDecoration: "none",
+              color: "inherit",
+              flexShrink: 0,
+              "&:hover .rmis-brand-mark": { transform: "rotateY(180deg)" },
+            }}
           >
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                borderRadius: 2,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                background: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${theme.palette.primary.dark ?? theme.palette.primary.main})`,
-                boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
-              }}
-            >
-              <ShieldIcon sx={{ fontSize: 21, color: "#fff" }} />
+            <Box sx={{ perspective: "400px", flexShrink: 0 }}>
+              <Box
+                className="rmis-brand-mark"
+                sx={{
+                  position: "relative",
+                  width: { xs: 34, sm: 40 },
+                  height: { xs: 34, sm: 40 },
+                  borderRadius: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transformStyle: "preserve-3d",
+                  transition: `transform 0.9s ${ease.out}`,
+                  background: `conic-gradient(from 210deg, ${neon.violet}, ${neon.sky}, ${neon.cyan}, ${neon.magenta}, ${neon.violet})`,
+                  boxShadow: `0 0 26px -4px ${alpha(neon.violet, 0.9)}, inset 0 1px 0 rgba(255,255,255,0.4)`,
+                  "&::after": {
+                    content: '""',
+                    position: "absolute",
+                    inset: "1.5px",
+                    borderRadius: "11.5px",
+                    background: `radial-gradient(circle at 30% 20%, #20275a, ${ink.void} 80%)`,
+                  },
+                }}
+              >
+                <ShieldIcon
+                  sx={{
+                    position: "relative",
+                    zIndex: 1,
+                    fontSize: 21,
+                    color: "#fff",
+                    filter: `drop-shadow(0 0 8px ${alpha(neon.cyan, 0.9)})`,
+                  }}
+                />
+              </Box>
             </Box>
             <Box>
               <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.1, letterSpacing: 0.2 }}>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontFamily: fonts.display,
+                    fontWeight: 800,
+                    lineHeight: 1.05,
+                    letterSpacing: "0.04em",
+                    background: gradients.heading,
+                    WebkitBackgroundClip: "text",
+                    backgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
                   RMIS
                 </Typography>
                 <Chip
                   label="Demo"
                   size="small"
                   variant="outlined"
-                  sx={{ height: 18, fontSize: 10, borderColor: alpha("#fff", 0.4), color: alpha("#fff", 0.9) }}
+                  sx={{
+                    display: { xs: "none", sm: "inline-flex" },
+                    height: 18,
+                    fontSize: 9.5,
+                    fontFamily: fonts.mono,
+                    letterSpacing: "0.12em",
+                    borderColor: alpha(neon.cyan, 0.45),
+                    color: neon.cyan,
+                    boxShadow: `0 0 12px -4px ${alpha(neon.cyan, 0.9)}`,
+                  }}
                 />
               </Stack>
               <Typography
                 variant="caption"
-                sx={{ opacity: 0.75, display: { xs: "none", sm: "block" }, lineHeight: 1.2 }}
+                sx={{
+                  color: "text.secondary",
+                  display: { xs: "none", sm: "block" },
+                  lineHeight: 1.3,
+                  letterSpacing: "0.04em",
+                }}
               >
                 מערכת לניהול סיכונים
               </Typography>
             </Box>
           </Box>
 
+          <Box sx={{ flexGrow: 1 }} />
+
           {/* Utility actions & profile */}
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0, ms: "auto" }}>
+          <Stack direction="row" spacing={{ xs: 0.5, sm: 1 }} alignItems="center" sx={{ flexShrink: 0, ms: "auto" }}>
             <Tooltip title="דיווח אירוע חדש">
               <Button
                 component={Link}
@@ -421,7 +516,7 @@ export default function Navbar() {
                 color="secondary"
                 size="small"
                 startIcon={<ReportProblemIcon fontSize="small" />}
-                sx={{ display: { xs: "none", sm: "inline-flex" }, fontWeight: 700, boxShadow: "0 2px 10px rgba(0,0,0,0.3)" }}
+                sx={{ display: { xs: "none", sm: "inline-flex" }, fontWeight: 700, borderRadius: 999, px: 2.25 }}
               >
                 דיווח אירוע
               </Button>
@@ -431,7 +526,14 @@ export default function Navbar() {
                 component={Link}
                 to="/report-incident"
                 size="small"
-                sx={{ display: { xs: "inline-flex", sm: "none" }, color: "#fff", bgcolor: alpha(theme.palette.secondary.main, 0.9) }}
+                sx={{
+                  display: { xs: "inline-flex", sm: "none" },
+                  width: 34,
+                  height: 34,
+                  color: "#02110F",
+                  backgroundImage: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${neon.sky})`,
+                  boxShadow: `0 0 18px -4px ${alpha(theme.palette.secondary.main, 0.9)}`,
+                }}
               >
                 <ReportProblemIcon fontSize="small" />
               </IconButton>
@@ -442,7 +544,7 @@ export default function Navbar() {
             </Box>
 
             <Tooltip title="דואר">
-              <IconButton component={Link} to="/emails" sx={{ color: "#fff" }}>
+              <IconButton component={Link} to="/emails" sx={NAV_ICON_SX}>
                 <Badge badgeContent={inboxUnreadCount ?? 0} color="error" max={9}>
                   <MailOutlineIcon fontSize="small" />
                 </Badge>
@@ -451,7 +553,7 @@ export default function Navbar() {
 
             {notificationsAllowed && (
               <Tooltip title="התראות">
-                <IconButton component={Link} to="/notifications" sx={{ color: "#fff" }}>
+                <IconButton component={Link} to="/notifications" sx={NAV_ICON_SX}>
                   <Badge badgeContent={notifCount} color="error" max={9}>
                     <NotificationsActiveIcon fontSize="small" />
                   </Badge>
@@ -463,20 +565,37 @@ export default function Navbar() {
               <>
                 <Box
                   onClick={(e) => setUserMenuAnchor(e.currentTarget)}
-                  sx={{ display: "flex", alignItems: "center", gap: 1, cursor: "pointer", borderRadius: 2, px: 0.5, py: 0.5, "&:hover": { bgcolor: alpha("#fff", 0.08) } }}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    cursor: "pointer",
+                    borderRadius: 999,
+                    pl: { xs: 0.25, sm: 0.5 },
+                    pr: { xs: 0.25, md: 1.25 },
+                    py: { xs: 0.25, sm: 0.5 },
+                    border: `1px solid ${ink.line}`,
+                    bgcolor: "rgba(255,255,255,0.03)",
+                    transition: `background-color 0.35s ${ease.out}, border-color 0.35s, box-shadow 0.45s ${ease.out}`,
+                    "&:hover": {
+                      bgcolor: alpha(neon.violet, 0.1),
+                      borderColor: alpha(neon.violet, 0.45),
+                      boxShadow: `0 0 28px -8px ${alpha(neon.violet, 0.8)}`,
+                    },
+                  }}
                 >
-                  <Avatar sx={{ width: 34, height: 34, bgcolor: alpha("#fff", 0.22), color: "#fff", fontSize: 14, fontWeight: 700 }}>
+                  <Avatar sx={{ width: { xs: 30, sm: 34 }, height: { xs: 30, sm: 34 }, fontSize: 13, fontWeight: 700 }}>
                     {initials}
                   </Avatar>
                   <Box sx={{ display: { xs: "none", md: "block" }, textAlign: "right", lineHeight: 1.1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: "#fff", lineHeight: 1.2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: "text.primary", lineHeight: 1.2 }}>
                       {user.full_name}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: alpha("#fff", 0.75) }}>
+                    <Typography variant="caption" sx={{ color: neon.cyan, fontWeight: 500 }}>
                       {ROLE_LABELS[user.role] ?? user.role}
                     </Typography>
                   </Box>
-                  <KeyboardArrowDownIcon sx={{ color: "#fff", fontSize: 18, display: { xs: "none", md: "block" } }} />
+                  <KeyboardArrowDownIcon sx={{ color: "text.secondary", fontSize: 18, display: { xs: "none", md: "block" } }} />
                 </Box>
                 <Menu
                   anchorEl={userMenuAnchor}
@@ -516,7 +635,7 @@ export default function Navbar() {
             )}
 
             <Tooltip title="ניווט">
-              <IconButton onClick={() => setMobileOpen(true)} sx={{ color: "#fff" }}>
+              <IconButton onClick={() => setMobileOpen(true)} sx={NAV_ICON_SX}>
                 <MenuIcon />
               </IconButton>
             </Tooltip>
@@ -533,34 +652,40 @@ export default function Navbar() {
         anchor="right"
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
-        PaperProps={{ sx: { width: 300, display: "flex", flexDirection: "column" } }}
+        PaperProps={{ sx: { width: { xs: "88vw", sm: 340 }, maxWidth: 360, display: "flex", flexDirection: "column" } }}
         data-testid="nav-drawer"
       >
         <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Box
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 1.5,
+                width: 34,
+                height: 34,
+                borderRadius: "11px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                background: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${theme.palette.primary.main})`,
+                background: `conic-gradient(from 210deg, ${neon.violet}, ${neon.sky}, ${neon.cyan}, ${neon.magenta}, ${neon.violet})`,
+                boxShadow: `0 0 22px -4px ${alpha(neon.violet, 0.9)}`,
               }}
             >
               <ShieldIcon sx={{ fontSize: 18, color: "#fff" }} />
             </Box>
-            <Typography variant="subtitle1" fontWeight={800}>
-              RMIS
-            </Typography>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800} sx={{ fontFamily: fonts.display, letterSpacing: "0.04em", lineHeight: 1.1 }}>
+                RMIS
+              </Typography>
+              <Typography variant="overline" sx={{ display: "block", fontSize: 9, lineHeight: 1.4, color: neon.cyan }}>
+                NAVIGATION
+              </Typography>
+            </Box>
           </Stack>
           <IconButton onClick={() => setMobileOpen(false)} size="small">
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
         <Divider />
-        <List sx={{ flexGrow: 1, overflowY: "auto" }}>
+        <List sx={{ flexGrow: 1, overflowY: "auto", py: 1.5 }}>
           {visibleEntries.map((entry) =>
             entry.kind === "link" ? (
               <ListItemButton
@@ -594,7 +719,7 @@ export default function Navbar() {
                         to={item.to}
                         selected={isActive(item.to)}
                         onClick={() => setMobileOpen(false)}
-                        sx={{ pl: 5 }}
+                        sx={{ pl: 5, "& .MuiListItemText-primary": { fontSize: "0.9rem" } }}
                         data-testid={`nav-link-${item.to}`}
                       >
                         <ListItemIcon>{item.icon}</ListItemIcon>
@@ -611,7 +736,7 @@ export default function Navbar() {
         {user && (
           <Box sx={{ p: 2 }}>
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-              <Avatar sx={{ bgcolor: "primary.main" }}>{initials}</Avatar>
+              <Avatar>{initials}</Avatar>
               <Box>
                 <Typography variant="body2" fontWeight={700}>
                   {user.full_name}
