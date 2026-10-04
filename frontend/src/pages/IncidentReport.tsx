@@ -47,6 +47,7 @@ import {
 import MediaUploader from "../components/MediaUploader";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
+import { useTokens } from "../ui/useTokens";
 import {
   enqueueDraftSubmit,
   enqueueDraftUpdate,
@@ -94,6 +95,10 @@ const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
 const IMPACT_OPTIONS: OperationalImpact[] = ["FULL_OPERATION", "PARTIAL_SHUTDOWN", "FULL_SHUTDOWN"];
 
 export default function IncidentReport() {
+  // Pill colors: the option hexes are the dark-mode set; adapt() swaps in the deeper
+  // light-mode equivalents, and the selected-pill ink flips to white on those.
+  const { adapt, mode } = useTokens();
+  const pillInk = mode === "dark" ? "#05081A" : "#FFFFFF";
   const [activeStep, setActiveStep] = useState(0);
   const [property, setProperty] = useState<Property | null>(null);
   const [areaOrBuilding, setAreaOrBuilding] = useState("");
@@ -615,12 +620,12 @@ export default function IncidentReport() {
                       variant="outlined"
                       onClick={() => setHazardType(h.value)}
                       style={{
-                        backgroundColor: hazardType === h.value ? h.color : "transparent",
-                        color: hazardType === h.value ? "#05081A" : h.color,
-                        borderColor: h.color,
-                        boxShadow: hazardType === h.value ? `0 12px 30px -10px ${h.color}, 0 0 0 1px ${h.color}` : undefined,
+                        backgroundColor: hazardType === h.value ? adapt(h.color) : "transparent",
+                        color: hazardType === h.value ? pillInk : adapt(h.color),
+                        borderColor: adapt(h.color),
+                        boxShadow: hazardType === h.value ? `0 12px 30px -10px ${adapt(h.color)}, 0 0 0 1px ${adapt(h.color)}` : undefined,
                       }}
-                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: h.color, color: "#05081A", transform: "translateY(-2px)" } }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: adapt(h.color), color: pillInk, transform: "translateY(-2px)" } }}
                     >
                       {HAZARD_LABELS[h.value]}
                     </Button>
@@ -639,12 +644,12 @@ export default function IncidentReport() {
                       variant="outlined"
                       onClick={() => setSeverity(s.value)}
                       style={{
-                        backgroundColor: severity === s.value ? s.color : "transparent",
-                        color: severity === s.value ? "#05081A" : s.color,
-                        borderColor: s.color,
-                        boxShadow: severity === s.value ? `0 12px 30px -10px ${s.color}, 0 0 0 1px ${s.color}` : undefined,
+                        backgroundColor: severity === s.value ? adapt(s.color) : "transparent",
+                        color: severity === s.value ? pillInk : adapt(s.color),
+                        borderColor: adapt(s.color),
+                        boxShadow: severity === s.value ? `0 12px 30px -10px ${adapt(s.color)}, 0 0 0 1px ${adapt(s.color)}` : undefined,
                       }}
-                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: s.color, color: "#05081A", transform: "translateY(-2px)" } }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: adapt(s.color), color: pillInk, transform: "translateY(-2px)" } }}
                     >
                       {SEVERITY_LABELS[s.value]}
                     </Button>

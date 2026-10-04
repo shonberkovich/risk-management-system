@@ -60,7 +60,9 @@ import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../format";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
-import { ease, fonts, gradients, ink, neon } from "../ui/tokens";
+import { ease, fonts } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
+import ThemeToggle from "./ThemeToggle";
 
 interface NavLeaf {
   kind: "link";
@@ -241,19 +243,21 @@ const NAV_ENTRIES: NavEntry[] = [
 ];
 
 /** Glass "pill" treatment shared by the toolbar icon buttons. */
-const NAV_ICON_SX = {
-  color: "text.primary",
-  width: { xs: 34, sm: 40 },
-  height: { xs: 34, sm: 40 },
-  bgcolor: "rgba(255,255,255,0.035)",
-  border: "1px solid rgba(148, 163, 255, 0.12)",
-} as const;
+const navIconSx = (isDark: boolean) =>
+  ({
+    color: "text.primary",
+    width: { xs: 34, sm: 40 },
+    height: { xs: 34, sm: 40 },
+    bgcolor: isDark ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.7)",
+    border: `1px solid ${isDark ? "rgba(148, 163, 255, 0.12)" : "rgba(30, 38, 96, 0.12)"}`,
+  }) as const;
 
 // Same read-role set as routers/notifications.py's _NOTIFICATIONS_ROLES.
 const NOTIFICATIONS_ROLES = ["RISK_MANAGER", "CFO"];
 
 /** Small chip: shows live online/offline state and, when relevant, the offline-sync queue. */
 function ConnectionStatus() {
+  const { neon } = useTokens();
   const online = useOnlineStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -319,6 +323,9 @@ export default function Navbar() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const theme = useTheme();
+  const { ink, neon, gradients } = useTokens();
+  const isDark = theme.palette.mode === "dark";
+  const NAV_ICON_SX = navIconSx(isDark);
   const scrolled = useScrollTrigger({ disableHysteresis: true, threshold: 8 });
 
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -384,14 +391,20 @@ export default function Navbar() {
           isolation: "isolate",
           borderRadius: { xs: "18px", md: "22px" },
           color: "text.primary",
-          bgcolor: scrolled ? "rgba(7, 10, 26, 0.78)" : "rgba(10, 15, 36, 0.48)",
+          bgcolor: isDark
+            ? scrolled
+              ? "rgba(7, 10, 26, 0.78)"
+              : "rgba(10, 15, 36, 0.48)"
+            : scrolled
+              ? "rgba(255, 255, 255, 0.82)"
+              : "rgba(255, 255, 255, 0.55)",
           backgroundImage: `linear-gradient(90deg, ${alpha(neon.violet, 0.1)} 0%, transparent 35%, transparent 65%, ${alpha(neon.cyan, 0.08)} 100%)`,
           backdropFilter: "blur(24px) saturate(170%)",
           WebkitBackdropFilter: "blur(24px) saturate(170%)",
           border: `1px solid ${scrolled ? ink.lineStrong : ink.line}`,
           boxShadow: scrolled
-            ? `0 24px 60px -24px rgba(0,0,0,0.9), 0 0 50px -30px ${alpha(neon.violet, 0.8)}, inset 0 1px 0 rgba(255,255,255,0.07)`
-            : "inset 0 1px 0 rgba(255,255,255,0.06)",
+            ? `0 24px 60px -24px ${isDark ? "rgba(0,0,0,0.9)" : "rgba(30,38,96,0.32)"}, 0 0 50px -30px ${alpha(neon.violet, 0.8)}, inset 0 1px 0 ${isDark ? "rgba(255,255,255,0.07)" : "#fff"}`
+            : `inset 0 1px 0 ${isDark ? "rgba(255,255,255,0.06)" : "#fff"}`,
           transition: `background-color 0.5s ${ease.out}, box-shadow 0.5s ${ease.out}, border-color 0.5s ${ease.out}`,
           // Thin aurora "scanline" along the bottom edge of the floating bar.
           "&::before": {
@@ -442,7 +455,7 @@ export default function Navbar() {
                     position: "absolute",
                     inset: "1.5px",
                     borderRadius: "11.5px",
-                    background: `radial-gradient(circle at 30% 20%, #20275a, ${ink.void} 80%)`,
+                    background: "radial-gradient(circle at 30% 20%, #20275a, #02030A 80%)",
                   },
                 }}
               >
@@ -543,6 +556,8 @@ export default function Navbar() {
               <ConnectionStatus />
             </Box>
 
+            <ThemeToggle />
+
             <Tooltip title="דואר">
               <IconButton component={Link} to="/emails" sx={NAV_ICON_SX}>
                 <Badge badgeContent={inboxUnreadCount ?? 0} color="error" max={9}>
@@ -575,7 +590,7 @@ export default function Navbar() {
                     pr: { xs: 0.25, md: 1.25 },
                     py: { xs: 0.25, sm: 0.5 },
                     border: `1px solid ${ink.line}`,
-                    bgcolor: "rgba(255,255,255,0.03)",
+                    bgcolor: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.7)",
                     transition: `background-color 0.35s ${ease.out}, border-color 0.35s, box-shadow 0.45s ${ease.out}`,
                     "&:hover": {
                       bgcolor: alpha(neon.violet, 0.1),
@@ -745,6 +760,7 @@ export default function Navbar() {
               </Box>
             </Stack>
             <Stack spacing={1}>
+              <ThemeToggle variant="row" />
               <Button
                 fullWidth
                 variant="outlined"

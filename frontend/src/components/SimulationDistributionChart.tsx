@@ -13,7 +13,7 @@ import {
 
 import type { HistogramBucket } from "../api/client";
 import { formatIlsCompact } from "../format";
-import { neon, seriesPalette } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 /** Histogram of simulated portfolio/property loss totals, with vertical reference
  * lines marking VaR95/VaR99 so the reader can see where those percentiles sit
@@ -28,6 +28,7 @@ export default function SimulationDistributionChart({
   var99: number;
 }) {
   const theme = useTheme();
+  const { neon, seriesPalette } = useTokens();
   const chartData = distribution.map((b) => ({
     ...b,
     label: formatIlsCompact((b.bucket_min + b.bucket_max) / 2),

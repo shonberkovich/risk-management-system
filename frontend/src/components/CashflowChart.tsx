@@ -16,7 +16,7 @@ import {
 
 import type { CashflowSummary } from "../api/client";
 import { formatIlsCompact } from "../format";
-import { neon, seriesPalette } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 const monthLabel = (month: string) => {
   if (month === "unscheduled") return "לא מתוזמן";
@@ -26,6 +26,7 @@ const monthLabel = (month: string) => {
 
 export default function CashflowChart({ data }: { data: CashflowSummary }) {
   const theme = useTheme();
+  const { neon, seriesPalette } = useTokens();
   const chartData = data.monthly.map((d) => ({ ...d, label: monthLabel(d.month) }));
 
   return (

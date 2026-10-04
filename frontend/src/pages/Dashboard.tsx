@@ -42,7 +42,8 @@ import RiskMap from "../components/RiskMap";
 import RiskCore3D from "../components/RiskCore3D";
 import RiskMatrix from "../components/RiskMatrix";
 import { formatIlsCompact, formatPercent } from "../format";
-import { ink, neon } from "../ui/tokens";
+import type { Tokens } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 import FieldWorkerDashboard from "./FieldWorkerDashboard";
 
 const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
@@ -87,6 +88,11 @@ function ExecutiveDashboard() {
   const cashflow = useQuery({ queryKey: ["cashflow"], queryFn: () => fetchCashflowSummary() });
   const claims = useQuery({ queryKey: ["claims"], queryFn: () => fetchClaims() });
   const [selectedCell, setSelectedCell] = useState<RiskMatrixCell | null>(null);
+  const tokens = useTokens();
+  const { neon } = tokens;
+  const GLASS_TILE_SX = glassTileSx(tokens);
+  const HERO_PILL_SX = heroPillSx(tokens);
+  const TILE_TITLE_SX = tileTitleSx(tokens);
 
   const filteredMapPoints = useMemo(() => {
     if (!mapPoints.data) return mapPoints.data;
@@ -292,19 +298,24 @@ const BENTO_SX = {
   alignItems: "stretch",
 } as const;
 
-const GLASS_TILE_SX = {
-  position: "relative",
-  isolation: "isolate",
-  overflow: "hidden",
-  borderRadius: "26px",
-  border: `1px solid ${ink.line}`,
-  bgcolor: "rgba(13, 19, 44, 0.5)",
-  backdropFilter: "blur(22px) saturate(160%)",
-  WebkitBackdropFilter: "blur(22px) saturate(160%)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 30px 80px -40px rgba(0,0,0,0.9)",
-} as const;
+const glassTileSx = ({ mode, ink }: Tokens) =>
+  ({
+    position: "relative",
+    isolation: "isolate",
+    overflow: "hidden",
+    borderRadius: "26px",
+    border: `1px solid ${ink.line}`,
+    bgcolor: mode === "dark" ? "rgba(13, 19, 44, 0.5)" : "rgba(255, 255, 255, 0.62)",
+    backdropFilter: "blur(22px) saturate(160%)",
+    WebkitBackdropFilter: "blur(22px) saturate(160%)",
+    boxShadow:
+      mode === "dark"
+        ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 30px 80px -40px rgba(0,0,0,0.9)"
+        : "inset 0 1px 0 #fff, 0 30px 80px -44px rgba(30,38,96,0.35)",
+  }) as const;
 
-const HERO_PILL_SX = {
+const heroPillSx = ({ neon }: Tokens) =>
+  ({
   display: "inline-flex",
   alignItems: "center",
   gap: 1,
@@ -317,9 +328,10 @@ const HERO_PILL_SX = {
   border: `1px solid ${alpha(neon.low, 0.3)}`,
   bgcolor: alpha(neon.low, 0.07),
   backdropFilter: "blur(8px)",
-} as const;
+  }) as const;
 
-const TILE_TITLE_SX = {
+const tileTitleSx = ({ neon }: Tokens) =>
+  ({
   fontWeight: 700,
   display: "flex",
   alignItems: "center",
@@ -333,4 +345,4 @@ const TILE_TITLE_SX = {
     boxShadow: `0 0 10px ${neon.cyan}`,
     flexShrink: 0,
   },
-} as const;
+  }) as const;

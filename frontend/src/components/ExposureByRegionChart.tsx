@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 
 import type { RegionExposure } from "../api/client";
 import { formatIlsCompact } from "../format";
-import { neon, seriesPalette } from "../ui/tokens";
+import { useTokens } from "../ui/useTokens";
 
 /** Grouped TIV/MFL bar chart per geographic region (TODO_SPEC.md §8, "פילוח חשיפה
  * בדוח הנהלה") — GET /analytics/exposure-by-region was already fetched in Reports.tsx
@@ -12,6 +12,7 @@ import { neon, seriesPalette } from "../ui/tokens";
  * visualization of its own; this is that missing piece. */
 export default function ExposureByRegionChart({ data }: { data: RegionExposure[] }) {
   const theme = useTheme();
+  const { neon, seriesPalette } = useTokens();
   const chartData = data.map((d) => ({ name: d.region_name, tiv: d.tiv, mfl: d.mfl }));
 
   return (

@@ -215,12 +215,16 @@ export default function AIAssistant() {
         borderRadius: "26px",
         overflow: "hidden",
         zIndex: 1300,
-        bgcolor: "rgba(8, 12, 30, 0.78)",
+        bgcolor: (theme) => (theme.palette.mode === "dark" ? "rgba(8, 12, 30, 0.78)" : "rgba(255, 255, 255, 0.86)"),
         backgroundImage: "radial-gradient(120% 50% at 50% 0%, rgba(139,123,255,0.22) 0%, transparent 60%)",
         backdropFilter: "blur(28px) saturate(170%)",
         WebkitBackdropFilter: "blur(28px) saturate(170%)",
-        border: "1px solid rgba(148,163,255,0.22)",
-        boxShadow: "0 40px 100px -30px rgba(0,0,0,0.95), 0 0 80px -30px rgba(139,123,255,0.7)",
+        border: "1px solid",
+        borderColor: "divider",
+        boxShadow: (theme) =>
+          theme.palette.mode === "dark"
+            ? "0 40px 100px -30px rgba(0,0,0,0.95), 0 0 80px -30px rgba(139,123,255,0.7)"
+            : "0 40px 100px -30px rgba(30,38,96,0.45), 0 0 80px -30px rgba(102,80,242,0.4)",
         animation: "rmis-dialog-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
         transformOrigin: "bottom left",
       }}
@@ -233,7 +237,8 @@ export default function AIAssistant() {
           px: 2,
           py: 1.75,
           color: "text.primary",
-          borderBottom: "1px solid rgba(148,163,255,0.14)",
+          borderBottom: "1px solid",
+          borderBottomColor: "divider",
           backgroundImage: "linear-gradient(90deg, rgba(139,123,255,0.18), rgba(46,230,214,0.08))",
         }}
       >
@@ -343,7 +348,7 @@ export default function AIAssistant() {
                     ) : turn.actionCard ? (
                       <ActionCard actionId={turn.actionCard.actionId} proposal={turn.actionCard.proposal} />
                     ) : (
-                      <Paper variant="outlined" sx={{ px: 1.5, py: 1, bgcolor: "rgba(255,255,255,0.04)", borderRadius: "16px 16px 16px 4px" }}>
+                      <Paper variant="outlined" sx={{ px: 1.5, py: 1, bgcolor: "action.hover", borderRadius: "16px 16px 16px 4px" }}>
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                           <StreamedAnswer text={turn.text} />
                         </Typography>

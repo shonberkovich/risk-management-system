@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="description" content="RMIS - מערכת ניהול סיכונים ותביעות ביטוח" />
     <meta name="theme-color" content="#02030A" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -11,6 +11,23 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="RMIS" />
     <title>RMIS - מערכת ניהול סיכונים</title>
+    <!-- Apply the stored light/dark choice before first paint (no flash of the wrong
+         theme); ui/ColorMode.tsx owns the mode after React mounts. -->
+    <script>
+      (function () {
+        var mode = "dark";
+        try {
+          var stored = localStorage.getItem("rmis-color-mode");
+          if (stored === "light" || stored === "dark") mode = stored;
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", mode);
+        document.documentElement.style.colorScheme = mode;
+      })();
+    </script>
+    <style>
+      html, body { background: #02030a; }
+      html[data-theme="light"], html[data-theme="light"] body { background: #f3f4fa; }
+    </style>
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon.svg" />
@@ -19,7 +36,7 @@
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
   </head>
-  <body style="background:#02030A">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
