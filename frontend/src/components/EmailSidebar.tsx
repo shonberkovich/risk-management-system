@@ -145,7 +145,7 @@ function CreateLabelForm() {
                 height: 22,
                 borderRadius: "50%",
                 bgcolor: c,
-                border: color === c ? "2px solid" : "1px solid rgba(0,0,0,0.2)",
+                border: color === c ? "2px solid" : "1px solid rgba(255,255,255,0.22)",
                 borderColor: color === c ? "text.primary" : undefined,
                 cursor: "pointer",
                 p: 0,

@@ -12,6 +12,8 @@ import { registerAutoSync } from "./offline/syncQueue";
 import { registerServiceWorker } from "./registerServiceWorker";
 import { rtlCache } from "./rtlCache";
 import { theme } from "./theme";
+import { installSpotlight } from "./ui/spotlight";
+import "./ui/spatial.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } },
@@ -35,4 +37,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 registerServiceWorker();
+installSpotlight();
 registerAutoSync();

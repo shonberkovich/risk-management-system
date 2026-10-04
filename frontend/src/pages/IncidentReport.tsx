@@ -74,21 +74,22 @@ const PILL_BUTTON_SX = {
   minHeight: 48,
   fontSize: "1rem",
   fontWeight: 600,
+  transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s, color 0.3s",
 };
 
 const HAZARD_OPTIONS: { value: HazardType; color: string }[] = [
-  { value: "FLOOD", color: "#0277bd" },
-  { value: "FIRE", color: "#c62828" },
-  { value: "STRUCTURAL_FAILURE", color: "#6d4c41" },
-  { value: "THEFT", color: "#6a1b9a" },
-  { value: "ELECTRICAL", color: "#f9a825" },
-  { value: "OTHER", color: "#616161" },
+  { value: "FLOOD", color: "#4CC9F0" },
+  { value: "FIRE", color: "#FF4D79" },
+  { value: "STRUCTURAL_FAILURE", color: "#D9A47A" },
+  { value: "THEFT", color: "#B79CFF" },
+  { value: "ELECTRICAL", color: "#FFC857" },
+  { value: "OTHER", color: "#A3ACCF" },
 ];
 const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
-  { value: "LOW", color: "#2e7d32" },
-  { value: "MEDIUM", color: "#e69413" },
-  { value: "HIGH", color: "#e64a19" },
-  { value: "CRITICAL", color: "#c62828" },
+  { value: "LOW", color: "#2BE4A7" },
+  { value: "MEDIUM", color: "#FFC857" },
+  { value: "HIGH", color: "#FF8A4C" },
+  { value: "CRITICAL", color: "#FF4D79" },
 ];
 const IMPACT_OPTIONS: OperationalImpact[] = ["FULL_OPERATION", "PARTIAL_SHUTDOWN", "FULL_SHUTDOWN"];
 
@@ -615,10 +616,11 @@ export default function IncidentReport() {
                       onClick={() => setHazardType(h.value)}
                       style={{
                         backgroundColor: hazardType === h.value ? h.color : "transparent",
-                        color: hazardType === h.value ? "white" : h.color,
+                        color: hazardType === h.value ? "#05081A" : h.color,
                         borderColor: h.color,
+                        boxShadow: hazardType === h.value ? `0 12px 30px -10px ${h.color}, 0 0 0 1px ${h.color}` : undefined,
                       }}
-                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: h.color, color: "white" } }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: h.color, color: "#05081A", transform: "translateY(-2px)" } }}
                     >
                       {HAZARD_LABELS[h.value]}
                     </Button>
@@ -638,10 +640,11 @@ export default function IncidentReport() {
                       onClick={() => setSeverity(s.value)}
                       style={{
                         backgroundColor: severity === s.value ? s.color : "transparent",
-                        color: severity === s.value ? "white" : s.color,
+                        color: severity === s.value ? "#05081A" : s.color,
                         borderColor: s.color,
+                        boxShadow: severity === s.value ? `0 12px 30px -10px ${s.color}, 0 0 0 1px ${s.color}` : undefined,
                       }}
-                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: s.color, color: "white" } }}
+                      sx={{ ...PILL_BUTTON_SX, "&:hover": { bgcolor: s.color, color: "#05081A", transform: "translateY(-2px)" } }}
                     >
                       {SEVERITY_LABELS[s.value]}
                     </Button>

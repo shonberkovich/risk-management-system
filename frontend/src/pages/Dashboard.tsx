@@ -3,14 +3,15 @@ import CloseIcon from "@mui/icons-material/Close";
 import GavelIcon from "@mui/icons-material/Gavel";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import WarningIcon from "@mui/icons-material/Warning";
+import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { alpha } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -38,8 +39,10 @@ import HazardChart from "../components/HazardChart";
 import KpiCard from "../components/KpiCard";
 import LossRatioTrendChart from "../components/LossRatioTrendChart";
 import RiskMap from "../components/RiskMap";
+import RiskCore3D from "../components/RiskCore3D";
 import RiskMatrix from "../components/RiskMatrix";
 import { formatIlsCompact, formatPercent } from "../format";
+import { ink, neon } from "../ui/tokens";
 import FieldWorkerDashboard from "./FieldWorkerDashboard";
 
 const BAND_LABELS: Record<string, string> = { low: "נמוכה", medium: "בינונית", high: "גבוהה" };
@@ -111,25 +114,59 @@ function ExecutiveDashboard() {
   }
 
   return (
-    <Stack spacing={3}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        דשבורד מנהלים
-      </Typography>
+    <Stack spacing={{ xs: 2, md: 2.5 }}>
+      {/* ---- Bento row 1: hero (title + 3D Risk Core) beside a 2×2 KPI cluster ---- */}
+      <Box className="rmis-bento" sx={BENTO_SX}>
+        <Box
+          className="rmis-spot"
+          sx={{
+            ...GLASS_TILE_SX,
+            gridColumn: { xs: "1 / -1", lg: "span 7" },
+            minHeight: { xs: "auto", md: 260 },
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 2,
+            p: { xs: 2.5, sm: 3.5, md: 4 },
+            backgroundImage: `radial-gradient(90% 120% at 100% 0%, ${alpha(neon.violet, 0.22)} 0%, transparent 55%), radial-gradient(70% 90% at 0% 100%, ${alpha(neon.cyan, 0.12)} 0%, transparent 60%)`,
+          }}
+        >
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              דשבורד מנהלים
+            </Typography>
+            <Typography variant="body1" sx={{ color: "text.secondary", mt: 1.5, maxWidth: 520, lineHeight: 1.7 }}>
+              תמונת מצב חיה של תיק הנכסים — חשיפה, אירועים, תביעות ותזרים, במסך אחד.
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 2.5, flexWrap: "wrap", rowGap: 1 }}>
+              <Box sx={HERO_PILL_SX}>
+                <span className="rmis-pulse" />
+                ניטור בזמן אמת
+              </Box>
+              <Box sx={{ ...HERO_PILL_SX, color: neon.violet, borderColor: alpha(neon.violet, 0.35), bgcolor: alpha(neon.violet, 0.08) }}>
+                ISO 31000
+              </Box>
+            </Stack>
+          </Box>
+          <Box sx={{ display: { xs: "none", sm: "block" }, flexShrink: 0, mx: { sm: 3, md: 5 } }}>
+            <RiskCore3D size={200} />
+          </Box>
+        </Box>
 
-      {alerts.data && (
-        <AlertsBanner alerts={alerts.data} weatherAlerts={weatherAlerts.data} homeFrontAlerts={homeFrontAlerts.data} />
-      )}
-
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            gridColumn: { xs: "1 / -1", lg: "span 5" },
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))", lg: "repeat(2, minmax(0, 1fr))" },
+            gap: { xs: 1.5, md: 2 },
+          }}
+        >
           <KpiCard
             label="סך שווי מבוטח (TIV)"
             value={formatIlsCompact(kpis.data?.tiv ?? 0)}
             icon={<AccountBalanceWalletIcon color="primary" fontSize="large" />}
             accentColor="#1e5b8a"
           />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="חשיפה מקסימלית (MFL)"
             value={formatIlsCompact(kpis.data?.mfl ?? 0)}
@@ -137,8 +174,6 @@ function ExecutiveDashboard() {
             icon={<WarningIcon color="warning" fontSize="large" />}
             accentColor="#e69413"
           />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="תביעות פתוחות"
             value={`${kpis.data?.open_claims_count ?? 0}`}
@@ -146,8 +181,6 @@ function ExecutiveDashboard() {
             icon={<GavelIcon color="secondary" fontSize="large" />}
             accentColor="#c0521f"
           />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="יחס נזקים (Loss Ratio)"
             value={formatPercent(kpis.data?.loss_ratio ?? 0)}
@@ -156,66 +189,77 @@ function ExecutiveDashboard() {
             icon={<ShowChartIcon color="success" fontSize="large" />}
             accentColor="#2e7d32"
           />
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
-          <Card variant="outlined">
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                  מפת חשיפה מרחבית ואירועים
-                </Typography>
-                {selectedCell && (
-                  <Chip
-                    size="small"
-                    color="primary"
-                    onDelete={() => setSelectedCell(null)}
-                    deleteIcon={<CloseIcon />}
-                    label={`מסונן: הסתברות ${BAND_LABELS[selectedCell.probability_band]} × חומרה ${BAND_LABELS[selectedCell.severity_band]} (${selectedCell.property_ids.length} נכסים)`}
-                  />
-                )}
-              </Stack>
-              {filteredMapPoints && (
-                <RiskMap
-                  points={filteredMapPoints}
-                  properties={properties.data}
-                  incidents={incidents.data}
-                  exposureClusters={exposureClusters.data}
+      {alerts.data && (
+        <AlertsBanner alerts={alerts.data} weatherAlerts={weatherAlerts.data} homeFrontAlerts={homeFrontAlerts.data} />
+      )}
+
+      {/* ---- Bento row 2: spatial map (tall) + risk matrix + hazard mix ---- */}
+      <Box className="rmis-bento" sx={BENTO_SX}>
+        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 8" }, gridRow: { lg: "span 2" } }}>
+          <CardContent>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              sx={{ mb: 1.5, flexWrap: "wrap", gap: 1 }}
+            >
+              <Typography variant="subtitle2" sx={TILE_TITLE_SX}>
+                מפת חשיפה מרחבית ואירועים
+              </Typography>
+              {selectedCell && (
+                <Chip
+                  size="small"
+                  color="primary"
+                  onDelete={() => setSelectedCell(null)}
+                  deleteIcon={<CloseIcon />}
+                  label={`מסונן: הסתברות ${BAND_LABELS[selectedCell.probability_band]} × חומרה ${BAND_LABELS[selectedCell.severity_band]} (${selectedCell.property_ids.length} נכסים)`}
                 />
               )}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Stack spacing={2}>
-            <Card variant="outlined">
-              <CardContent>
-                {riskMatrix.data && (
-                  <RiskMatrix cells={riskMatrix.data} selectedCell={selectedCell} onSelectCell={setSelectedCell} />
-                )}
-              </CardContent>
-            </Card>
-            <Card variant="outlined">
-              <CardContent>{hazardDist.data && <HazardChart data={hazardDist.data} />}</CardContent>
-            </Card>
-          </Stack>
-        </Grid>
-      </Grid>
+            </Stack>
+            {filteredMapPoints && (
+              <RiskMap
+                points={filteredMapPoints}
+                properties={properties.data}
+                incidents={incidents.data}
+                exposureClusters={exposureClusters.data}
+              />
+            )}
+          </CardContent>
+        </Card>
+        <Card sx={{ gridColumn: { xs: "1 / -1", md: "span 6", lg: "span 4" } }}>
+          <CardContent>
+            {riskMatrix.data && (
+              <RiskMatrix cells={riskMatrix.data} selectedCell={selectedCell} onSelectCell={setSelectedCell} />
+            )}
+          </CardContent>
+        </Card>
+        <Card sx={{ gridColumn: { xs: "1 / -1", md: "span 6", lg: "span 4" } }}>
+          <CardContent>{hazardDist.data && <HazardChart data={hazardDist.data} />}</CardContent>
+        </Card>
+      </Box>
 
-      <Card variant="outlined">
-        <CardContent>{lossRatioTrend.data && <LossRatioTrendChart data={lossRatioTrend.data} />}</CardContent>
-      </Card>
+      {/* ---- Bento row 3: asymmetric 5/7 split of the two financial trend tiles ---- */}
+      <Box className="rmis-bento" sx={BENTO_SX}>
+        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 5" } }}>
+          <CardContent>{lossRatioTrend.data && <LossRatioTrendChart data={lossRatioTrend.data} />}</CardContent>
+        </Card>
+        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 7" } }}>
+          <CardContent>{cashflow.data && <CashflowChart data={cashflow.data} />}</CardContent>
+        </Card>
+      </Box>
 
-      <Card variant="outlined">
-        <CardContent>{cashflow.data && <CashflowChart data={cashflow.data} />}</CardContent>
-      </Card>
-
-      <Card variant="outlined">
+      <Card>
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mb: 1.5, flexWrap: "wrap", gap: 1 }}
+          >
+            <Typography variant="subtitle2" sx={TILE_TITLE_SX}>
               אירועים בטיפול וסטטוס תביעות ביטוח פתוחות
             </Typography>
             {selectedCell && (
@@ -238,3 +282,55 @@ function ExecutiveDashboard() {
     </Stack>
   );
 }
+
+// ---- Presentation-only style constants for the bento layout ----
+
+const BENTO_SX = {
+  display: "grid",
+  gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(12, minmax(0, 1fr))" },
+  gap: { xs: 1.5, md: 2.5 },
+  alignItems: "stretch",
+} as const;
+
+const GLASS_TILE_SX = {
+  position: "relative",
+  isolation: "isolate",
+  overflow: "hidden",
+  borderRadius: "26px",
+  border: `1px solid ${ink.line}`,
+  bgcolor: "rgba(13, 19, 44, 0.5)",
+  backdropFilter: "blur(22px) saturate(160%)",
+  WebkitBackdropFilter: "blur(22px) saturate(160%)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 30px 80px -40px rgba(0,0,0,0.9)",
+} as const;
+
+const HERO_PILL_SX = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 1,
+  px: 1.5,
+  py: 0.6,
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 600,
+  color: neon.low,
+  border: `1px solid ${alpha(neon.low, 0.3)}`,
+  bgcolor: alpha(neon.low, 0.07),
+  backdropFilter: "blur(8px)",
+} as const;
+
+const TILE_TITLE_SX = {
+  fontWeight: 700,
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  "&::before": {
+    content: '""',
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    bgcolor: neon.cyan,
+    boxShadow: `0 0 10px ${neon.cyan}`,
+    flexShrink: 0,
+  },
+} as const;
