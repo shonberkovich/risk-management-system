@@ -16,7 +16,7 @@ import ClaimPaymentsDialog from "../components/ClaimPaymentsDialog";
 import ClaimUpdateDialog from "../components/ClaimUpdateDialog";
 import ClaimsTable from "../components/ClaimsTable";
 import { exportClaimsToExcel } from "../exportClaims";
-import { CLAIM_STATUS_LABELS } from "../format";
+import { CLAIM_STATUS_LABELS, todayLocalIsoDate } from "../format";
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED", "REJECTED", "SETTLED"];
 // Same role set backend/app/routers/claims.py enforces server-side for PATCH
@@ -62,7 +62,7 @@ export default function Claims() {
             variant="outlined"
             startIcon={<FileDownloadIcon />}
             disabled={!data || data.length === 0}
-            onClick={() => data && exportClaimsToExcel(data, `תביעות-${new Date().toISOString().slice(0, 10)}.xlsx`)}
+            onClick={() => data && exportClaimsToExcel(data, `תביעות-${todayLocalIsoDate()}.xlsx`)}
           >
             ייצוא ל-Excel
           </Button>

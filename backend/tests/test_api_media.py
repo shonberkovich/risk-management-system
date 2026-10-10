@@ -15,7 +15,7 @@ without needing a real EXIF-bearing image fixture.
 from __future__ import annotations
 
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -47,9 +47,10 @@ def test_upload_media_happy_path_without_exif(client, make_user, make_property, 
     headers = auth_headers(make_user())
     incident = make_incident(make_property().property_id)
 
-    before = datetime.now()
+    # Timestamps are stored as naive UTC (models.py convention).
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
     resp = _upload(client, headers, incident.incident_id)
-    after = datetime.now()
+    after = datetime.now(timezone.utc).replace(tzinfo=None)
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -74,7 +75,9 @@ def test_upload_media_uses_exif_datetime_and_gps(client, make_user, make_propert
 
     assert resp.status_code == 201
     body = resp.json()
-    assert body["captured_at"].startswith("2026-03-15T08:30:00")
+    # EXIF is the camera's local wall clock; it's stored converted to naive UTC.
+    expected_utc = datetime(2026, 3, 15, 8, 30).astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(body["captured_at"]) == expected_utc
     assert body["gps_latitude"] == 32.05
     assert body["gps_longitude"] == 34.77
 

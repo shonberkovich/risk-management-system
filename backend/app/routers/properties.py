@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -114,7 +112,7 @@ def create_property(
     if payload.region_id is not None and not db.get(models.Region, payload.region_id):
         raise HTTPException(404, "Region not found")
 
-    now = datetime.now()
+    now = models.utcnow()
     prop = models.Property(
         **payload.model_dump(),
         is_active=True,
@@ -152,7 +150,7 @@ def update_property(
 
     for field, value in updates.items():
         setattr(prop, field, value)
-    prop.updated_at = datetime.now()
+    prop.updated_at = models.utcnow()
 
     try:
         db.commit()
@@ -181,5 +179,5 @@ def delete_property(
     if not prop:
         raise HTTPException(404, "Property not found")
     prop.is_active = False
-    prop.updated_at = datetime.now()
+    prop.updated_at = models.utcnow()
     db.commit()

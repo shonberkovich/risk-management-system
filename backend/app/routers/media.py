@@ -18,7 +18,7 @@ bytes from the public download endpoint, which re-validates the token before
 serving anything — this is the "future download endpoint" storage.py's
 docstring anticipated.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -38,13 +38,18 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB — generous for a course-demo inc
 def _parse_exif_datetime(value: str | None) -> datetime | None:
     """EXIF DateTimeOriginal comes as "YYYY:MM:DD HH:MM:SS" (colons in the date,
     not dashes — an EXIF quirk). Returns None if it's missing or malformed
-    rather than raising, consistent with storage.py's None-on-missing pattern."""
+    rather than raising, consistent with storage.py's None-on-missing pattern.
+
+    EXIF carries no timezone — it's the camera's local wall clock — so it's read as
+    server-local time and converted to the naive-UTC storage convention (models.py),
+    like every other timestamp the frontend then shows in local time."""
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+        local = datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
     except ValueError:
         return None
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 @router.post("/api/incidents/{incident_id}/media", response_model=schemas.IncidentMediaOut, status_code=201)
@@ -68,7 +73,7 @@ async def upload_incident_media(
 
     upload_result = storage.upload_file(file_bytes, file.filename, "INCIDENT", incident_id)
 
-    captured_at = datetime.now()
+    captured_at = models.utcnow()
     gps_latitude: float | None = None
     gps_longitude: float | None = None
     metadata = storage.extract_image_metadata(file_bytes)

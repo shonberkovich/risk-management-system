@@ -1,6 +1,6 @@
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
@@ -147,7 +147,7 @@ def create_claim(
             raise HTTPException(404, "Policy not found")
 
         if not idempotency_key:
-            duplicate_cutoff = datetime.now() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
+            duplicate_cutoff = models.utcnow() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
             duplicate = db.scalar(
                 select(models.Claim)
                 .where(models.Claim.incident_id == payload.incident_id)
@@ -169,7 +169,7 @@ def create_claim(
             claim_status="DRAFT",
             adjuster_name=payload.adjuster_name,
             expected_payment_date=payload.expected_payment_date,
-            created_at=datetime.now(),
+            created_at=models.utcnow(),
         )
         db.add(claim)
         incident.status = "CLAIM_FILED"
@@ -296,7 +296,7 @@ def create_claim_reserve(
         claim_id=claim_id,
         reserve_amount=payload.reserve_amount,
         expected_payment_date=payload.expected_payment_date,
-        updated_at=datetime.now(),
+        updated_at=models.utcnow(),
     )
     db.add(reserve)
     db.commit()
@@ -323,7 +323,7 @@ def update_claim_reserve(
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(reserve, field, value)
-    reserve.updated_at = datetime.now()
+    reserve.updated_at = models.utcnow()
 
     db.commit()
     db.refresh(reserve)

@@ -29,7 +29,6 @@ there's no id in the request for a caller to spoof in the first place. It always
 on `get_current_user`'s own row; "self-only" falls out of that by construction, no
 403 branch needed.
 """
-from datetime import datetime
 from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -148,7 +147,7 @@ def create_user(
         role=payload.role,
         password_hash=hash_password(payload.password) if payload.password else None,
         is_active=True,
-        created_at=datetime.now(),
+        created_at=models.utcnow(),
         # TODO_SPEC.md "משימה 14" step 5 (optional) — auto-generated "name + role"
         # signature for the new employee; they can edit or clear it afterwards via
         # PATCH /{user_id}/signature like any other signature.

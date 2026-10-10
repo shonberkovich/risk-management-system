@@ -41,7 +41,7 @@ import ExposureByRegionChart from "../components/ExposureByRegionChart";
 import KpiCard from "../components/KpiCard";
 import { exportExposureReportToExcel } from "../exportExposureReport";
 import { exportElementToPdf } from "../exportPdf";
-import { formatIls } from "../format";
+import { formatIls, todayLocalIsoDate } from "../format";
 
 const SUGGESTED_QUESTIONS = [
   "כמה תביעות אושרו ועדיין לא שולמו?",
@@ -89,7 +89,7 @@ export default function Reports() {
     if (!printableRef.current || !kpis.data || !claims.data || !exposureByRegion.data) return;
     setPdfExporting(true);
     try {
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = todayLocalIsoDate();
       await exportElementToPdf(printableRef.current, `executive-report-${dateStr}.pdf`);
     } finally {
       setPdfExporting(false);

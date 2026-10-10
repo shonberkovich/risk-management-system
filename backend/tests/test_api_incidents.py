@@ -194,3 +194,20 @@ def test_incident_status_update_requires_auth(client, make_property, make_user):
 
     resp = client.patch(f"/api/incidents/{incident['incident_id']}/status", json={"status": "UNDER_INVESTIGATION"})
     assert resp.status_code == 401
+
+
+def test_incident_timestamp_with_offset_is_stored_as_naive_utc(client, make_property, make_user):
+    """The frontend sends `toISOString()` ("...Z"/offset). It must be stored — and read
+    back — as naive UTC (models.py convention), not by its wall-clock digits alone."""
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+
+    resp = client.post(
+        "/api/incidents",
+        json=_incident_payload(prop.property_id, incident_timestamp="2024-06-01T10:00:00+03:00"),
+        headers=auth_headers(reporter),
+    )
+    assert resp.status_code == 201
+
+    stored = client.get(f"/api/incidents/{resp.json()['incident_id']}").json()["incident_timestamp"]
+    assert stored == "2024-06-01T07:00:00"

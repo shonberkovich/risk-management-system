@@ -263,14 +263,18 @@ class PropertyMapPoint(BaseModel):
 # --- Incidents ---
 def _reject_future_timestamp(v: datetime | None) -> datetime | None:
     """Shared by IncidentCreate/IncidentUpdate — an incident cannot be reported as
-    happening in the future (relative to server time in UTC)."""
+    happening in the future (relative to server time in UTC).
+
+    Also normalizes to the naive-UTC storage convention (models.py `_utcnow`): the
+    frontend sends `toISOString()` ("...Z"), and an aware value would otherwise be
+    stored by its wall-clock digits alone on SQL Server's offset-less DATETIME2."""
     if v is None:
         return v
     now_utc = datetime.now(timezone.utc)
     compare_v = v if v.tzinfo is not None else v.replace(tzinfo=timezone.utc)
     if compare_v > now_utc:
         raise ValueError("incident_timestamp cannot be in the future")
-    return v
+    return compare_v.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class IncidentCreate(BaseModel):

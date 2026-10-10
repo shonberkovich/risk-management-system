@@ -21,6 +21,12 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+# Public name for routers/services that set a timestamp explicitly (updated_at on
+# edit, a duplicate-detection cutoff, ...) — the same naive-UTC "now" as the column
+# defaults, so those comparisons and the frontend's UTC parsing line up.
+utcnow = _utcnow
+
+
 class User(Base):
     __tablename__ = "Users"
 

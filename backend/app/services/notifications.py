@@ -52,7 +52,6 @@ Notification_Log — never any other user's private mail content.
 """
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from html import escape
 
 from sqlalchemy import select
@@ -276,7 +275,7 @@ def _send_and_log(db: Session, notifications: list[dict]) -> list[dict]:
     as an audit trail — see TODO_SPEC.md §1, "טבלת Notification_Log" — independent of
     the in-process `logger.log` call above, which is not queryable after the process
     exits. Shared by dispatch_notifications and dispatch_critical_incident_alert."""
-    sent_at = datetime.utcnow()
+    sent_at = models.utcnow()
     for n in notifications:
         level = logging.WARNING if n["severity"] == "critical" else logging.INFO
         logger.log(

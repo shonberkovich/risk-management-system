@@ -12,7 +12,7 @@ future (or is COMPLETED) is not automatically OVERDUE anymore. COMPLETED is the
 one state that is never overridden by the date check, matching "סגירה" (closing)
 as a genuinely terminal action.
 """
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -104,7 +104,7 @@ def create_task(
         due_date=payload.due_date,
         status="OPEN",
         assigned_to_user_id=payload.assigned_to_user_id,
-        created_at=datetime.now(),
+        created_at=models.utcnow(),
     )
     _sync_overdue(task)
     db.add(task)

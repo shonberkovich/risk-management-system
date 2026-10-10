@@ -1,6 +1,6 @@
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
@@ -92,7 +92,7 @@ def _trigger_critical_incident_ticket(db: Session, incident: models.Incident) ->
         due_date=date.today() + timedelta(days=_CRITICAL_TICKET_TASK_DUE_DAYS),
         status="OPEN",
         assigned_to_user_id=None,
-        created_at=datetime.now(),
+        created_at=models.utcnow(),
     )
     db.add(task)
     db.commit()
@@ -172,7 +172,7 @@ def check_seismic_activity(db: Session) -> list[models.Incident]:
                 incident_code=_next_incident_code(db),
                 property_id=row["property_id"],
                 reported_by_user_id=None,
-                incident_timestamp=datetime.now(),
+                incident_timestamp=models.utcnow(),
                 hazard_type="STRUCTURAL_FAILURE",
                 # Unknown until a human inspects the property — MEDIUM/full-operation
                 # are the conservative "not yet assessed" defaults for an
@@ -183,7 +183,7 @@ def check_seismic_activity(db: Session) -> list[models.Incident]:
                 description=description,
                 status="NEW",
                 ai_classified=False,
-                created_at=datetime.now(),
+                created_at=models.utcnow(),
                 is_draft=True,
             )
             db.add(incident)
@@ -316,7 +316,7 @@ def create_incident(
             raise HTTPException(404, "Property not found")
 
         if not idempotency_key:
-            duplicate_cutoff = datetime.now() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
+            duplicate_cutoff = models.utcnow() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
             duplicate = db.scalar(
                 select(models.Incident)
                 .where(models.Incident.property_id == payload.property_id)
@@ -341,7 +341,7 @@ def create_incident(
             status="NEW",
             ai_classified=payload.ai_classified,
             ai_confidence=payload.ai_confidence,
-            created_at=datetime.now(),
+            created_at=models.utcnow(),
             is_draft=payload.is_draft,
             business_interruption_requested=payload.business_interruption_requested,
             area_or_building=payload.area_or_building,

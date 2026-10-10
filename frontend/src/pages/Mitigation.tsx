@@ -33,7 +33,7 @@ import MitigationRoiDialog from "../components/MitigationRoiDialog";
 import MitigationTable, { type MitigationRow } from "../components/MitigationTable";
 import MitigationTaskDialog from "../components/MitigationTaskDialog";
 import { exportElementToPdf } from "../exportPdf";
-import { MITIGATION_STATUS_LABELS, formatIlsCompact } from "../format";
+import { MITIGATION_STATUS_LABELS, formatIlsCompact, todayLocalIsoDate } from "../format";
 
 const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
 // Same RISK_MANAGER/PROPERTY_MANAGER/ADMIN set backend/app/routers/mitigation.py
@@ -69,7 +69,7 @@ export default function Mitigation() {
     if (!printableRef.current) return;
     setPdfExporting(true);
     try {
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = todayLocalIsoDate();
       await exportElementToPdf(printableRef.current, `mitigation-report-${dateStr}.pdf`);
     } finally {
       setPdfExporting(false);
