@@ -107,7 +107,9 @@ function renderControlledModal(props: Partial<EmailComposeModalProps> = {}) {
 // seed users the untyped dropdown already shows every option, and avoiding
 // per-keystroke typing sidesteps flakiness from MUI Autocomplete's own re-renders
 // racing with userEvent's keystroke pacing under load.
-async function selectRecipient(label: string, name: string, ue: ReturnType<typeof userEvent.setup> = userEvent) {
+// `ue` only needs `click` — typed structurally so both the default `userEvent` export and a
+// `userEvent.setup()` instance fit (their full shapes differ, e.g. `keyboard()`'s return type).
+async function selectRecipient(label: string, name: string, ue: { click: (element: Element) => Promise<void> } = userEvent) {
   const field = screen.getByLabelText(label);
   await ue.click(field);
   const option = await screen.findByRole("option", { name });
