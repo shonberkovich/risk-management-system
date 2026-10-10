@@ -288,3 +288,39 @@ def test_auto_reply_rate_limit_does_not_block_a_new_day(db: Session, make_user):
     replies_today_and_before = _auto_replies_to(db, away_user.user_id, sender.user_id)
     # yesterday's simulated row + today's real one
     assert len(replies_today_and_before) == 2
+
+
+def test_auto_reply_rate_limit_counts_a_reply_sent_just_after_local_midnight(db: Session, make_user):
+    """Regression: `created_at` is naive UTC but "today" is the local calendar day,
+    so the window bounds must be converted to UTC. An auto-reply stamped at local
+    midnight (21:00/22:00 UTC the previous date in Israel) used to fall outside the
+    window and let a second auto-reply through between 00:00 and 03:00 local."""
+    from datetime import datetime, timezone
+
+    sender = make_user(role="RISK_MANAGER")
+    away_user = make_user(role="PROPERTY_MANAGER")
+    _enable_auto_reply(away_user, db)
+
+    local_midnight_utc = (
+        datetime.combine(date.today(), datetime.min.time()).astimezone(timezone.utc).replace(tzinfo=None)
+    )
+    earlier_reply = models.Email(
+        sender_id=away_user.user_id,
+        subject="Re: אחרי חצות",
+        body_html="<p>בחופשה</p>",
+        status="AUTO_REPLY",
+        created_at=local_midnight_utc,
+    )
+    db.add(earlier_reply)
+    db.flush()
+    db.add(models.EmailRecipient(
+        email_id=earlier_reply.email_id, user_id=sender.user_id, recipient_type="TO", folder="INBOX", is_read=False
+    ))
+    db.commit()
+
+    email_service.send_email(
+        db, sender.user_id, EmailCreate(to=[away_user.user_id], subject="שוב היום", body_html="<p>שוב</p>")
+    )
+
+    # Only the earlier (same local day) auto-reply — no second one.
+    assert len(_auto_replies_to(db, away_user.user_id, sender.user_id)) == 1

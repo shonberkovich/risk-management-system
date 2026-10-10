@@ -165,6 +165,11 @@ def _auto_reply_subject(original_subject: str) -> str:
     return f"Re: {original_subject}"
 
 
+def _local_midnight_as_naive_utc(day: date) -> datetime:
+    """00:00 server-local time on `day`, as a naive-UTC datetime (models.py convention)."""
+    return datetime.combine(day, datetime.min.time()).astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _has_auto_replied_today(db: Session, out_of_office_user_id: int, original_sender_id: int) -> bool:
     """TODO_SPEC.md "משימה 18" step 4's explicit rate limit: has
     `out_of_office_user_id` already sent `original_sender_id` an auto-reply today?
@@ -173,9 +178,17 @@ def _has_auto_replied_today(db: Session, out_of_office_user_id: int, original_se
     DB-specific `DATE(created_at) = ...`/`CAST(... AS DATE)` function — so the exact
     same query runs unmodified against both this repo's SQLite test engine and the
     real SQL Server LocalDB (see conftest.py's module docstring on why tests run
-    against SQLite at all)."""
-    start_of_today = datetime.combine(date.today(), datetime.min.time())
-    start_of_tomorrow = start_of_today + timedelta(days=1)
+    against SQLite at all).
+
+    "Today" is the server's *local* calendar day — the same `date.today()` the
+    auto_reply_start/end window check in `_maybe_send_auto_reply` uses — so its
+    midnight-to-midnight bounds are converted to naive UTC before comparing against
+    `created_at`. Comparing local-midnight bounds directly against UTC timestamps
+    missed every auto-reply sent between local midnight and the UTC date change
+    (00:00-03:00 in Israel), letting a second one through."""
+    today = date.today()
+    start_of_today = _local_midnight_as_naive_utc(today)
+    start_of_tomorrow = _local_midnight_as_naive_utc(today + timedelta(days=1))
     existing = db.scalar(
         select(models.Email.email_id)
         .join(models.EmailRecipient, models.EmailRecipient.email_id == models.Email.email_id)
