@@ -25,7 +25,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { type InputHTMLAttributes, type MouseEvent, useEffect, useRef, useState } from "react";
 
 import {
   fetchEmailTemplates,
@@ -557,7 +557,7 @@ export default function EmailComposeModal({
                   // lands on that wrapper, not the input itself, which is what
                   // testing-library's `.toBeChecked()` needs. `inputProps` forwards
                   // straight onto the native element.
-                  inputProps={{ "data-testid": "read-receipt-checkbox" }}
+                  inputProps={{ "data-testid": "read-receipt-checkbox" } as InputHTMLAttributes<HTMLInputElement>}
                 />
               }
               label="בקש אישור קריאה"

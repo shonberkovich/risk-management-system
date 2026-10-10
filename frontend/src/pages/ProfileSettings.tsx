@@ -22,7 +22,7 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useEffect, useState } from "react";
+import { type InputHTMLAttributes, useEffect, useState } from "react";
 
 import {
   createEmailRule,
@@ -245,7 +245,9 @@ function OutOfOfficeSection() {
                   checked={enabled}
                   disabled={saving}
                   onChange={(e) => setEnabled(e.target.checked)}
-                  inputProps={{ "aria-label": "הפעלת מענה אוטומטי", "data-testid": "auto-responder-toggle" }}
+                  inputProps={
+                    { "aria-label": "הפעלת מענה אוטומטי", "data-testid": "auto-responder-toggle" } as InputHTMLAttributes<HTMLInputElement>
+                  }
                 />
               }
               label={enabled ? "מופעל" : "כבוי"}
