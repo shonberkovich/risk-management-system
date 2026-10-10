@@ -138,11 +138,15 @@ export default function ExecutiveReportPrintable({
       {simulation && (
         <>
           <h2 style={{ fontSize: 15, marginBottom: 6, marginTop: 16 }}>
-            סימולציית Monte Carlo ו-VaR ({simulation.iterations.toLocaleString("he-IL")} הדמיות, אופק {simulation.horizon_years} שנים)
+            סימולציית Monte Carlo ו-VaR ({simulation.iterations.toLocaleString("he-IL")} הדמיות, אופק{" "}
+            {simulation.horizon_years === 1 ? "שנה אחת" : `${simulation.horizon_years} שנים`})
           </h2>
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div style={cardStyle}>
-              <div style={{ fontSize: 11, color: "#666" }}>נזק שנתי צפוי</div>
+              {/* A horizon total, not per year, once horizon_years > 1 — see Simulation.tsx. */}
+              <div style={{ fontSize: 11, color: "#666" }}>
+                {simulation.horizon_years === 1 ? "נזק שנתי צפוי" : `נזק צפוי מצטבר (${simulation.horizon_years} שנים)`}
+              </div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{formatIls(simulation.expected_annual_loss)}</div>
             </div>
             <div style={cardStyle}>

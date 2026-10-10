@@ -67,6 +67,7 @@ export default function Simulation() {
 
   const activeQuery = runParams?.scope === "portfolio" ? portfolioResult : propertyResult;
   const result = activeQuery.data;
+  const horizonSuffix = result && result.horizon_years > 1 ? ` (${result.horizon_years} שנים)` : "";
 
   function runSimulation() {
     setRunParams({ scope, iterations, horizonYears });
@@ -160,9 +161,17 @@ export default function Simulation() {
         <>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
+              {/* `expected_annual_loss` (and VaR / worst case) are totals over the whole
+                  simulated horizon — services/simulation.py sums horizon_years years per
+                  run — so they're only "annual" at a 1-year horizon. */}
               <KpiCard
-                label="הפסד שנתי צפוי"
+                label={result.horizon_years === 1 ? "הפסד שנתי צפוי" : `הפסד צפוי מצטבר (${result.horizon_years} שנים)`}
                 value={formatIlsCompact(result.expected_annual_loss)}
+                subtext={
+                  result.horizon_years === 1
+                    ? undefined
+                    : `ממוצע לשנה: ${formatIlsCompact(result.expected_annual_loss / result.horizon_years)}`
+                }
                 accentColor="#1e5b8a"
               />
             </Grid>
@@ -174,10 +183,10 @@ export default function Simulation() {
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <KpiCard label="VaR 95%" value={formatIlsCompact(result.var_95)} accentColor="#e69413" />
+              <KpiCard label={`VaR 95%${horizonSuffix}`} value={formatIlsCompact(result.var_95)} accentColor="#e69413" />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <KpiCard label="VaR 99%" value={formatIlsCompact(result.var_99)} accentColor="#c0521f" />
+              <KpiCard label={`VaR 99%${horizonSuffix}`} value={formatIlsCompact(result.var_99)} accentColor="#c0521f" />
             </Grid>
           </Grid>
 
