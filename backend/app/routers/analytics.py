@@ -78,7 +78,11 @@ def get_risk_matrix(db: Session = Depends(get_db)):
         select(models.Property).where(models.Property.is_active == True)  # noqa: E712
     ).all()
     profiles = {p.property_id: p for p in db.scalars(select(models.AssetRiskProfile)).all()}
-    incidents = db.scalars(select(models.Incident)).all()
+    # Open incidents only (same definition as the map above) — a long-CLOSED incident
+    # must not keep a property in the high-severity column forever.
+    incidents = db.scalars(
+        select(models.Incident).where(models.Incident.status.in_(OPEN_INCIDENT_STATUSES))
+    ).all()
 
     cells: dict[tuple[str, str], list[int]] = {}
     for prop in props:

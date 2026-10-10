@@ -190,3 +190,14 @@ def test_hazard_distribution_empty_db_returns_empty_list(client):
     resp = client.get("/api/analytics/hazard-distribution")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_risk_matrix_ignores_closed_incidents_for_severity(client, make_property, make_incident):
+    """Severity comes from the worst *open* incident (docstring + map definition) —
+    a CLOSED critical incident must not keep the property in the high column."""
+    prop = make_property()
+    make_incident(prop.property_id, severity_level="CRITICAL", status="CLOSED")
+
+    cells = client.get("/api/analytics/risk-matrix").json()
+    low_low = next(c for c in cells if c["probability_band"] == "low" and c["severity_band"] == "low")
+    assert prop.property_id in low_low["property_ids"]
