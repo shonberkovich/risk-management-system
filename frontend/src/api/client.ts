@@ -38,10 +38,20 @@ api.interceptors.request.use((config) => {
 // giving up and logging the user out — avoids bouncing to /login on every access-token expiry.
 let refreshInFlight: Promise<string> | null = null;
 
+// The auth endpoints' own 401s never trigger a refresh: from /auth/login it just means
+// wrong credentials, and from /auth/refresh (expired refresh token, or a user disabled
+// since login) it used to re-enter this interceptor and await the very refresh promise
+// it belonged to — a deadlock that left every request hanging instead of logging out.
+// Rejecting here lets the original request's refresh attempt fail and log out below.
+const isAuthEndpoint = (url: string | undefined) => !!url && /\/auth\/(login|refresh)$/.test(url);
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+    if (isAuthEndpoint(original?.url)) {
+      return Promise.reject(error);
+    }
     if (error.response?.status !== 401 || original?._retried || !getRefreshToken()) {
       if (error.response?.status === 401) emitLogout();
       return Promise.reject(error);
