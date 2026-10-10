@@ -136,6 +136,7 @@ export default function NotificationRecipientDialog({
             <Grid item xs={12}>
               <TextField
                 label="שם תצוגה"
+                inputProps={{ maxLength: 100 }}
                 fullWidth
                 value={form.display_name}
                 onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
@@ -144,6 +145,7 @@ export default function NotificationRecipientDialog({
             <Grid item xs={6}>
               <TextField
                 label="אימייל"
+                inputProps={{ maxLength: 200 }}
                 type="email"
                 fullWidth
                 value={form.email}
@@ -153,6 +155,7 @@ export default function NotificationRecipientDialog({
             <Grid item xs={6}>
               <TextField
                 label="טלפון"
+                inputProps={{ maxLength: 30 }}
                 fullWidth
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}

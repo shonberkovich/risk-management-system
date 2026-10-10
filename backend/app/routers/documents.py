@@ -59,7 +59,11 @@ async def upload_document(
     entity_type: schemas.DocumentEntityType,
     entity_id: int,
     file: UploadFile,
-    doc_type: str = Query(..., description='e.g. "POLICY_DOCUMENT", "ADJUSTER_REPORT", "CORRESPONDENCE", "PHOTO", "SURVEY_REPORT"'),
+    doc_type: str = Query(
+        ...,
+        max_length=30,  # Documents.doc_type NVARCHAR(30)
+        description='e.g. "POLICY_DOCUMENT", "ADJUSTER_REPORT", "CORRESPONDENCE", "PHOTO", "SURVEY_REPORT"',
+    ),
     uploaded_by: int | None = Query(None, description="Users.user_id"),
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles()),  # any authenticated role

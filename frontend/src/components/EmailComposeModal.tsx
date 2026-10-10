@@ -525,6 +525,7 @@ export default function EmailComposeModal({
               label="נושא"
               fullWidth
               disabled={scheduling}
+              inputProps={{ maxLength: 500 }}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
             />

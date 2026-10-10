@@ -124,6 +124,7 @@ export default function PolicyDialog({
             <Grid item xs={6}>
               <TextField
                 label="מספר פוליסה"
+                inputProps={{ maxLength: 50 }}
                 fullWidth
                 value={form.policy_number}
                 disabled={isEdit}
@@ -133,6 +134,7 @@ export default function PolicyDialog({
             <Grid item xs={6}>
               <TextField
                 label="שם מבטח"
+                inputProps={{ maxLength: 150 }}
                 fullWidth
                 value={form.insurer_name}
                 onChange={(e) => setForm((f) => ({ ...f, insurer_name: e.target.value }))}

@@ -173,7 +173,13 @@ export default function ClaimPaymentsDialog({
                     </MenuItem>
                   ))}
                 </TextField>
-                <TextField label="מס' אסמכתא" fullWidth value={reference} onChange={(e) => setReference(e.target.value)} />
+                <TextField
+                  label="מס' אסמכתא"
+                  fullWidth
+                  inputProps={{ maxLength: 60 }}
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                />
               </Stack>
               {mutation.isError && <Alert severity="error">רישום התשלום נכשל.</Alert>}
               <Button

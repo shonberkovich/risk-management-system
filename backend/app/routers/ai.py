@@ -2,7 +2,7 @@
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app import models
@@ -52,7 +52,7 @@ class AskResponse(BaseModel):
 
 class AgentChatRequest(BaseModel):
     message: str
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=64)  # Agent_Sessions.session_id NVARCHAR(64)
 
 
 class AgentChatResponse(BaseModel):
@@ -64,7 +64,7 @@ class AgentChatResponse(BaseModel):
 
 class ProposeMitigationTaskRequest(BaseModel):
     property_id: int
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=64)
 
 
 class ActionProposalResponse(BaseModel):

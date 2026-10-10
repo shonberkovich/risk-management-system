@@ -120,6 +120,7 @@ export default function MitigationTaskDialog({
             <Grid item xs={12}>
               <TextField
                 label="כותרת המשימה"
+                inputProps={{ maxLength: 200 }}
                 fullWidth
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}

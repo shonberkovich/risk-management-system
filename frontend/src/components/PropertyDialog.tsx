@@ -126,6 +126,7 @@ export default function PropertyDialog({
             <Grid item xs={6}>
               <TextField
                 label="קוד נכס"
+                inputProps={{ maxLength: 30 }}
                 fullWidth
                 disabled={isEdit}
                 value={form.property_code}
@@ -150,6 +151,7 @@ export default function PropertyDialog({
             <Grid item xs={12}>
               <TextField
                 label="שם הנכס"
+                inputProps={{ maxLength: 200 }}
                 fullWidth
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -158,6 +160,7 @@ export default function PropertyDialog({
             <Grid item xs={12}>
               <TextField
                 label="כתובת"
+                inputProps={{ maxLength: 300 }}
                 fullWidth
                 value={form.address}
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}

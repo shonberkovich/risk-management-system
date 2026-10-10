@@ -110,6 +110,7 @@ export default function FileClaimDialog({
           </Grid>
           <TextField
             label="שם שמאי (אופציונלי)"
+            inputProps={{ maxLength: 60 }}
             fullWidth
             value={adjusterName}
             onChange={(e) => setAdjusterName(e.target.value)}
