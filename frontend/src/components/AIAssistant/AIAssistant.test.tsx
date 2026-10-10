@@ -4,10 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sendAgentChatMessageMock, proposeMitigationTaskMock } = vi.hoisted(() => ({
+const { sendAgentChatMessageMock, proposeMitigationTaskMock, useAuthMock } = vi.hoisted(() => ({
   sendAgentChatMessageMock: vi.fn(),
   proposeMitigationTaskMock: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
+vi.mock("../../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../../api/client", () => ({
   sendAgentChatMessage: sendAgentChatMessageMock,
   proposeMitigationTask: proposeMitigationTaskMock,
@@ -43,6 +45,17 @@ function renderAssistant() {
 describe("AIAssistant", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "דנה", role: "RISK_MANAGER" } });
+  });
+
+  it("suggests only external-data questions to a FIELD_WORKER", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 5, full_name: "רונית", role: "FIELD_WORKER" } });
+    renderAssistant();
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(screen.getByText("האם יש התרעות מזג אוויר פעילות?")).toBeInTheDocument();
+    expect(screen.queryByText("מהו ה-TIV הכולל של תיק הנכסים?")).not.toBeInTheDocument();
+    expect(screen.queryByText("אילו נכסים חורגים מתאימות לתקן ISO 31000?")).not.toBeInTheDocument();
   });
 
   it("sends a suggested question and renders the routed agent's answer with its badge", async () => {

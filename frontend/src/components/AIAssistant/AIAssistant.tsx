@@ -23,6 +23,7 @@ import {
   type ActionProposal,
   type AgentType,
 } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
 import ActionCard from "./ActionCard";
 import { useAIAssistant } from "./AIAssistantContext";
 
@@ -65,6 +66,14 @@ const SUGGESTED_QUESTIONS = [
   "אילו נכסים חורגים מתאימות לתקן ISO 31000?",
 ];
 
+// FIELD_WORKER is only answered by the external-data agent (backend
+// services/ai_orchestrator.AGENT_ALLOWED_ROLES — no financial/compliance data), so
+// don't suggest questions the assistant would just decline.
+const FIELD_WORKER_SUGGESTED_QUESTIONS = [
+  "האם יש התרעות מזג אוויר פעילות?",
+  "האם היו רעידות אדמה משמעותיות לאחרונה?",
+];
+
 const AGENT_LABELS: Record<AgentType, string> = {
   DATA_AGENT: "סוכן נתונים פנימיים",
   COMPLIANCE_AGENT: "סוכן ציות וסיכונים",
@@ -81,6 +90,8 @@ const AGENT_LABELS: Record<AgentType, string> = {
  * widget is wanted again later. */
 export default function AIAssistant() {
   const { open, setOpen, pendingPropertyContext, clearPendingPropertyContext } = useAIAssistant();
+  const { user } = useAuth();
+  const suggestedQuestions = user?.role === "FIELD_WORKER" ? FIELD_WORKER_SUGGESTED_QUESTIONS : SUGGESTED_QUESTIONS;
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<AgentTurn[]>([]);
   const [loading, setLoading] = useState(false);
@@ -287,7 +298,7 @@ export default function AIAssistant() {
               נעשה אוטומטית לפי תוכן הפנייה.
             </Typography>
             <Stack spacing={0.75}>
-              {SUGGESTED_QUESTIONS.map((sq) => (
+              {suggestedQuestions.map((sq) => (
                 <Paper
                   key={sq}
                   variant="outlined"
