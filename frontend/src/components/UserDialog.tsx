@@ -90,6 +90,7 @@ export default function UserDialog({
             <Grid item xs={12}>
               <TextField
                 label="שם מלא"
+                inputProps={{ maxLength: 100 }}
                 fullWidth
                 value={form.full_name}
                 onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
@@ -98,6 +99,7 @@ export default function UserDialog({
             <Grid item xs={12}>
               <TextField
                 label="אימייל"
+                inputProps={{ maxLength: 200 }}
                 type="email"
                 fullWidth
                 value={form.email}

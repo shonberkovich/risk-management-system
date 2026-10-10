@@ -91,6 +91,7 @@ export default function RolePermissionDialog({
             <Grid item xs={12}>
               <TextField
                 label="מפתח הרשאה (permission_key)"
+                inputProps={{ maxLength: 100 }}
                 fullWidth
                 disabled={isEdit}
                 value={form.permission_key}
@@ -101,6 +102,7 @@ export default function RolePermissionDialog({
             <Grid item xs={12}>
               <TextField
                 label="תיאור"
+                inputProps={{ maxLength: 200 }}
                 fullWidth
                 multiline
                 minRows={2}

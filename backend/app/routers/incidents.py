@@ -198,7 +198,8 @@ def check_seismic_activity(db: Session) -> list[models.Incident]:
             if prop is not None:
                 geocoded = gis.reverse_geocode(float(prop.latitude), float(prop.longitude))
                 if geocoded["status"] == "ok":
-                    incident.resolved_address = geocoded["address"]
+                    # Nominatim's display_name has no length bound; the column is NVARCHAR(255).
+                    incident.resolved_address = geocoded["address"][:255]
                     db.commit()
                     db.refresh(incident)
 

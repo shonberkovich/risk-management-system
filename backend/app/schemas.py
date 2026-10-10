@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 HazardType = Literal["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"]
 SeverityLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -13,6 +13,22 @@ MitigationStatus = Literal["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"]
 PolicyStatus = Literal["ACTIVE", "EXPIRED", "PENDING_RENEWAL"]
 PaymentType = Literal["ADVANCE", "FINAL_SETTLEMENT"]
 UserRole = Literal["RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "FIELD_WORKER", "ADMIN", "RISK_OFFICER", "ADJUSTER"]
+
+# Text inputs below carry max_length matching their NVARCHAR(n) column, so an
+# over-long value is a clean 422 instead of a SQL Server truncation error (500).
+# The EncryptedString(255) columns (services/encryption.py) are tighter: the Fernet
+# token for n UTF-8 bytes of plaintext only fits in 255 chars up to n = 127 bytes —
+# about 60 Hebrew characters — so those are capped by encoded size, not char count.
+ENCRYPTED_COLUMN_MAX_BYTES = 127
+
+
+def _fits_encrypted_column(value: str | None) -> str | None:
+    if value is not None and len(value.encode("utf-8")) > ENCRYPTED_COLUMN_MAX_BYTES:
+        raise ValueError("הטקסט ארוך מדי (עד כ-60 תווים בעברית)")
+    return value
+
+
+EncryptedColumnText = Annotated[str | None, AfterValidator(_fits_encrypted_column)]
 
 
 # --- Users ---
@@ -80,8 +96,8 @@ class UserAutoResponderUpdate(BaseModel):
 
 
 class UserCreate(BaseModel):
-    full_name: str
-    email: str
+    full_name: str = Field(max_length=100)  # Users.full_name NVARCHAR(100)
+    email: str = Field(max_length=200)  # Users.email NVARCHAR(200)
     role: UserRole
     password: str | None = None  # None = no local password (SSO-only), same as seed.py's convention
 
@@ -96,23 +112,23 @@ class RolePermissionOut(BaseModel):
 
 class RolePermissionCreate(BaseModel):
     role: UserRole
-    permission_key: str
-    description: str | None = None
+    permission_key: str = Field(max_length=100)  # Role_Permissions.permission_key NVARCHAR(100)
+    description: str | None = Field(default=None, max_length=200)
 
 
 class RolePermissionUpdate(BaseModel):
     """description only — role and permission_key together identify the row
     (UQ_RolePermissions_RoleKey); changing either is really "delete this row, create a
     different one", not an edit, so they're left out of the update shape."""
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=200)
 
 
 class UserUpdate(BaseModel):
     """Partial update — also how role changes and disabling happen (is_active=False),
     rather than separate dedicated endpoints, same convention as ClaimUpdate covering
     claim_status changes."""
-    full_name: str | None = None
-    email: str | None = None
+    full_name: str | None = Field(default=None, max_length=100)
+    email: str | None = Field(default=None, max_length=200)
     role: UserRole | None = None
     password: str | None = None
     is_active: bool | None = None
@@ -218,9 +234,9 @@ class PropertyCreate(BaseModel):
     property_id/created_at/updated_at are server-assigned, is_active defaults to True
     (a property is created active; use DELETE to deactivate)."""
     property_code: str = Field(max_length=30)  # matches Properties.property_code NVARCHAR(30)
-    name: str
-    address: str
-    region: str
+    name: str = Field(max_length=200)  # Properties.name NVARCHAR(200)
+    address: str = Field(max_length=300)  # Properties.address NVARCHAR(300)
+    region: str = Field(max_length=50)  # Properties.region NVARCHAR(50)
     region_id: int | None = None
     latitude: float
     longitude: float
@@ -236,9 +252,9 @@ class PropertyUpdate(BaseModel):
     full-replace connotation — chosen to match how the other write routers in this
     codebase already use PUT/PATCH interchangeably for partial updates."""
     property_code: str | None = Field(default=None, max_length=30)
-    name: str | None = None
-    address: str | None = None
-    region: str | None = None
+    name: str | None = Field(default=None, max_length=200)
+    address: str | None = Field(default=None, max_length=300)
+    region: str | None = Field(default=None, max_length=50)
     region_id: int | None = None
     latitude: float | None = None
     longitude: float | None = None
@@ -290,8 +306,8 @@ class IncidentCreate(BaseModel):
     ai_confidence: float | None = None
     is_draft: bool = False
     business_interruption_requested: bool = False
-    area_or_building: str | None = None
-    reported_coordinates: str | None = None  # "lat,lng"
+    area_or_building: str | None = Field(default=None, max_length=150)  # Incidents NVARCHAR(150)
+    reported_coordinates: str | None = Field(default=None, max_length=50)  # "lat,lng", NVARCHAR(50)
 
     @field_validator("incident_timestamp")
     @classmethod
@@ -331,8 +347,8 @@ class IncidentUpdate(BaseModel):
     initial_estimated_loss: float | None = Field(default=None, ge=0)
     description: str | None = None
     business_interruption_requested: bool | None = None
-    area_or_building: str | None = None
-    reported_coordinates: str | None = None
+    area_or_building: str | None = Field(default=None, max_length=150)
+    reported_coordinates: str | None = Field(default=None, max_length=50)
 
     @field_validator("incident_timestamp")
     @classmethod
@@ -364,14 +380,14 @@ class ClaimCreate(BaseModel):
     policy_id: int
     claimed_amount: float = Field(ge=0)
     deductible_applied: float = Field(default=0, ge=0)
-    adjuster_name: str | None = None
+    adjuster_name: EncryptedColumnText = None
     expected_payment_date: date | None = None
 
 
 class ClaimUpdate(BaseModel):
     claim_status: ClaimStatus | None = None
     approved_amount: float | None = Field(default=None, ge=0)
-    adjuster_name: str | None = None
+    adjuster_name: EncryptedColumnText = None
     expected_payment_date: date | None = None
 
 
@@ -388,7 +404,7 @@ class ClaimPaymentOut(BaseModel):
 class ClaimPaymentCreate(BaseModel):
     payment_date: date
     amount: float
-    reference_number: str | None = None
+    reference_number: EncryptedColumnText = None
     payment_type: PaymentType
 
 
@@ -443,8 +459,8 @@ class PolicyOut(BaseModel):
 
 
 class PolicyCreate(BaseModel):
-    policy_number: str
-    insurer_name: str
+    policy_number: str = Field(max_length=50)  # Insurance_Policies.policy_number NVARCHAR(50)
+    insurer_name: str = Field(max_length=150)  # Insurance_Policies.insurer_name NVARCHAR(150)
     start_date: date
     end_date: date
     total_limit: float = Field(ge=0)
@@ -457,7 +473,7 @@ class PolicyCreate(BaseModel):
 
 
 class PolicyUpdate(BaseModel):
-    insurer_name: str | None = None
+    insurer_name: str | None = Field(default=None, max_length=150)
     start_date: date | None = None
     end_date: date | None = None
     total_limit: float | None = Field(default=None, ge=0)
@@ -544,7 +560,7 @@ class MitigationTaskOut(BaseModel):
 
 class MitigationTaskCreate(BaseModel):
     property_id: int
-    title: str
+    title: str = Field(max_length=200)  # Mitigation_Tasks.title NVARCHAR(200)
     cost_estimate: float = Field(ge=0)
     expected_annual_savings: float = Field(default=0, ge=0)
     due_date: date
@@ -552,7 +568,7 @@ class MitigationTaskCreate(BaseModel):
 
 
 class MitigationTaskUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=200)
     cost_estimate: float | None = Field(default=None, ge=0)
     expected_annual_savings: float | None = Field(default=None, ge=0)
     due_date: date | None = None
@@ -724,21 +740,21 @@ class NotificationRecipientOut(BaseModel):
 
 
 class NotificationRecipientCreate(BaseModel):
-    role: str
-    display_name: str
-    email: str
-    phone: str
-    channels: list[NotificationChannel]
+    role: str = Field(max_length=30)  # Notification_Recipients: role(30), display_name(100), email(200), phone(30)
+    display_name: str = Field(max_length=100)
+    email: str = Field(max_length=200)
+    phone: str = Field(max_length=30)
+    channels: list[NotificationChannel] = Field(max_length=3)  # stored comma-joined in NVARCHAR(30)
     min_severity: NotificationSeverity = "warning"
     is_active: bool = True
 
 
 class NotificationRecipientUpdate(BaseModel):
-    role: str | None = None
-    display_name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    channels: list[NotificationChannel] | None = None
+    role: str | None = Field(default=None, max_length=30)
+    display_name: str | None = Field(default=None, max_length=100)
+    email: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=30)
+    channels: list[NotificationChannel] | None = Field(default=None, max_length=3)
     min_severity: NotificationSeverity | None = None
     is_active: bool | None = None
 
@@ -1185,8 +1201,8 @@ class LabelCreate(BaseModel):
     """Body for POST /api/folders (Task 16 steps 1/3) — the spec's own literal
     path for what this codebase treats as a per-user label, not another
     EmailRecipient.folder value; see models.Label's docstring."""
-    name: str
-    color: str
+    name: str = Field(max_length=100)  # Labels.name NVARCHAR(100)
+    color: str = Field(max_length=20)  # Labels.color NVARCHAR(20)
 
 
 class EmailLabelCreate(BaseModel):
@@ -1248,7 +1264,7 @@ class EmailRuleCreate(BaseModel):
     """Body for POST /api/rules (Task 17 step 1, the spec's own literal path).
     At least one condition and one action — a rule with none of either could
     never usefully fire/do anything."""
-    name: str
+    name: str = Field(max_length=200)  # Email_Rules.name NVARCHAR(200)
     conditions: list[EmailRuleCondition] = Field(min_length=1)
     actions: list[EmailRuleAction] = Field(min_length=1)
     is_active: bool = True
@@ -1288,7 +1304,7 @@ class EmailCreate(BaseModel):
     to: list[int]
     cc: list[int] = []
     bcc: list[int] = []
-    subject: str
+    subject: str = Field(max_length=500)  # Emails.subject NVARCHAR(500)
     body_html: str
     in_reply_to: int | None = None
     read_receipt_requested: bool = False
@@ -1442,7 +1458,7 @@ class EmailScheduleCreate(BaseModel):
     to: list[int]
     cc: list[int] = []
     bcc: list[int] = []
-    subject: str
+    subject: str = Field(max_length=500)
     body_html: str
     in_reply_to: int | None = None
     scheduled_for: datetime
@@ -1543,8 +1559,8 @@ class EmailTemplateOut(BaseModel):
 
 
 class EmailTemplateCreate(BaseModel):
-    name: str
-    subject_template: str
+    name: str = Field(max_length=200)  # Email_Templates.name NVARCHAR(200)
+    subject_template: str = Field(max_length=500)  # NVARCHAR(500)
     body_template: str
 
 
@@ -1552,6 +1568,6 @@ class EmailTemplateUpdate(BaseModel):
     """All fields optional — a PATCH may touch just the name, just the body, etc.
     Same `exclude_unset` convention as RolePermissionUpdate/MitigationTaskUpdate
     elsewhere in this file."""
-    name: str | None = None
-    subject_template: str | None = None
+    name: str | None = Field(default=None, max_length=200)
+    subject_template: str | None = Field(default=None, max_length=500)
     body_template: str | None = None
