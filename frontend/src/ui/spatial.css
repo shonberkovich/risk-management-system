@@ -273,9 +273,13 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* Small "system" eyebrow above each page title. */
+/* Small "system" eyebrow above each page title. Purely decorative: the `/ ""` alt text
+   keeps it out of the heading's accessible name (generated content otherwise counts,
+   so screen readers announced "RMIS · RISK INTELLIGENCE התראות" for every page title).
+   The first declaration is the fallback for browsers without CSS content alt text. */
 .rmis-main .MuiTypography-h5:not(.MuiPaper-root .MuiTypography-h5):not(.rmis-plain)::before {
   content: "RMIS · RISK INTELLIGENCE";
+  content: "RMIS · RISK INTELLIGENCE" / "";
   display: block;
   margin-block-end: 0.55rem;
   font-family: "JetBrains Mono Variable", ui-monospace, monospace;
