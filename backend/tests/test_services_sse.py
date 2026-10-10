@@ -139,3 +139,48 @@ def test_sse_stream_treats_empty_token_same_as_missing(client, bad_token):
     params = {} if bad_token is None else {"token": bad_token}
     resp = client.get("/api/sse/stream", params=params)
     assert resp.status_code == 401
+
+
+# --- GET /api/sse/stream DB-session lifetime -----------------------------------
+
+def test_sse_auth_releases_its_db_session_before_streaming(db, make_user):
+    """Regression: the stream's auth dependency used to keep get_db's session (and its
+    pooled connection) open for the whole life of the stream, so ~15 open tabs/proxied
+    streams exhausted the pool and froze every DB-backed endpoint. The dependency must
+    close the session itself as soon as the user is resolved."""
+    from app.routers import sse
+    from app.services.auth import create_access_token
+
+    user = make_user(role="RISK_MANAGER")
+    token = create_access_token(user.user_id, user.role)
+
+    closed = []
+    original_close = db.close
+
+    def _spy_close():
+        closed.append(True)
+        original_close()
+
+    db.close = _spy_close
+    user_id = sse._get_current_user_id_from_query(token=token, db=db)
+
+    assert user_id == user.user_id
+    assert closed, "the auth dependency must close its DB session before the stream starts"
+
+
+def test_sse_auth_closes_its_db_session_on_rejection_too(db, make_user):
+    from fastapi import HTTPException
+
+    from app.routers import sse
+
+    closed = []
+    original_close = db.close
+
+    def _spy_close():
+        closed.append(True)
+        original_close()
+
+    db.close = _spy_close
+    with pytest.raises(HTTPException):
+        sse._get_current_user_id_from_query(token="not-a-real-jwt", db=db)
+    assert closed

@@ -28,7 +28,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
 
-from app import models
 from app.database import get_db
 from app.dependencies.permissions import _UNAUTHORIZED, get_user_from_access_token
 from app.services import sse_manager
@@ -43,13 +42,26 @@ router = APIRouter(prefix="/api/sse", tags=["sse"])
 HEARTBEAT_INTERVAL_SECONDS = 20
 
 
-def _get_current_user_from_query(
+def _get_current_user_id_from_query(
     token: str | None = Query(default=None),
     db: Session = Depends(get_db),
-) -> models.User:
+) -> int:
+    """Authenticates the stream and returns just the user_id — the stream itself
+    never touches the DB again.
+
+    The session is closed here, right after the lookup: `get_db`'s own cleanup only
+    runs once the response has finished, which for this endpoint means when the
+    long-lived stream closes. Holding it that long pinned one of the engine's pooled
+    connections (5 + 10 overflow) per open tab — and the Vite dev proxy keeps
+    upstream streams open even after the browser leaves — so a handful of streams
+    froze every DB-backed endpoint (login included) until the server restarted.
+    Closing twice is harmless."""
     if not token:
         raise _UNAUTHORIZED
-    return get_user_from_access_token(token, db)
+    try:
+        return get_user_from_access_token(token, db).user_id
+    finally:
+        db.close()
 
 
 async def _event_stream(request: Request, user_id: int):
@@ -81,9 +93,9 @@ async def _event_stream(request: Request, user_id: int):
 
 
 @router.get("/stream")
-async def stream(request: Request, user: models.User = Depends(_get_current_user_from_query)):
+async def stream(request: Request, user_id: int = Depends(_get_current_user_id_from_query)):
     return StreamingResponse(
-        _event_stream(request, user.user_id),
+        _event_stream(request, user_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
