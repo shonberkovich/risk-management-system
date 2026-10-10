@@ -74,6 +74,34 @@ _AUDITED_GET_ROUTES: list[tuple[re.Pattern, str, str]] = [
 ]
 
 
+# Request-body keys whose values must never reach Audit_Log: the login/user-admin
+# bodies carry plaintext passwords and /auth/refresh a live refresh token, and every
+# ADMIN can read the audit trail decrypted. Matched case-insensitively at any depth.
+_SECRET_KEYS = {"password", "new_password", "current_password", "refresh_token", "access_token", "token", "client_secret"}
+_REDACTED = "***"
+
+
+def _redact(value):
+    if isinstance(value, dict):
+        return {k: (_REDACTED if k.lower() in _SECRET_KEYS else _redact(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v) for v in value]
+    return value
+
+
+def _body_for_audit(body_bytes: bytes, content_type: str) -> str | None:
+    """The request body as recorded in `new_value`: JSON only, with secrets redacted
+    (see _SECRET_KEYS). Anything else — multipart file uploads, binary — is left out
+    rather than stored as raw (possibly sensitive) file content."""
+    if not body_bytes or not content_type.lower().startswith("application/json"):
+        return None
+    try:
+        parsed = json.loads(body_bytes)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return json.dumps(_redact(parsed), ensure_ascii=False)[:2000]
+
+
 def _extract_entity(path: str) -> tuple[str, int]:
     match = _PATH_RE.match(path)
     if not match:
@@ -125,10 +153,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             entity_type, entity_id = _extract_entity(request.url.path)
             action = _ACTION_BY_METHOD[request.method]
         user_id = _current_user_id(request)
-        try:
-            new_value = body_bytes.decode("utf-8")[:2000] if body_bytes else None
-        except UnicodeDecodeError:
-            new_value = None
+        new_value = _body_for_audit(body_bytes, request.headers.get("content-type", ""))
 
         db = SessionLocal()
         try:

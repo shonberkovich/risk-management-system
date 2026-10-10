@@ -196,3 +196,44 @@ def test_get_endpoint_does_not_write_its_own_audit_row(client, make_user):
     client.get("/api/audit-log", headers=headers)
     after = client.get("/api/audit-log", headers=headers).json()["total"]
     assert before == after
+
+
+def test_audit_log_never_stores_passwords_or_tokens(client, make_user):
+    """Login, user-creation and refresh bodies carry a plaintext password / live
+    refresh token — the audit trail (readable by every ADMIN) must store them
+    redacted, while keeping the rest of the body for context."""
+    admin = make_user(role="ADMIN", email="audit-admin@example.com")
+    headers = auth_headers(admin)
+
+    client.post("/api/auth/login", json={"email": "audit-admin@example.com", "password": "Sup3r-Secret!"})
+    client.post("/api/auth/login", json={"email": "audit-admin@example.com", "password": "Wrong-Guess-1"})
+    client.post(
+        "/api/users",
+        json={"full_name": "חדש", "email": "new-audit@example.com", "role": "CFO", "password": "Init1al-Pass!"},
+        headers=headers,
+    )
+    client.post("/api/auth/refresh", json={"refresh_token": "eyJhbGciOi.secret-refresh.token"})
+
+    entries = client.get("/api/audit-log", params={"limit": 500}, headers=headers).json()["entries"]
+    stored = " ".join(e["new_value"] or "" for e in entries)
+    for secret in ("Sup3r-Secret!", "Wrong-Guess-1", "Init1al-Pass!", "secret-refresh"):
+        assert secret not in stored
+    assert "audit-admin@example.com" in stored  # non-secret context is kept
+    assert '"password": "***"' in stored
+
+
+def test_audit_log_does_not_store_uploaded_file_contents(client, make_user, make_property):
+    admin = make_user(role="ADMIN")
+    headers = auth_headers(admin)
+    prop = make_property()
+
+    client.post(
+        f"/api/documents/entity/PROPERTY/{prop.property_id}",
+        params={"doc_type": "CORRESPONDENCE"},
+        files={"file": ("notes.txt", b"confidential file contents", "text/plain")},
+        headers=headers,
+    )
+
+    entries = client.get("/api/audit-log", params={"entity_type": "DOCUMENTS"}, headers=headers).json()["entries"]
+    assert entries, "the upload itself is still audited"
+    assert all("confidential" not in (e["new_value"] or "") for e in entries)
