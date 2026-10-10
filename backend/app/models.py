@@ -123,7 +123,8 @@ class InsurancePolicy(Base):
     # Encrypted at rest (see services/encryption.py) — a per-event coverage term that's
     # only ever read one policy at a time (never SUM'd/AVG'd across policies like
     # annual_premium/total_limit/deductible_default are), so it's safe to encrypt.
-    per_event_limit: Mapped[str | None] = mapped_column(EncryptedString(64), nullable=True)
+    # 255, not 64: a Fernet token is ~100+ chars even for a short number.
+    per_event_limit: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
     bi_waiting_period_hours: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     exclusions: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
@@ -138,7 +139,7 @@ class PolicyAsset(Base):
     # Encrypted at rest (see services/encryption.py) — same rationale as
     # Insurance_Policies.per_event_limit above: a single-property coverage term, never
     # aggregated across rows.
-    specific_deductible: Mapped[str | None] = mapped_column(EncryptedString(64), nullable=True)
+    specific_deductible: Mapped[str | None] = mapped_column(EncryptedString(255), nullable=True)
 
     policy: Mapped["InsurancePolicy"] = relationship()
     property_: Mapped["Property"] = relationship(back_populates="policy_assets")

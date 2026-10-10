@@ -163,7 +163,7 @@ CREATE TABLE dbo.Insurance_Policies (
     annual_premium             DECIMAL(18,2) NOT NULL,
     status                      NVARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('ACTIVE','EXPIRED','PENDING_RENEWAL')),
-    per_event_limit             NVARCHAR(64) NULL,           -- גבול אחריות לאירוע בודד; מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2)
+    per_event_limit             NVARCHAR(255) NULL,          -- גבול אחריות לאירוע בודד; מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2); 255 כי טוקן Fernet הוא ~100+ תווים
     bi_waiting_period_hours     SMALLINT NULL,                -- תקופת המתנה לכיסוי אובדן רווחים (שעות)
     exclusions                  NVARCHAR(MAX) NULL           -- החרגות פוליסה (טקסט חופשי / JSON)
 );
@@ -177,7 +177,7 @@ GO
 CREATE TABLE dbo.Policy_Assets (
     policy_id           BIGINT NOT NULL REFERENCES dbo.Insurance_Policies(policy_id),
     property_id           BIGINT NOT NULL REFERENCES dbo.Properties(property_id),
-    specific_deductible     NVARCHAR(64) NULL,        -- מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2)
+    specific_deductible     NVARCHAR(255) NULL,       -- מוצפן at-rest (Fernet, ר' app/services/encryption.py) — היה DECIMAL(18,2); 255 כי טוקן Fernet הוא ~100+ תווים
     PRIMARY KEY (policy_id, property_id)
 );
 GO
