@@ -97,6 +97,28 @@ describe("Simulation", () => {
     expect(screen.queryByText(/\d+ נכסים\)/)).not.toBeInTheDocument();
   });
 
+  it("labels a 1-year result as annual", async () => {
+    fetchPortfolioSimulationMock.mockResolvedValue(PORTFOLIO_RESULT);
+    renderPage();
+    await userEvent.click(screen.getByText("הרץ סימולציה"));
+
+    expect(await screen.findByText("הפסד שנתי צפוי")).toBeInTheDocument();
+    expect(screen.getByText("VaR 95%")).toBeInTheDocument();
+  });
+
+  it("labels a multi-year result as a horizon total and shows the per-year average", async () => {
+    // expected_annual_loss is the mean loss summed over the whole horizon (see
+    // services/simulation.py), so at 10 years it must not be presented as "annual".
+    fetchPortfolioSimulationMock.mockResolvedValue({ ...PORTFOLIO_RESULT, horizon_years: 10, expected_annual_loss: 5_000_000 });
+    renderPage();
+    await userEvent.click(screen.getByText("הרץ סימולציה"));
+
+    expect(await screen.findByText("הפסד צפוי מצטבר (10 שנים)")).toBeInTheDocument();
+    expect(screen.queryByText("הפסד שנתי צפוי")).not.toBeInTheDocument();
+    expect(screen.getByText("ממוצע לשנה: ₪500K")).toBeInTheDocument();
+    expect(screen.getByText("VaR 95% (10 שנים)")).toBeInTheDocument();
+  });
+
   it("shows an error alert when the simulation query fails", async () => {
     fetchPortfolioSimulationMock.mockRejectedValue(new Error("500"));
     renderPage();
