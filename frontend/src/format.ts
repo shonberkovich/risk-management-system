@@ -15,11 +15,30 @@ export const formatIlsCompact = (value: number) => {
 
 export const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
+// The backend stores and returns timestamps as naive UTC ("2026-10-11T08:30:00", no
+// offset — see backend/app/models.py `_utcnow`), which `new Date()` would read as *local*
+// time. Treat an offset-less date-time as UTC; date-only values ("2026-10-11") and
+// strings that already carry "Z"/an offset are parsed as-is.
+const NAIVE_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+export const parseServerDate = (value: string) => new Date(NAIVE_DATETIME.test(value) ? `${value}Z` : value);
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Local "YYYY-MM-DDTHH:mm" — the value format of `<input type="datetime-local">`
+ * (`toISOString().slice(0, 16)` would give UTC wall-clock time instead). */
+export const toDatetimeLocalValue = (date: Date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+
+/** Today's local calendar date as "YYYY-MM-DD" (`toISOString()` gives the UTC date,
+ * which is still "yesterday" between local midnight and 02:00/03:00 in Israel). */
+export const todayLocalIsoDate = () => toDatetimeLocalValue(new Date()).slice(0, 10);
+
 export const formatDate = (value: string) =>
-  new Date(value).toLocaleDateString("he-IL", { year: "numeric", month: "2-digit", day: "2-digit" });
+  parseServerDate(value).toLocaleDateString("he-IL", { year: "numeric", month: "2-digit", day: "2-digit" });
 
 export const formatDateTime = (value: string) =>
-  new Date(value).toLocaleString("he-IL", {
+  parseServerDate(value).toLocaleString("he-IL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

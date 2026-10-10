@@ -73,7 +73,7 @@ CREATE TABLE dbo.Users (
         CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER','SYSTEM')),
     password_hash   NVARCHAR(255) NULL,   -- pbkdf2_hmac "salt$hash" hex; NULL = no local password (SSO-only / not provisioned)
     is_active       BIT NOT NULL DEFAULT 1,   -- disabled users are rejected at login and on every existing token, see dependencies/permissions.get_current_user
-    created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    created_at      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     signature       NVARCHAR(MAX) NULL,   -- personal email signature (HTML), bleach-sanitized on write via services/email.sanitize_body_html; see routers/users.py PATCH /{user_id}/signature
     -- Out-of-office / auto-responder (TODO_SPEC.md "משימה 18") — see models.User's
     -- docstring. auto_reply_enabled defaults to 0 so the feature is opt-in; the
@@ -106,8 +106,8 @@ CREATE TABLE dbo.Properties (
     book_value           DECIMAL(18,2) NOT NULL,
     primary_manager_id   BIGINT NULL REFERENCES dbo.Users(user_id),
     is_active            BIT NOT NULL DEFAULT 1,
-    created_at           DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    updated_at           DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    created_at           DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    updated_at           DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 -- TODO_SPEC.md "אינדקסים לביצועים" calls for a "spatial index (GIST)" on property
@@ -210,7 +210,7 @@ CREATE TABLE dbo.Incidents (
         CHECK (status IN ('NEW','UNDER_INVESTIGATION','CLAIM_FILED','CLOSED')),
     ai_classified                             BIT NOT NULL DEFAULT 0,
     ai_confidence                              DECIMAL(4,3) NULL,
-    created_at                                   DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    created_at                                   DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     is_draft                                       BIT NOT NULL DEFAULT 0,
     business_interruption_requested                BIT NOT NULL DEFAULT 0,
     area_or_building                                 NVARCHAR(150) NULL,   -- אזור/מבנה בתוך הנכס
@@ -233,7 +233,7 @@ CREATE TABLE dbo.Incident_Media (
     incident_id           BIGINT NOT NULL REFERENCES dbo.Incidents(incident_id),
     file_path               NVARCHAR(500) NOT NULL,
     file_type                 NVARCHAR(50) NOT NULL,
-    captured_at                 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    captured_at                 DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     gps_latitude                       FLOAT NULL,
     gps_longitude                      FLOAT NULL
 );
@@ -258,7 +258,7 @@ CREATE TABLE dbo.Claims (
         CHECK (claim_status IN ('DRAFT','SUBMITTED','IN_ADJUSTMENT','APPROVED','REJECTED','SETTLED')),
     adjuster_name                         NVARCHAR(255) NULL,   -- מוצפן at-rest (Fernet, ר' app/services/encryption.py) — הורחב מ-100 כדי להכיל טקסט מוצפן
     expected_payment_date                   DATE NULL,
-    created_at                                DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    created_at                                DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 CREATE INDEX IX_Claims_Incident ON dbo.Claims(incident_id);
@@ -297,7 +297,7 @@ CREATE TABLE dbo.Claim_Reserves (
     claim_id                 BIGINT NOT NULL REFERENCES dbo.Claims(claim_id),
     reserve_amount              DECIMAL(18,2) NOT NULL,
     expected_payment_date          DATE NULL,
-    updated_at                        DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    updated_at                        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 CREATE INDEX IX_ClaimReserves_Claim ON dbo.Claim_Reserves(claim_id);
@@ -318,7 +318,7 @@ CREATE TABLE dbo.Mitigation_Tasks (
     status                          NVARCHAR(20) NOT NULL DEFAULT 'OPEN'
         CHECK (status IN ('OPEN','IN_PROGRESS','COMPLETED','OVERDUE')),
     assigned_to_user_id              BIGINT NULL REFERENCES dbo.Users(user_id),
-    created_at                         DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+    created_at                         DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 CREATE INDEX IX_Mitigation_Property ON dbo.Mitigation_Tasks(property_id);
@@ -340,7 +340,7 @@ CREATE TABLE dbo.Audit_Log (
         CHECK (action IN ('CREATE','UPDATE','DELETE')),
     old_value                     NVARCHAR(MAX) NULL,   -- JSON snapshot before change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
     new_value                       NVARCHAR(MAX) NULL, -- JSON snapshot after change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
-    timestamp                         DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    timestamp                         DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     ip_address                          NVARCHAR(45) NULL  -- IPv4/IPv6
 );
 GO
@@ -500,7 +500,7 @@ CREATE TABLE dbo.Emails (
     subject         NVARCHAR(500) NOT NULL,
     body_html       NVARCHAR(MAX) NOT NULL,
     thread_id       BIGINT NULL REFERENCES dbo.Emails(email_id),
-    created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    created_at      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     status          NVARCHAR(20) NOT NULL DEFAULT 'SENT',  -- SENT or SCHEDULED (TODO_SPEC.md §13)
     scheduled_for        DATETIME2 NULL,       -- future send time for status='SCHEDULED' rows; NULL otherwise (§13)
     scheduled_recipients NVARCHAR(MAX) NULL,   -- JSON {"to":[...],"cc":[...],"bcc":[...]} until it actually sends (§13); see app/models.py's Email docstring

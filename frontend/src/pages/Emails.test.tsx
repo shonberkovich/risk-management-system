@@ -104,6 +104,7 @@ vi.mock("../api/client", () => ({
   removeLabelFromEmail: removeLabelFromEmailMock,
 }));
 
+import { todayLocalIsoDate } from "../format";
 import Emails from "./Emails";
 
 const SENDER = { user_id: 2, full_name: "דנה כהן", role: "RISK_MANAGER" };
@@ -186,7 +187,7 @@ describe("Emails", () => {
   });
 
   it("shows the out-of-office banner when the current user's own auto-responder is active", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIsoDate();
     useAuthMock.mockReturnValue({
       user: { ...RECIPIENT_USER, signature: null, auto_reply_enabled: true, auto_reply_start: today, auto_reply_end: today, auto_reply_body: "בחופשה" },
     });

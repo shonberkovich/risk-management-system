@@ -39,6 +39,7 @@ import {
   type User,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { toDatetimeLocalValue } from "../format";
 import { applyEmailTemplate, type EmailTemplateVariables } from "../utils/emailTemplates";
 
 /** TODO_SPEC.md "משימה 8" — Compose modal for the internal email system.
@@ -190,14 +191,6 @@ type ScheduleState =
   | { stage: "scheduling" }
   | { stage: "uploading"; emailId: number }
   | { stage: "error"; message: string; emailId: number | null };
-
-/** Formats a `Date` as the value a native `<input type="datetime-local">`
- * expects (`YYYY-MM-DDTHH:mm`, local time, no timezone) — used only to seed a
- * sensible default (a few minutes from now) in the picker. */
-function toDatetimeLocalValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 export default function EmailComposeModal({
   open,

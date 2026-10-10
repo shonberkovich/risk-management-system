@@ -2,6 +2,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
 
 import type { CurrentUser } from "../api/client";
+import { todayLocalIsoDate } from "../format";
 
 /** TODO_SPEC.md "משימה 18" step 5 — is the *current* user's own out-of-office
  * auto-responder active right now: enabled AND today falls within the inclusive
@@ -17,7 +18,7 @@ export function isAutoResponderActive(
   user: Pick<CurrentUser, "auto_reply_enabled" | "auto_reply_start" | "auto_reply_end"> | null | undefined,
 ): boolean {
   if (!user?.auto_reply_enabled || !user.auto_reply_start || !user.auto_reply_end) return false;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalIsoDate();
   return user.auto_reply_start <= today && today <= user.auto_reply_end;
 }
 

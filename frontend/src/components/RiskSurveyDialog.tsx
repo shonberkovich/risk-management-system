@@ -15,18 +15,21 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { createRiskProfile, updateRiskProfile, type RiskProfile } from "../api/client";
+import { todayLocalIsoDate } from "../format";
 
 const SCORE_MARKS = [1, 2, 3, 4, 5].map((v) => ({ value: v, label: String(v) }));
 
-const emptyForm = {
-  survey_date: new Date().toISOString().slice(0, 10),
+// A function, not a constant, so the default survey date is "today" when the dialog
+// opens (not when the module first loaded) — and local, not the UTC date.
+const emptyForm = () => ({
+  survey_date: todayLocalIsoDate(),
   flood_risk_score: 3,
   fire_risk_score: 3,
   earthquake_risk_score: 3,
   mfl_amount: "",
   has_sprinklers: false,
   notes: "",
-};
+});
 
 function ScoreSlider({
   label,
@@ -84,7 +87,7 @@ export default function RiskSurveyDialog({
         notes: existing.notes ?? "",
       });
     } else {
-      setForm(emptyForm);
+      setForm(emptyForm());
     }
   }, [existing, open]);
 

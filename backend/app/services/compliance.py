@@ -66,7 +66,7 @@ threshold.
 Nothing here writes back to the DB — this is a read-only report, same as
 economics.fetch_replacement_value_updates and gis.fetch_risk_layers.
 """
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -336,7 +336,7 @@ def build_iso31000_report(db: Session) -> dict:
     ]
 
     return {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": models.utcnow().isoformat(),
         "standard": "ISO 31000:2018 + Solvency II (Pillar II) + חוזר ניהול סיכונים (רשות שוק ההון)",
         "summary": {
             "total_properties": total_properties,

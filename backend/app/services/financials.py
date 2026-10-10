@@ -24,8 +24,6 @@ this module derives per-year totals from them:
     the fixed-assumption pattern used throughout this service layer (e.g.
     retention.PREMIUM_SURCHARGE_RATE) since this is a course demo, not a GL system.
 """
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -240,7 +238,7 @@ def build_regulatory_report(db: Session, seed: int | None = None) -> dict:
     concentration_percent = round(mfl / tiv * 100, 2) if tiv else None
 
     return {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": models.utcnow().isoformat(),
         "reporting_year": latest_year["year"] if latest_year else None,
         "capital_adequacy": {
             "eligible_own_funds": own_funds,

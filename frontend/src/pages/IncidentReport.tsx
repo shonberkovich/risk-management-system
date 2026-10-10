@@ -46,7 +46,7 @@ import {
 } from "../api/client";
 import MediaUploader from "../components/MediaUploader";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
-import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS } from "../format";
+import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS, parseServerDate, toDatetimeLocalValue } from "../format";
 import { useTokens } from "../ui/useTokens";
 import {
   enqueueDraftSubmit,
@@ -104,7 +104,7 @@ export default function IncidentReport() {
   const [areaOrBuilding, setAreaOrBuilding] = useState("");
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
-  const [timestamp, setTimestamp] = useState(() => new Date().toISOString().slice(0, 16));
+  const [timestamp, setTimestamp] = useState(() => toDatetimeLocalValue(new Date()));
   const [hazardType, setHazardType] = useState<HazardType | "">("");
   const [severity, setSeverity] = useState<SeverityLevel | "">("");
   const [impact, setImpact] = useState<OperationalImpact | "">("");
@@ -160,7 +160,7 @@ export default function IncidentReport() {
         setDraftCode(incident.incident_code);
         setProperty(properties.find((p) => p.property_id === incident.property_id) ?? null);
         setAreaOrBuilding(incident.area_or_building ?? "");
-        setTimestamp(incident.incident_timestamp.slice(0, 16));
+        setTimestamp(toDatetimeLocalValue(parseServerDate(incident.incident_timestamp)));
         setHazardType(incident.hazard_type);
         setSeverity(incident.severity_level);
         setImpact(incident.operational_impact);

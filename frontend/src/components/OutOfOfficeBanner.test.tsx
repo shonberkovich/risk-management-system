@@ -8,6 +8,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { CurrentUser } from "../api/client";
+import { toDatetimeLocalValue } from "../format";
 import OutOfOfficeBanner, { isAutoResponderActive } from "./OutOfOfficeBanner";
 
 function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
@@ -24,10 +25,12 @@ function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
   };
 }
 
+// Local calendar date, like the component (toISOString() would give the UTC date,
+// which is a day behind between local midnight and the UTC date change).
 function todayPlusDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toDatetimeLocalValue(d).slice(0, 10);
 }
 
 describe("isAutoResponderActive", () => {
