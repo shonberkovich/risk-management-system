@@ -95,3 +95,26 @@ def test_confirm_unknown_action_is_404(client, make_user):
     user = make_user(role="RISK_MANAGER", email="rm-confirm-test@example.com")
     resp = client.post("/api/ai/actions/999999/confirm", headers=auth_headers(user))
     assert resp.status_code == 404
+
+
+def test_ask_forbidden_for_field_worker(client, make_user):
+    """/ask answers from KPIs/claims/premiums (financial disclosure) — same
+    _FINANCIAL_READ_ROLES gate as routers/analytics.py, enforced before the
+    API-key check, so FIELD_WORKER gets 403 rather than 503."""
+    user = make_user(role="FIELD_WORKER", email="fw-ask-test@example.com")
+    resp = client.post("/api/ai/ask", json={"question": "מה ה-TIV הכולל?"}, headers=auth_headers(user))
+    assert resp.status_code == 403
+
+
+def test_executive_summary_forbidden_for_field_worker(client, make_user):
+    user = make_user(role="FIELD_WORKER", email="fw-summary-test@example.com")
+    resp = client.get("/api/ai/executive-summary", headers=auth_headers(user))
+    assert resp.status_code == 403
+
+
+def test_agent_chat_still_open_to_field_worker(client, make_user):
+    """/agent-chat itself isn't role-gated (FIELD_WORKER uses the assistant for
+    external/macro data); the per-agent gate lives in ai_orchestrator."""
+    user = make_user(role="FIELD_WORKER", email="fw-agent-chat-test@example.com")
+    resp = client.post("/api/ai/agent-chat", json={"message": "מזג אוויר"}, headers=auth_headers(user))
+    assert resp.status_code == 503

@@ -105,6 +105,28 @@ AGENT_REGISTRY: dict[AgentType, Callable[[str, list[dict]], str]] = {
 }
 
 
+# Who may be *answered* by each agent, mirroring the REST endpoints behind the same
+# data (routers/analytics.py _FINANCIAL_READ_ROLES, routers/compliance.py
+# _COMPLIANCE_ROLES). /api/ai/agent-chat itself is open to every role (FIELD_WORKER
+# uses the assistant too), so without this a FIELD_WORKER could get TIV/claims/
+# premium figures from DATA_AGENT's tools that every financial endpoint denies them.
+# None = no restriction (EXTERNAL_DATA_AGENT only reads public macro data —
+# weather, earthquakes, hazmat layers, BOI indicators).
+FINANCIAL_READ_ROLES = ("RISK_MANAGER", "CFO", "PROPERTY_MANAGER", "RISK_OFFICER", "ADJUSTER", "ADMIN")
+COMPLIANCE_ROLES = ("RISK_MANAGER", "RISK_OFFICER", "CFO", "ADMIN")
+AGENT_ALLOWED_ROLES: dict[AgentType, tuple[str, ...] | None] = {
+    "DATA_AGENT": FINANCIAL_READ_ROLES,
+    "COMPLIANCE_AGENT": COMPLIANCE_ROLES,
+    "EXTERNAL_DATA_AGENT": None,
+}
+
+_AGENT_DENIED_ANSWER = (
+    "אין לתפקידך הרשאה לנתונים שהשאלה הזו דורשת (נתונים פיננסיים/תאימות). "
+    "ניתן לשאול אותי על נתוני מאקרו חיצוניים — מזג אוויר קיצוני, רעידות אדמה, "
+    "חומרים מסוכנים בסביבת הנכסים ומדדים כלכליים."
+)
+
+
 def register_agent(agent: AgentType, handler: Callable[[str, list[dict]], str]) -> None:
     """Lets a downstream agent module (data_agent.py / action_agent.py) plug
     itself into the orchestrator without this module importing them directly
@@ -133,7 +155,11 @@ class AgentOrchestrator:
         if session_id:
             existing = self.db.get(models.AgentSession, session_id)
             if existing is not None:
-                return existing
+                if self.user is None or existing.user_id in (None, self.user.user_id):
+                    return existing
+                # Someone else's session — never continue (or append to) another
+                # user's conversation; start a fresh one under a new id instead.
+                session_id = None
         new_id = session_id or str(uuid.uuid4())
         session = models.AgentSession(
             session_id=new_id,
@@ -168,15 +194,22 @@ class AgentOrchestrator:
     def handle(self, message: str) -> AgentChatResult:
         history = self._history()
         decision = classify_intent(message, history)
-        handler = AGENT_REGISTRY.get(decision.agent, _not_implemented(decision.agent))
-        answer = handler(message, history)
+        allowed_roles = AGENT_ALLOWED_ROLES.get(decision.agent)
+        denied = (
+            allowed_roles is not None and self.user is not None and self.user.role not in allowed_roles
+        )
+        if denied:
+            answer = _AGENT_DENIED_ANSWER
+        else:
+            handler = AGENT_REGISTRY.get(decision.agent, _not_implemented(decision.agent))
+            answer = handler(message, history)
 
         history.append({"message": message, "agent": decision.agent, "answer": answer})
         self._save_history(history)
         self._log_action(
             action_type=f"ROUTE_{decision.agent}",
             payload={"message": message, "reasoning": decision.reasoning},
-            status="executed",
+            status="denied" if denied else "executed",
         )
         self.db.commit()
 

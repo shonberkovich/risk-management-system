@@ -59,3 +59,46 @@ def test_unregistered_agent_falls_back_gracefully(db, monkeypatch):
 
     assert result.agent == "COMPLIANCE_AGENT"
     assert "טרם מומש" in result.answer
+
+
+def test_field_worker_is_not_answered_by_financial_data_agent(db, make_user, monkeypatch):
+    """DATA_AGENT's tools expose TIV/claims/premiums — FIELD_WORKER is denied those
+    everywhere else, so the orchestrator must not run that agent for them."""
+    monkeypatch.setattr(ai_orchestrator, "classify_intent", lambda message, history=None: _fake_decision("DATA_AGENT"))
+    called = []
+    monkeypatch.setitem(
+        ai_orchestrator.AGENT_REGISTRY, "DATA_AGENT", lambda message, history: called.append(message) or "TIV=1"
+    )
+    field_worker = make_user(role="FIELD_WORKER")
+
+    result = ai_orchestrator.AgentOrchestrator(db, session_id=None, user=field_worker).handle("מה ה-TIV?")
+
+    assert called == []
+    assert "TIV=1" not in result.answer
+    action = db.query(models.AgentActionLog).filter_by(session_id=result.session_id).one()
+    assert action.status == "denied"
+
+
+def test_field_worker_can_use_external_data_agent(db, make_user, monkeypatch):
+    monkeypatch.setattr(
+        ai_orchestrator, "classify_intent", lambda message, history=None: _fake_decision("EXTERNAL_DATA_AGENT")
+    )
+    monkeypatch.setitem(ai_orchestrator.AGENT_REGISTRY, "EXTERNAL_DATA_AGENT", lambda message, history: "סערה")
+    field_worker = make_user(role="FIELD_WORKER")
+
+    result = ai_orchestrator.AgentOrchestrator(db, session_id=None, user=field_worker).handle("מזג אוויר?")
+
+    assert result.answer == "סערה"
+
+
+def test_another_users_session_id_starts_a_fresh_session(db, make_user, monkeypatch):
+    monkeypatch.setattr(ai_orchestrator, "classify_intent", lambda message, history=None: _fake_decision("DATA_AGENT"))
+    monkeypatch.setitem(ai_orchestrator.AGENT_REGISTRY, "DATA_AGENT", lambda message, history: f"answer-{len(history)}")
+    owner = make_user(role="RISK_MANAGER")
+    other = make_user(role="CFO")
+
+    first = ai_orchestrator.AgentOrchestrator(db, session_id=None, user=owner).handle("שאלה פרטית")
+    second = ai_orchestrator.AgentOrchestrator(db, session_id=first.session_id, user=other).handle("שאלה")
+
+    assert second.session_id != first.session_id
+    assert second.answer == "answer-0"  # didn't see the owner's history

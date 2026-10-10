@@ -9,7 +9,7 @@ from app import models
 from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import get_current_user, require_roles
-from app.services import llm
+from app.services import ai_orchestrator, llm
 from app.services.agents import action_agent, data_agent  # noqa: F401 — register agents on import
 from app.services.ai_orchestrator import AgentOrchestrator, AgentType
 from app.services.rate_limit import enforce_ai_rate_limit
@@ -26,6 +26,16 @@ router = APIRouter(
     tags=["ai"],
     dependencies=[Depends(enforce_ai_rate_limit), Depends(require_roles())],
 )
+
+# /ask and /executive-summary answer straight from KPIs, claims, premiums and
+# replacement values (services/llm.py's get_kpis/query_claims/... tools and
+# stream_executive_summary) — the same financial disclosure routers/analytics.py
+# gates behind its _FINANCIAL_READ_ROLES. FIELD_WORKER has no access to that data
+# anywhere else, so the AI layer mustn't become a side door to it. Checked before
+# _require_api_key(), so the 403 holds whether or not a key is configured.
+# (/agent-chat stays open to every role — its per-agent gate lives in
+# services/ai_orchestrator.AGENT_ALLOWED_ROLES.)
+_FINANCIAL_READ_ROLES = ai_orchestrator.FINANCIAL_READ_ROLES
 
 
 class ClassifyRequest(BaseModel):
@@ -90,7 +100,7 @@ def classify_incident(payload: ClassifyRequest):
 
 
 @router.get("/executive-summary")
-def executive_summary():
+def executive_summary(_user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES))):
     """Streams a Hebrew executive-summary narrative as plain text chunks."""
     _require_api_key()
 
@@ -104,7 +114,7 @@ def executive_summary():
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask(payload: AskRequest):
+def ask(payload: AskRequest, _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES))):
     _require_api_key()
     if not payload.question.strip():
         raise HTTPException(400, "Question is required")
