@@ -73,6 +73,10 @@ logger = logging.getLogger("rmis.notifications")
 # DEFAULT_RECIPIENTS fallback posture: never assume a fresh/test DB was seeded).
 SYSTEM_USER_EMAIL = "system@rmis.local"
 SYSTEM_USER_NAME = "מערכת RMIS"
+# Not a schemas.UserRole (nobody can be assigned it or log in as it) — it only marks
+# this one sender row. Allowed by the Users.role CHECK constraint (sql/schema.sql),
+# and filtered out of the user listings in routers/users.py.
+SYSTEM_USER_ROLE = "SYSTEM"
 
 SEVERITY_RANK = {"critical": 0, "warning": 1}
 CHANNELS = ("EMAIL", "SMS", "PUSH")
@@ -208,7 +212,7 @@ def _get_or_create_system_user(db: Session) -> models.User:
     user = models.User(
         full_name=SYSTEM_USER_NAME,
         email=SYSTEM_USER_EMAIL,
-        role="SYSTEM",
+        role=SYSTEM_USER_ROLE,
         password_hash=None,
         is_active=False,
     )

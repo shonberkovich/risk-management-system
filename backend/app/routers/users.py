@@ -42,6 +42,7 @@ from app.database import get_db
 from app.dependencies.permissions import get_current_user, require_roles
 from app.services.auth import hash_password
 from app.services.email import sanitize_body_html
+from app.services.notifications import SYSTEM_USER_ROLE
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -78,9 +79,20 @@ def _default_signature(full_name: str, role: str) -> str:
     return sanitize_body_html(f"<p>{escape(full_name)}</p><p>{escape(role_label)}</p>")
 
 
+def _real_users_query():
+    """Every user except services/notifications.py's system sender row — it isn't a real
+    employee (can't log in, can't be picked as a recipient/assignee), and its role isn't a
+    schemas.UserRole, so UserAdminOut would fail to serialize it."""
+    return (
+        select(models.User)
+        .where(models.User.role != SYSTEM_USER_ROLE)
+        .order_by(models.User.full_name)
+    )
+
+
 @router.get("", response_model=list[schemas.UserOut])
 def list_users(db: Session = Depends(get_db)):
-    return db.scalars(select(models.User).order_by(models.User.full_name)).all()
+    return db.scalars(_real_users_query()).all()
 
 
 @router.get("/admin", response_model=list[schemas.UserAdminOut])
@@ -92,7 +104,7 @@ def list_users_admin(
     screen (TODO_SPEC.md §5, "ניהול משתמשים והרשאות") — kept as a separate endpoint
     rather than widening GET /api/users itself, since that one is deliberately open and
     minimal for use as a name/role picker elsewhere in the UI (see module docstring)."""
-    return db.scalars(select(models.User).order_by(models.User.full_name)).all()
+    return db.scalars(_real_users_query()).all()
 
 
 @router.put("/auto-responder", response_model=schemas.UserMeOut)
@@ -160,7 +172,7 @@ def update_user(
     admin: models.User = Depends(require_roles(*_USERS_WRITE_ROLES)),
 ):
     user = db.get(models.User, user_id)
-    if not user:
+    if not user or user.role == SYSTEM_USER_ROLE:
         raise HTTPException(404, "User not found")
 
     updates = payload.model_dump(exclude_unset=True)

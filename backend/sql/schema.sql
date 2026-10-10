@@ -66,8 +66,11 @@ CREATE TABLE dbo.Users (
     user_id         BIGINT IDENTITY(1,1) PRIMARY KEY,
     full_name       NVARCHAR(100) NOT NULL,
     email           NVARCHAR(200) NOT NULL UNIQUE,
+    -- 'SYSTEM' = the single non-login sender row for system-generated mail
+    -- (services/notifications.py SYSTEM_USER_EMAIL; inserted by app/seed.py).
     role            NVARCHAR(30) NOT NULL
-        CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER')),
+        CONSTRAINT CK_Users_role
+        CHECK (role IN ('RISK_MANAGER','CFO','PROPERTY_MANAGER','FIELD_WORKER','ADMIN','RISK_OFFICER','ADJUSTER','SYSTEM')),
     password_hash   NVARCHAR(255) NULL,   -- pbkdf2_hmac "salt$hash" hex; NULL = no local password (SSO-only / not provisioned)
     is_active       BIT NOT NULL DEFAULT 1,   -- disabled users are rejected at login and on every existing token, see dependencies/permissions.get_current_user
     created_at      DATETIME2 NOT NULL DEFAULT SYSDATETIME(),

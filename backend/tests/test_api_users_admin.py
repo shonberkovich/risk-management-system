@@ -139,3 +139,26 @@ def test_list_users_admin_returns_full_shape(client, make_user):
     assert row["role"] == "FIELD_WORKER"
     assert row["is_active"] is True
     assert "created_at" in row
+
+
+def test_system_sender_is_hidden_from_user_listings_and_edits(client, db, make_user):
+    """services/notifications.py's system sender (role SYSTEM, not a schemas.UserRole)
+    must not appear in either listing — it used to make GET /api/users/admin fail
+    response validation (500) as soon as the row existed — nor be editable."""
+    from app.services import notifications
+
+    admin = make_user(role="ADMIN")
+    system_user = notifications._get_or_create_system_user(db)
+
+    admin_list = client.get("/api/users/admin", headers=auth_headers(admin))
+    assert admin_list.status_code == 200
+    assert all(u["user_id"] != system_user.user_id for u in admin_list.json())
+
+    open_list = client.get("/api/users")
+    assert open_list.status_code == 200
+    assert all(u["user_id"] != system_user.user_id for u in open_list.json())
+
+    resp = client.patch(
+        f"/api/users/{system_user.user_id}", json={"is_active": True}, headers=auth_headers(admin)
+    )
+    assert resp.status_code == 404
