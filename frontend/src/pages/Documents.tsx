@@ -34,6 +34,7 @@ import {
   type DocumentEntityType,
   type DocumentFile,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { DOCUMENT_TYPE_LABELS, formatDate } from "../format";
 
 const ENTITY_TYPE_LABELS: Record<DocumentEntityType, string> = {
@@ -45,6 +46,10 @@ const ENTITY_TYPE_LABELS: Record<DocumentEntityType, string> = {
 
 const DOC_TYPE_OPTIONS = Object.keys(DOCUMENT_TYPE_LABELS);
 
+// Same set backend/app/routers/documents.py enforces on DELETE (and PropertyDetail.tsx's
+// DOCUMENT_DELETE_ROLES) — other roles would just get a 403.
+const DOCUMENT_DELETE_ROLES = ["RISK_MANAGER", "ADMIN"];
+
 interface EntityOption {
   id: number;
   label: string;
@@ -54,7 +59,15 @@ interface EntityOption {
  * already established in IncidentDetail.tsx (GET .../signed-url, then GET the
  * returned download_url). Kept local to this file since Documents.tsx is the
  * only other place, besides the incident drill-down, that needs it. */
-function DocumentRow({ doc, onDelete }: { doc: DocumentFile; onDelete: (id: number) => void }) {
+function DocumentRow({
+  doc,
+  onDelete,
+  canDelete,
+}: {
+  doc: DocumentFile;
+  onDelete: (id: number) => void;
+  canDelete: boolean;
+}) {
   const signed = useQuery({
     queryKey: ["document-signed-url", doc.document_id],
     queryFn: () => fetchDocumentSignedUrl(doc.document_id),
@@ -81,9 +94,11 @@ function DocumentRow({ doc, onDelete }: { doc: DocumentFile; onDelete: (id: numb
         )}
       </TableCell>
       <TableCell align="left">
-        <IconButton size="small" onClick={() => onDelete(doc.document_id)} aria-label="מחק מסמך">
-          <DeleteIcon fontSize="small" />
-        </IconButton>
+        {canDelete && (
+          <IconButton size="small" onClick={() => onDelete(doc.document_id)} aria-label="מחק מסמך">
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -91,6 +106,8 @@ function DocumentRow({ doc, onDelete }: { doc: DocumentFile; onDelete: (id: numb
 
 export default function Documents() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canDelete = !!user && DOCUMENT_DELETE_ROLES.includes(user.role);
   const [entityType, setEntityType] = useState<DocumentEntityType>("PROPERTY");
   const [entity, setEntity] = useState<EntityOption | null>(null);
   const [docType, setDocType] = useState<string>(DOC_TYPE_OPTIONS[0]);
@@ -151,8 +168,14 @@ export default function Documents() {
   };
 
   const handleDelete = async (documentId: number) => {
-    if (!entity) return;
-    await deleteDocument(documentId);
+    if (!entity || !window.confirm("למחוק את המסמך?")) return;
+    setUploadError(null);
+    try {
+      await deleteDocument(documentId);
+    } catch {
+      setUploadError("מחיקת המסמך נכשלה. נסו שוב.");
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["documents", "entity", entityType, entity.id] });
   };
 
@@ -271,7 +294,7 @@ export default function Documents() {
                 </TableHead>
                 <TableBody>
                   {(documents.data ?? []).map((d) => (
-                    <DocumentRow key={d.document_id} doc={d} onDelete={handleDelete} />
+                    <DocumentRow key={d.document_id} doc={d} onDelete={handleDelete} canDelete={canDelete} />
                   ))}
                 </TableBody>
               </Table>
