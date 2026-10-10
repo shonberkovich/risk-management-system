@@ -211,3 +211,32 @@ def test_incident_timestamp_with_offset_is_stored_as_naive_utc(client, make_prop
 
     stored = client.get(f"/api/incidents/{resp.json()['incident_id']}").json()["incident_timestamp"]
     assert stored == "2024-06-01T07:00:00"
+
+def test_create_incident_records_the_authenticated_reporter(client, db, make_property, make_user):
+    """The report form never sends reported_by_user_id — the server records the caller."""
+    from app import models
+
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+    resp = client.post("/api/incidents", json=_incident_payload(prop.property_id), headers=auth_headers(reporter))
+    assert resp.status_code == 201
+
+    incident = db.get(models.Incident, resp.json()["incident_id"])
+    db.refresh(incident)
+    assert incident.reported_by_user_id == reporter.user_id
+
+
+def test_same_hazard_reported_by_two_users_is_not_treated_as_a_duplicate(client, make_property, make_user):
+    """Duplicate suppression (double-click / retry) is per reporter: a second field
+    worker reporting the same hazard at the same property seconds later is a separate
+    report, not a duplicate of the first one."""
+    prop = make_property()
+    first = make_user(role="FIELD_WORKER")
+    second = make_user(role="FIELD_WORKER")
+
+    a = client.post("/api/incidents", json=_incident_payload(prop.property_id), headers=auth_headers(first))
+    b = client.post("/api/incidents", json=_incident_payload(prop.property_id), headers=auth_headers(second))
+    again = client.post("/api/incidents", json=_incident_payload(prop.property_id), headers=auth_headers(second))
+
+    assert a.json()["incident_id"] != b.json()["incident_id"]
+    assert again.json()["incident_id"] == b.json()["incident_id"]  # same user's double-submit still deduped

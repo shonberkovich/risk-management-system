@@ -297,14 +297,20 @@ def list_incident_emails(
 def create_incident(
     payload: schemas.IncidentCreate,
     db: Session = Depends(get_db),
-    _user: models.User = Depends(require_roles()),  # any authenticated role — field workers report incidents
+    current_user: models.User = Depends(require_roles()),  # any authenticated role — field workers report incidents
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Race-condition-safe against two near-simultaneous duplicate submissions
     (double-click, retried request) — see the idempotency/duplicate-check
     helpers above the router. The whole check-then-insert critical section
     runs under _CREATE_LOCK so there's no window for two concurrent requests
-    to both pass the duplicate check before either has committed."""
+    to both pass the duplicate check before either has committed.
+
+    The reporter defaults to the authenticated caller — the report form never
+    sends reported_by_user_id, so it used to be stored as NULL for every report,
+    which also made the duplicate check below match *any* user's report of the
+    same hazard on the same property within the window."""
+    reported_by_user_id = payload.reported_by_user_id or current_user.user_id
     with _CREATE_LOCK:
         if idempotency_key:
             _purge_idempotency_cache_locked()
@@ -322,7 +328,7 @@ def create_incident(
                 select(models.Incident)
                 .where(models.Incident.property_id == payload.property_id)
                 .where(models.Incident.hazard_type == payload.hazard_type)
-                .where(models.Incident.reported_by_user_id == payload.reported_by_user_id)
+                .where(models.Incident.reported_by_user_id == reported_by_user_id)
                 .where(models.Incident.created_at >= duplicate_cutoff)
                 .order_by(models.Incident.created_at.desc())
             )
@@ -332,7 +338,7 @@ def create_incident(
         incident = models.Incident(
             incident_code=_next_incident_code(db),
             property_id=payload.property_id,
-            reported_by_user_id=payload.reported_by_user_id,
+            reported_by_user_id=reported_by_user_id,
             incident_timestamp=payload.incident_timestamp,
             hazard_type=payload.hazard_type,
             severity_level=payload.severity_level,
