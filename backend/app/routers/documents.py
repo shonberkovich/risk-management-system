@@ -23,17 +23,28 @@ route before FastAPI validates the Literal value, so a bare
 entity_type="9", entity_id="signed-url" and 422 on Literal validation instead
 of falling through). The /entity/ prefix removes the ambiguity outright
 instead of relying on route registration order.
+
+Reads follow the parent entity's own read rule. Like most GET endpoints here (see
+dependencies/permissions.py), listing and signing documents of a property, incident or
+claim is open. Policies are the exception: GET /api/policies is gated as financial
+disclosure (routers/policies.py's _POLICIES_READ_ROLES), so a policy's documents
+(the policy PDF itself: limits, premiums, exclusions) get the same gate. Otherwise any
+anonymous caller could list and download what /api/policies refuses them. The download
+endpoint itself stays token-free: the signed URL is the credential (a plain <a href>
+can't carry a bearer header), and only an authorized caller can obtain one.
 """
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies.permissions import require_roles
+from app.dependencies.permissions import get_current_user, require_roles
+from app.routers.policies import _POLICIES_READ_ROLES
 from app.services import storage
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -46,6 +57,23 @@ _ENTITY_MODELS: dict[str, type] = {
     "PROPERTY": models.Property,
     "POLICY": models.InsurancePolicy,
 }
+
+
+# Entity types whose documents are read-gated, mirroring the gate on the entity itself.
+_GATED_READ_ROLES: dict[str, tuple[str, ...]] = {"POLICY": _POLICIES_READ_ROLES}
+
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+def _require_read_access(
+    entity_type: str, credentials: HTTPAuthorizationCredentials | None, db: Session
+) -> None:
+    """401/403 exactly like require_roles(...) would, but only for a gated entity type —
+    the others stay open like their parent entity's GET."""
+    roles = _GATED_READ_ROLES.get(entity_type)
+    if roles is None:
+        return
+    require_roles(*roles)(get_current_user(credentials, db))
 
 
 def _get_entity_or_404(db: Session, entity_type: schemas.DocumentEntityType, entity_id: int) -> None:
@@ -95,7 +123,13 @@ async def upload_document(
 
 
 @router.get("/entity/{entity_type}/{entity_id}", response_model=list[schemas.DocumentOut])
-def list_documents(entity_type: schemas.DocumentEntityType, entity_id: int, db: Session = Depends(get_db)):
+def list_documents(
+    entity_type: schemas.DocumentEntityType,
+    entity_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+):
+    _require_read_access(entity_type, credentials, db)
     _get_entity_or_404(db, entity_type, entity_id)
     return db.scalars(
         select(models.Document)
@@ -119,10 +153,15 @@ def delete_document(
 
 
 @router.get("/{document_id}/signed-url", response_model=schemas.SignedUrlOut)
-def get_document_signed_url(document_id: int, db: Session = Depends(get_db)):
+def get_document_signed_url(
+    document_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+):
     document = db.get(models.Document, document_id)
     if not document:
         raise HTTPException(404, "Document not found")
+    _require_read_access(document.entity_type, credentials, db)
     signed = storage.generate_signed_url(document.s3_url)
     return {
         **signed,
