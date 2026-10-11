@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 HazardType = Literal["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"]
 SeverityLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -39,6 +39,24 @@ Money = Annotated[float, Field(ge=0, lt=MONEY_MAX)]
 SignedMoney = Annotated[float, Field(gt=-MONEY_MAX, lt=MONEY_MAX)]
 Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
+
+
+class PartialUpdate(BaseModel):
+    """Base for the partial-update bodies (PATCH, and the PUTs used the same way):
+    leave a field out to keep its value. Every field is typed `X | None` so it can be
+    left out, which also let an explicit null through to the router's setattr loop,
+    and from there into a NOT NULL column: an IntegrityError, i.e. a 500 (or, for
+    users, a misleading "Email already exists"). So null is a 422 except for the
+    fields a subclass lists in NULLABLE: nullable columns, where null means "clear".
+    Validators don't run on left-out fields, so only an explicit null is checked."""
+    NULLABLE: ClassVar[frozenset[str]] = frozenset()
+
+    @field_validator("*")
+    @classmethod
+    def _null_only_where_the_column_allows_it(cls, value, info: ValidationInfo):
+        if value is None and info.field_name not in cls.NULLABLE:
+            raise ValueError("שדה זה אינו יכול להיות ריק (null) — כדי להשאיר את הערך הקיים יש להשמיט אותו")
+        return value
 
 
 # --- Users ---
@@ -133,10 +151,11 @@ class RolePermissionUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=200)
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(PartialUpdate):
     """Partial update — also how role changes and disabling happen (is_active=False),
     rather than separate dedicated endpoints, same convention as ClaimUpdate covering
-    claim_status changes."""
+    claim_status changes. A null password means "keep the current one"."""
+    NULLABLE = frozenset({"password"})
     full_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=200)
     role: UserRole | None = None
@@ -199,9 +218,10 @@ class RiskProfileCreate(BaseModel):
     near_hazmat_site: bool = False
 
 
-class RiskProfileUpdate(BaseModel):
+class RiskProfileUpdate(PartialUpdate):
     """Payload for PUT /api/properties/{property_id}/risk-profile — partial update
     (re-survey) of the existing profile."""
+    NULLABLE = frozenset({"notes"})
     survey_date: date | None = None
     flood_risk_score: int | None = Field(default=None, ge=1, le=5)
     fire_risk_score: int | None = Field(default=None, ge=1, le=5)
@@ -256,11 +276,12 @@ class PropertyCreate(BaseModel):
     primary_manager_id: int | None = None
 
 
-class PropertyUpdate(BaseModel):
+class PropertyUpdate(PartialUpdate):
     """Payload for PUT /api/properties/{id}. All fields optional (partial update,
     same convention as MitigationTaskUpdate/PolicyUpdate) despite PUT's usual
     full-replace connotation — chosen to match how the other write routers in this
     codebase already use PUT/PATCH interchangeably for partial updates."""
+    NULLABLE = frozenset({"region_id", "primary_manager_id"})
     property_code: str | None = Field(default=None, max_length=30)
     name: str | None = Field(default=None, max_length=200)
     address: str | None = Field(default=None, max_length=300)
@@ -347,9 +368,10 @@ class IncidentOut(BaseModel):
     resolved_address: str | None = None
 
 
-class IncidentUpdate(BaseModel):
+class IncidentUpdate(PartialUpdate):
     """Edits a draft's content before submission — see PATCH /{incident_id}.
     Only usable while the incident is still a draft (is_draft=True)."""
+    NULLABLE = frozenset({"area_or_building", "reported_coordinates"})
     property_id: int | None = None
     incident_timestamp: datetime | None = None
     hazard_type: HazardType | None = None
@@ -395,7 +417,8 @@ class ClaimCreate(BaseModel):
     expected_payment_date: date | None = None
 
 
-class ClaimUpdate(BaseModel):
+class ClaimUpdate(PartialUpdate):
+    NULLABLE = frozenset({"adjuster_name", "expected_payment_date"})
     claim_status: ClaimStatus | None = None
     approved_amount: Money | None = None
     adjuster_name: EncryptedColumnText = None
@@ -433,7 +456,8 @@ class ClaimReserveCreate(BaseModel):
     expected_payment_date: date | None = None
 
 
-class ClaimReserveUpdate(BaseModel):
+class ClaimReserveUpdate(PartialUpdate):
+    NULLABLE = frozenset({"expected_payment_date"})
     reserve_amount: Money | None = None
     expected_payment_date: date | None = None
 
@@ -483,7 +507,8 @@ class PolicyCreate(BaseModel):
     exclusions: str | None = None
 
 
-class PolicyUpdate(BaseModel):
+class PolicyUpdate(PartialUpdate):
+    NULLABLE = frozenset({"per_event_limit", "bi_waiting_period_hours", "exclusions"})
     insurer_name: str | None = Field(default=None, max_length=150)
     start_date: date | None = None
     end_date: date | None = None
@@ -578,7 +603,8 @@ class MitigationTaskCreate(BaseModel):
     assigned_to_user_id: int | None = None
 
 
-class MitigationTaskUpdate(BaseModel):
+class MitigationTaskUpdate(PartialUpdate):
+    NULLABLE = frozenset({"assigned_to_user_id"})
     title: str | None = Field(default=None, max_length=200)
     cost_estimate: Money | None = None
     expected_annual_savings: Money | None = None
@@ -760,7 +786,7 @@ class NotificationRecipientCreate(BaseModel):
     is_active: bool = True
 
 
-class NotificationRecipientUpdate(BaseModel):
+class NotificationRecipientUpdate(PartialUpdate):
     role: str | None = Field(default=None, max_length=30)
     display_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=200)
@@ -1575,7 +1601,7 @@ class EmailTemplateCreate(BaseModel):
     body_template: str
 
 
-class EmailTemplateUpdate(BaseModel):
+class EmailTemplateUpdate(PartialUpdate):
     """All fields optional — a PATCH may touch just the name, just the body, etc.
     Same `exclude_unset` convention as RolePermissionUpdate/MitigationTaskUpdate
     elsewhere in this file."""
