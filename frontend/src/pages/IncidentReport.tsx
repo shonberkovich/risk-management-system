@@ -258,7 +258,9 @@ export default function IncidentReport() {
         severity_level: severity || undefined,
         operational_impact: impact || undefined,
         initial_estimated_loss: loss ? Number(loss) : undefined,
-        description,
+        // Not written yet: leave the stored text (the placeholder) alone, the API
+        // rejects a blank description.
+        description: description.trim() ? description : undefined,
         business_interruption_requested: businessInterruption,
         area_or_building: areaOrBuilding || undefined,
         reported_coordinates: reportedCoordinates,
@@ -273,7 +275,7 @@ export default function IncidentReport() {
         severity_level: severity || "LOW",
         operational_impact: impact || "FULL_OPERATION",
         initial_estimated_loss: Number(loss) || 0,
-        description: description || "(טיוטה — יושלם מאוחר יותר)",
+        description: description.trim() ? description : "(טיוטה — יושלם מאוחר יותר)",
         is_draft: true,
         business_interruption_requested: businessInterruption,
         area_or_building: areaOrBuilding || undefined,
