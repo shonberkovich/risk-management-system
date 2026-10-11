@@ -253,7 +253,6 @@ export interface Incident {
 
 export interface IncidentCreate {
   property_id: number;
-  reported_by_user_id?: number | null;
   incident_timestamp: string;
   hazard_type: HazardType;
   severity_level: SeverityLevel;
