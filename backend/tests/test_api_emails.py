@@ -63,6 +63,27 @@ def test_send_email_creates_recipients_and_is_retrievable(client, make_user):
     assert sender_get.status_code == 200
 
 
+def test_a_user_addressed_more_than_once_gets_one_mailbox_copy(client, make_user):
+    sender = make_user(role="RISK_MANAGER")
+    twice = make_user(role="PROPERTY_MANAGER")
+    cc_only = make_user(role="CFO")
+
+    resp = _send(
+        client, auth_headers(sender),
+        to=[twice.user_id, twice.user_id], cc=[twice.user_id, cc_only.user_id], bcc=[cc_only.user_id],
+    )
+
+    assert resp.status_code == 201, resp.text
+    rows = [(r["user"]["user_id"], r["recipient_type"], r["folder"]) for r in resp.json()["recipients"]]
+    assert sorted(rows) == sorted([
+        (twice.user_id, "TO", "INBOX"),  # To beats CC
+        (cc_only.user_id, "CC", "INBOX"),  # CC beats BCC
+        (sender.user_id, "TO", "SENT"),
+    ])
+    inbox = client.get("/api/emails", params={"folder": "INBOX"}, headers=auth_headers(twice)).json()
+    assert [row["email_id"] for row in inbox] == [resp.json()["email_id"]]
+
+
 def test_send_email_is_not_marked_system_email(client, make_user):
     """TODO_SPEC.md "משימה 20" step 3 — a normal person-to-person send must never
     come back marked as a system email."""
