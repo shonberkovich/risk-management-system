@@ -81,8 +81,10 @@ def test_add_attachments_creates_rows_and_retrievable_via_thread(client, make_us
         assert a["file_size"] > 0
         assert "id" in a and "content_type" in a
 
-    # Physically persisted under media_storage/emails/<email_id>/...
-    assert (tmp_path / "emails" / str(email_id) / "report.pdf").exists()
+    # Physically persisted under media_storage/emails/<email_id>/<unique prefix>_<name>
+    stored = [p.name for p in (tmp_path / "emails" / str(email_id)).iterdir()]
+    assert len(stored) == 2
+    assert any(name.endswith("_report.pdf") for name in stored)
 
     # Retrievable via GET /api/emails/{id} (EmailThreadOut -> EmailOut.attachments)
     # both for the sender and for a recipient.
@@ -129,6 +131,21 @@ def test_add_attachments_rejects_oversized_file(client, make_user):
     resp = _attach(client, auth_headers(sender), email_id, [("files", "big.pdf", oversized, "application/pdf")])
     assert resp.status_code == 400
     assert "חורג" in resp.json()["detail"]
+
+
+def test_add_attachments_keeps_a_traversal_filename_inside_storage(client, make_user, tmp_path):
+    sender = make_user(role="RISK_MANAGER")
+    email_id = _send(client, auth_headers(sender), to=[sender.user_id])
+
+    resp = _attach(
+        client, auth_headers(sender), email_id, [("files", "../../../escaped.txt", b"payload", "text/plain")]
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()[0]["file_name"] == "escaped.txt"
+    assert not (tmp_path.parent / "escaped.txt").exists()
+    stored = list((tmp_path / "emails" / str(email_id)).iterdir())
+    assert len(stored) == 1 and stored[0].read_bytes() == b"payload"
 
 
 def test_add_attachments_rejects_empty_file(client, make_user):

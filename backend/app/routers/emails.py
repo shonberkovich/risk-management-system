@@ -547,10 +547,7 @@ def get_attachment_signed_url(
     signed = storage.generate_signed_url(attachment.file_path)
     return {
         **signed,
-        "download_url": (
-            f"/api/media/download?key={signed['storage_key']}"
-            f"&expires={signed['expires_at']}&token={signed['token']}"
-        ),
+        "download_url": storage.download_url("/api/media/download", signed),
     }
 
 

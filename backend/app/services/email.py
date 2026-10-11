@@ -511,7 +511,7 @@ def add_attachments(
     db: Session, email: models.Email, files: list[tuple[str, bytes]]
 ) -> list[models.EmailAttachment]:
     """Persists each (filename, file_bytes) pair via storage.upload_file under
-    entity_type="EMAIL" (-> media_storage/emails/<email_id>/<filename>, TODO_SPEC.md
+    entity_type="EMAIL" (-> media_storage/emails/<email_id>/<prefix>_<filename>, TODO_SPEC.md
     "משימה 6" step 1) and creates the matching EmailAttachment row. Deliberately a
     separate call from send_email rather than folded into it: routers/emails.py's
     POST /api/emails/{id}/attachments is a second step against an *already-created*
@@ -526,7 +526,7 @@ def add_attachments(
         attachment = models.EmailAttachment(
             email_id=email.email_id,
             file_path=upload_result.storage_key,
-            file_name=filename,
+            file_name=storage.safe_filename(filename),
             file_size=upload_result.size_bytes,
             content_type=upload_result.content_type,
         )
