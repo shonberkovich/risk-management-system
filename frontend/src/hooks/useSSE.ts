@@ -41,11 +41,19 @@ export interface NewEmailPayload {
  * Connects only while there's a signed-in user with a stored access token; closes
  * (effect cleanup) the moment either goes away — covers both logout (user -> null, e.g.
  * via AUTH_LOGOUT_EVENT bubbling into AuthContext) and this component unmounting.
- * Reconnection on a dropped connection is left entirely to the browser's native
- * `EventSource` behavior (auto-retries the same URL after a short delay unless `.close()`
- * was called) — no custom backoff/retry logic here, matching the task brief's steer not to
- * fight that default.
+ * Reconnection on a dropped connection is left to the browser's native `EventSource`
+ * behavior (auto-retries the same URL after a short delay unless `.close()` was called),
+ * with one exception: the browser gives up for good (readyState CLOSED) when a retry gets
+ * a non-200 — typically a 401 once the access token baked into the URL has expired (30
+ * min), e.g. after the server restarted under a long-open tab. Live updates would then
+ * stop in that tab until a full reload, so in that case only the hook opens a new
+ * connection itself, with whatever token is current by then (the axios interceptor keeps
+ * it refreshed — Navbar polls every 60s), backing off from RECONNECT_BASE_DELAY_MS up to
+ * RECONNECT_MAX_DELAY_MS while attempts keep failing.
  */
+export const RECONNECT_BASE_DELAY_MS = 5_000;
+export const RECONNECT_MAX_DELAY_MS = 60_000;
+
 export function useSSE(onNewEmail?: (payload: NewEmailPayload) => void): void {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -56,12 +64,13 @@ export function useSSE(onNewEmail?: (payload: NewEmailPayload) => void): void {
   }, [onNewEmail]);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!user || !token) {
+    if (!user || !getAccessToken()) {
       return;
     }
 
-    const source = new EventSource(`/api/sse/stream?token=${encodeURIComponent(token)}`);
+    let source: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let failedReconnects = 0;
 
     const handleNewEmail = (event: MessageEvent<string>) => {
       let payload: NewEmailPayload;
@@ -74,11 +83,35 @@ export function useSSE(onNewEmail?: (payload: NewEmailPayload) => void): void {
       queryClient.invalidateQueries({ queryKey: ["emails"] });
       onNewEmailRef.current?.(payload);
     };
-    source.addEventListener("new_email", handleNewEmail);
+
+    const connect = () => {
+      const token = getAccessToken();
+      if (!token) {
+        return; // signed out since — AuthContext tears this effect down anyway
+      }
+      const current = new EventSource(`/api/sse/stream?token=${encodeURIComponent(token)}`);
+      current.addEventListener("new_email", handleNewEmail);
+      current.addEventListener("open", () => {
+        failedReconnects = 0;
+      });
+      current.addEventListener("error", () => {
+        // Still CONNECTING: a plain drop the browser is already retrying on its own.
+        if (current.readyState !== EventSource.CLOSED) {
+          return;
+        }
+        current.removeEventListener("new_email", handleNewEmail);
+        const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** failedReconnects, RECONNECT_MAX_DELAY_MS);
+        failedReconnects += 1;
+        reconnectTimer = setTimeout(connect, delay);
+      });
+      source = current;
+    };
+    connect();
 
     return () => {
-      source.removeEventListener("new_email", handleNewEmail);
-      source.close();
+      clearTimeout(reconnectTimer);
+      source?.removeEventListener("new_email", handleNewEmail);
+      source?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onNewEmail intentionally excluded, see onNewEmailRef above.
   }, [user, queryClient]);
