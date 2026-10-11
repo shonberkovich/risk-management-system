@@ -19,6 +19,15 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Headless Chromium renders on the CPU (SwiftShader), and the spatial UI's endless
+    // ambient animations under backdrop-filter blurs (ui/spatial.css) make every frame
+    // cost 200-850ms there: measured ~4.5 fps on /mitigation, with the nav drawer taking
+    // 2s+ to slide in — long enough that clicks inside it intermittently landed while
+    // it was still off-screen ("element is outside of the viewport" until the test timed
+    // out). The same page runs ~46 fps on a real GPU and ~53 fps here once the app's
+    // existing prefers-reduced-motion rules switch those animations off — which is what
+    // this does. These specs test behavior, not animation.
+    contextOptions: { reducedMotion: "reduce" },
   },
   projects: [
     {
