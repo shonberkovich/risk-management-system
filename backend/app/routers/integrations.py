@@ -152,8 +152,8 @@ def get_recent_earthquakes(
 
 @router.get("/seismology/nearest-properties", response_model=list[schemas.NearestPropertyToEpicenterOut])
 def get_nearest_properties_to_epicenter(
-    latitude: float = Query(...),
-    longitude: float = Query(...),
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles(*_GIS_ROLES)),
 ):
@@ -212,8 +212,8 @@ def get_property_hazmat_proximity(
 
 @router.get("/gis/reverse-geocode", response_model=schemas.ReverseGeocodeOut)
 def get_reverse_geocode(
-    latitude: float = Query(...),
-    longitude: float = Query(...),
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
     _user: models.User = Depends(require_roles()),
 ):
     """Real OSM Nominatim reverse-geocoding call (lat/long -> street

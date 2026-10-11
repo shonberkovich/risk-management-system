@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
+from sqlalchemy.exc import DataError
+from starlette.responses import JSONResponse, RedirectResponse
 
 from app.config import settings
 from app.middleware.audit import AuditLogMiddleware
@@ -92,6 +93,25 @@ async def https_redirect(request: Request, call_next):
         if forwarded_proto != "https":
             return RedirectResponse(url=str(request.url.replace(scheme="https")), status_code=308)
     return await call_next(request)
+
+
+# The schemas bound every amount, but not every id: an id past BIGINT (a path param,
+# query param or body field) fails when the driver binds it (OverflowError), and one
+# past a narrower column fails in SQL Server with a class-22 data error (pyodbc's
+# DataError, e.g. 22003 arithmetic overflow). Both mean "this value can't be stored",
+# so they're the caller's 422, not a 500. The request's session is rolled back and
+# closed by get_db as usual.
+OUT_OF_RANGE_DETAIL = "ערך מספרי מחוץ לטווח המותר"
+
+
+@app.exception_handler(OverflowError)
+async def out_of_range_number(request: Request, exc: OverflowError):
+    return JSONResponse(status_code=422, content={"detail": OUT_OF_RANGE_DETAIL})
+
+
+@app.exception_handler(DataError)
+async def invalid_stored_value(request: Request, exc: DataError):
+    return JSONResponse(status_code=422, content={"detail": OUT_OF_RANGE_DETAIL})
 
 
 app.include_router(auth.router)
