@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -37,11 +38,17 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
+  // Every cached query belongs to the session that fetched it: without this, the next
+  // user to sign in on the same tab was served the previous user's cached data —
+  // including data their own role is refused by the server (e.g. a FIELD_WORKER seeing
+  // the CFO's policy list in the Documents picker).
   const doLogout = useCallback(() => {
     clearTokens();
+    queryClient.clear();
     setUser(null);
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     // A stored access token from a previous visit — confirm it's still valid via /me
@@ -65,8 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const tokens = await loginRequest({ email, password });
     setTokens(tokens.access_token, tokens.refresh_token);
+    queryClient.clear(); // e.g. leftovers from a session that expired without a logout
     setUser(tokens.user);
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(() => {
     // Best-effort call (stateless JWTs — server has nothing to revoke, see routers/auth.py);

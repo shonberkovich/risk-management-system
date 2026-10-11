@@ -168,3 +168,41 @@ test.describe("Role-based navigation", () => {
     }
   });
 });
+
+test.describe("Session switch on the same tab", () => {
+  // Everything here stays a client-side navigation: a page.goto() reload would empty the
+  // in-memory query cache by itself and hide the leak this guards against.
+  // Waits for the page's own GET /api/policies to settle (200 for CFO, 403 for
+  // FIELD_WORKER) before opening the picker, so the assertions see the final options.
+  // (A leftover cache entry would be served with no request at all — that times out here.)
+  async function openPolicyPickerOnDocuments(page: import("@playwright/test").Page, expectedStatus: number) {
+    const policiesSettled = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === "/api/policies" && r.request().method() === "GET",
+    );
+    await page.getByRole("button", { name: "ניווט" }).click();
+    await page.getByRole("button", { name: "עוד", exact: true }).click();
+    await page.getByRole("link", { name: "מסמכים", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "ניהול מסמכים" })).toBeVisible();
+    expect((await policiesSettled).status()).toBe(expectedStatus);
+    await page.getByLabel("סוג ישות").click();
+    await page.getByRole("option", { name: "פוליסה", exact: true }).click();
+    await page.getByLabel("בחרו פוליסה").click();
+  }
+
+  test("the next user does not see the previous user's cached data", async ({ page }) => {
+    await login(page, "CFO");
+    await openPolicyPickerOnDocuments(page, 200);
+    await expect(page.getByRole("option", { name: /POL-/ }).first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await logout(page);
+
+    // FIELD_WORKER is refused GET /api/policies (403), so the picker must stay empty.
+    await page.getByLabel("אימייל").fill(ROLE_CREDENTIALS.FIELD_WORKER.email);
+    await page.getByRole("textbox", { name: "סיסמה" }).fill(ROLE_CREDENTIALS.FIELD_WORKER.password);
+    await page.getByRole("button", { name: "התחברות" }).click();
+    await expect(page.getByText(ROLE_LABELS.FIELD_WORKER, { exact: true })).toBeVisible({ timeout: 15_000 });
+    await openPolicyPickerOnDocuments(page, 403);
+    await expect(page.getByText("No options")).toBeVisible();
+    await expect(page.getByRole("option", { name: /POL-/ })).toHaveCount(0);
+  });
+});
