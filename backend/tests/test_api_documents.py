@@ -130,6 +130,49 @@ def test_list_documents_rejects_unknown_entity(client):
     assert resp.status_code == 404
 
 
+# Policy documents follow GET /api/policies' financial-disclosure gate
+# (routers/policies.py's _POLICIES_READ_ROLES) instead of being open to anyone.
+
+
+def test_policy_documents_need_a_policy_read_role(client, make_user, make_policy):
+    policy = make_policy()
+    _upload(client, auth_headers(make_user(role="ADMIN")), "POLICY", policy.policy_id)
+    path = f"/api/documents/entity/POLICY/{policy.policy_id}"
+
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=auth_headers(make_user(role="FIELD_WORKER"))).status_code == 403
+    resp = client.get(path, headers=auth_headers(make_user(role="CFO")))
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_policy_document_signed_url_needs_a_policy_read_role(client, make_user, make_policy):
+    policy = make_policy()
+    doc_id = _upload(client, auth_headers(make_user(role="ADMIN")), "POLICY", policy.policy_id).json()["document_id"]
+    path = f"/api/documents/{doc_id}/signed-url"
+
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=auth_headers(make_user(role="FIELD_WORKER"))).status_code == 403
+    signed = client.get(path, headers=auth_headers(make_user(role="ADJUSTER")))
+    assert signed.status_code == 200
+    # The signed URL itself is the download credential — no bearer needed to fetch it.
+    assert client.get(signed.json()["download_url"]).status_code == 200
+
+
+def test_property_claim_and_incident_documents_stay_open_like_their_entities(
+    client, make_user, make_property, make_policy, make_incident, make_claim
+):
+    prop = make_property()
+    incident = make_incident(prop.property_id)
+    claim = make_claim(incident.incident_id, make_policy().policy_id)
+    for entity_type, entity_id in (
+        ("PROPERTY", prop.property_id),
+        ("INCIDENT", incident.incident_id),
+        ("CLAIM", claim.claim_id),
+    ):
+        assert client.get(f"/api/documents/entity/{entity_type}/{entity_id}").status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------
