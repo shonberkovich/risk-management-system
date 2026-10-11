@@ -218,6 +218,59 @@ def test_signed_url_and_download_round_trip(client, make_user, make_property, ma
     assert download.headers["content-type"] == "image/jpeg"
 
 
+def test_same_named_photos_do_not_overwrite_each_other(client, make_user, make_property, make_incident, monkeypatch):
+    # Phone cameras often name every capture "image.jpg" — each upload must keep its own
+    # bytes, and deleting one must leave the other downloadable.
+    monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
+    headers = auth_headers(make_user(role="ADMIN"))
+    incident = make_incident(make_property().property_id)
+    first = _upload(client, headers, incident.incident_id, filename="image.jpg", content=b"FIRST").json()
+    second = _upload(client, headers, incident.incident_id, filename="image.jpg", content=b"SECOND").json()
+    assert first["file_path"] != second["file_path"]
+
+    assert client.delete(f"/api/media/{second['media_id']}", headers=headers).status_code == 204
+
+    signed = client.get(f"/api/media/{first['media_id']}/signed-url").json()
+    download = client.get(signed["download_url"])
+    assert download.status_code == 200
+    assert download.content == b"FIRST"
+
+
+def test_upload_with_traversal_filename_is_kept_inside_storage(client, make_user, make_property, make_incident, monkeypatch, tmp_path):
+    monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
+    headers = auth_headers(make_user())
+    incident = make_incident(make_property().property_id)
+
+    resp = _upload(client, headers, incident.incident_id, filename="../../escaped.jpg")
+
+    assert resp.status_code == 201, resp.text
+    assert not (tmp_path.parent / "escaped.jpg").exists()
+    assert resp.json()["file_path"].startswith(f"incidents/{incident.incident_id}/")
+    assert (tmp_path / resp.json()["file_path"]).exists()
+
+
+def test_download_works_for_a_filename_with_url_special_characters(client, make_user, make_property, make_incident, monkeypatch):
+    monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
+    headers = auth_headers(make_user())
+    incident = make_incident(make_property().property_id)
+    media_id = _upload(client, headers, incident.incident_id, filename="R&D #1+2 צילום.jpg", content=b"BYTES").json()["media_id"]
+
+    signed = client.get(f"/api/media/{media_id}/signed-url").json()
+    download = client.get(signed["download_url"])
+    assert download.status_code == 200
+    assert download.content == b"BYTES"
+
+
+def test_download_rejects_a_validly_signed_key_outside_storage(client, tmp_path):
+    (tmp_path.parent / "outside.txt").write_text("secret")
+    signed = storage.generate_signed_url("../outside.txt")
+    resp = client.get(
+        "/api/media/download",
+        params={"key": signed["storage_key"], "expires": signed["expires_at"], "token": signed["token"]},
+    )
+    assert resp.status_code == 404
+
+
 def test_signed_url_for_nonexistent_media_returns_404(client):
     resp = client.get("/api/media/999999/signed-url")
     assert resp.status_code == 404

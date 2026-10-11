@@ -126,10 +126,7 @@ def get_document_signed_url(document_id: int, db: Session = Depends(get_db)):
     signed = storage.generate_signed_url(document.s3_url)
     return {
         **signed,
-        "download_url": (
-            f"/api/documents/download?key={signed['storage_key']}"
-            f"&expires={signed['expires_at']}&token={signed['token']}"
-        ),
+        "download_url": storage.download_url("/api/documents/download", signed),
     }
 
 
@@ -145,8 +142,8 @@ def download_document(
     if not storage.is_signed_url_valid(key, expires, token):
         raise HTTPException(403, "קישור ההורדה אינו תקף או שפג תוקפו")
 
-    dest = storage.STORAGE_ROOT / key
-    if not dest.exists():
+    dest = storage.resolve_key(key)
+    if dest is None or not dest.exists():
         raise HTTPException(404, "הקובץ לא נמצא באחסון")
 
     content_type = storage.ALLOWED_CONTENT_TYPES.get(key.rsplit(".", 1)[-1].lower(), "application/octet-stream")

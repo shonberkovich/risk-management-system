@@ -32,9 +32,12 @@ an unknown property_id).
 """
 import hashlib
 import io
+import re
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from PIL import Image
 from PIL.ExifTags import GPSTAGS, TAGS
@@ -66,9 +69,17 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 
+# Longest file name kept from the client (extension included). The storage key adds
+# "<entity>s/<id>/<32 hex>_" in front, and has to fit Documents.s3_url /
+# Incident_Media.file_path / Email_Attachments.file_path (NVARCHAR(500)).
+MAX_FILENAME_CHARS = 150
+
+_UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+
+
 @dataclass
 class UploadResult:
-    storage_key: str  # relative path within the bucket, e.g. "incidents/42/photo1.jpg"
+    storage_key: str  # relative path within the bucket, e.g. "incidents/42/<32 hex>_photo1.jpg"
     url: str  # unsigned, permanent-looking reference URL (mirrors Documents.s3_url)
     size_bytes: int
     content_type: str
@@ -79,14 +90,51 @@ def _content_type_for(filename: str) -> str:
     return ALLOWED_CONTENT_TYPES.get(ext, "application/octet-stream")
 
 
+def safe_filename(filename: str) -> str:
+    """The client's file name reduced to something safe to store and show: only the
+    last path component (a browser may send "C:\\fakepath\\x.pdf", an attacker
+    "../../x"), no characters Windows forbids in a name, no leading/trailing dots or
+    spaces, and at most MAX_FILENAME_CHARS long (the extension is kept). Falls back to
+    "file" when nothing usable is left."""
+    name = re.split(r"[\\/]", filename)[-1]
+    name = _UNSAFE_FILENAME_CHARS.sub("_", name).strip(" .")
+    if not name:
+        return "file"
+    if len(name) > MAX_FILENAME_CHARS:
+        stem, dot, ext = name.rpartition(".")
+        if dot and 0 < len(ext) <= 10:
+            name = stem[: MAX_FILENAME_CHARS - len(ext) - 1] + "." + ext
+        else:
+            name = name[:MAX_FILENAME_CHARS]
+    return name
+
+
+def resolve_key(storage_key: str) -> Path | None:
+    """The on-disk path for storage_key, or None when it would land outside
+    STORAGE_ROOT (e.g. a key containing ".."), so no caller can be steered into reading,
+    writing or deleting an arbitrary file."""
+    root = STORAGE_ROOT.resolve()
+    dest = (root / storage_key).resolve()
+    return dest if dest.is_relative_to(root) and dest != root else None
+
+
 def upload_file(file_bytes: bytes, filename: str, entity_type: str, entity_id: int) -> UploadResult:
     """Persists file_bytes to the local storage root under
-    <entity_type>/<entity_id>/<filename> (e.g. "incidents/42/photo1.jpg") and returns
-    an UploadResult with a Documents.s3_url-style reference URL. entity_type mirrors
-    Documents.entity_type ("INCIDENT", "CLAIM", "PROPERTY", "POLICY") but is not
-    validated against that enum here — callers (future routers/media.py) own that."""
-    storage_key = f"{entity_type.lower()}s/{entity_id}/{filename}"
-    dest = STORAGE_ROOT / storage_key
+    <entity_type>/<entity_id>/<unique prefix>_<safe filename> (e.g.
+    "incidents/42/3f2a…_photo1.jpg") and returns an UploadResult with a
+    Documents.s3_url-style reference URL. entity_type mirrors Documents.entity_type
+    ("INCIDENT", "CLAIM", "PROPERTY", "POLICY") but is not validated against that enum
+    here — callers (routers/media.py, routers/documents.py) own that.
+
+    The unique prefix matters: phone cameras routinely name every capture the same
+    (e.g. "image.jpg"), and keying by the client name alone made a second upload
+    overwrite the first one's bytes, with both rows then pointing at one file (deleting
+    either broke the other). The client name is reduced by safe_filename, so it can't
+    climb out of the storage root either."""
+    storage_key = f"{entity_type.lower()}s/{entity_id}/{uuid.uuid4().hex}_{safe_filename(filename)}"
+    dest = resolve_key(storage_key)
+    if dest is None:  # can't happen with a sanitized name; kept as the last line of defense
+        raise ValueError(f"storage key escapes the storage root: {storage_key!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(file_bytes)
 
@@ -94,7 +142,7 @@ def upload_file(file_bytes: bytes, filename: str, entity_type: str, entity_id: i
         storage_key=storage_key,
         url=f"{STORAGE_DOMAIN}/{storage_key}",
         size_bytes=len(file_bytes),
-        content_type=_content_type_for(filename),
+        content_type=_content_type_for(storage_key),
     )
 
 
@@ -102,8 +150,8 @@ def delete_file(storage_key: str) -> bool:
     """Removes a previously uploaded file. Returns False (no-op) if it doesn't
     exist, rather than raising — deleting an already-gone file is not an error for
     the caller (e.g. a retry after a partial failure)."""
-    dest = STORAGE_ROOT / storage_key
-    if not dest.exists():
+    dest = resolve_key(storage_key)
+    if dest is None or not dest.exists():
         return False
     dest.unlink()
     return True
@@ -131,6 +179,17 @@ def generate_signed_url(storage_key: str, expires_in_seconds: int = DEFAULT_SIGN
         "expires_at": expires_at,
         "token": token,
     }
+
+
+def download_url(endpoint: str, signed: dict) -> str:
+    """The fetchable URL for a generate_signed_url() result against one of this API's
+    download endpoints (e.g. "/api/media/download"). The key is percent-encoded: a file
+    name may contain "&", "#", "+" or spaces, which would otherwise break the query
+    string (and with it the token check)."""
+    return (
+        f"{endpoint}?key={quote(signed['storage_key'], safe='/')}"
+        f"&expires={signed['expires_at']}&token={signed['token']}"
+    )
 
 
 def is_signed_url_valid(storage_key: str, expires_at: int, token: str) -> bool:
