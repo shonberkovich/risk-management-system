@@ -23,6 +23,7 @@ import { useState } from "react";
 
 import { deleteRolePermission, fetchRolePermissions, type RolePermission } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import RolePermissionDialog from "../components/RolePermissionDialog";
 import { ROLE_LABELS } from "../format";
 
@@ -39,6 +40,7 @@ export default function Roles() {
   const [roleFilter, setRoleFilter] = useState("");
   const [dialogPermission, setDialogPermission] = useState<RolePermission | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmDialog, confirm] = useConfirmDialog();
   const queryClient = useQueryClient();
 
   const permissions = useQuery({
@@ -63,6 +65,15 @@ export default function Roles() {
   const openEdit = (p: RolePermission) => {
     setDialogPermission(p);
     setDialogOpen(true);
+  };
+  const handleDelete = async (p: RolePermission) => {
+    const confirmed = await confirm({
+      title: "מחיקת הרשאה",
+      message: `למחוק את ההרשאה "${p.permission_key}" עבור ${ROLE_LABELS[p.role] ?? p.role}?`,
+      confirmLabel: "מחיקה",
+      destructive: true,
+    });
+    if (confirmed) removeMutation.mutate(p.role_permission_id);
   };
 
   return (
@@ -136,11 +147,7 @@ export default function Roles() {
                     <IconButton
                       size="small"
                       disabled={removeMutation.isPending}
-                      onClick={() => {
-                        if (window.confirm(`למחוק את ההרשאה "${p.permission_key}" עבור ${ROLE_LABELS[p.role] ?? p.role}?`)) {
-                          removeMutation.mutate(p.role_permission_id);
-                        }
-                      }}
+                      onClick={() => handleDelete(p)}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -161,6 +168,7 @@ export default function Roles() {
       {removeMutation.isError && <Alert severity="error">מחיקת ההרשאה נכשלה.</Alert>}
 
       <RolePermissionDialog open={dialogOpen} permission={dialogPermission} onClose={() => setDialogOpen(false)} />
+      {confirmDialog}
     </Stack>
   );
 }

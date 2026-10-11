@@ -204,6 +204,28 @@ test.describe("Property create + detail workflow", () => {
     await expect(page.getByRole("button", { name: /עדכון סקר|סקר חדש/ })).toBeHidden();
     await expect(page.getByRole("button", { name: "העלאת מסמך" })).toBeHidden();
   });
+
+  // Last in this describe: it takes the property out of the active list.
+  test("RISK_MANAGER deactivates the property via the in-app confirm dialog", async ({ page }) => {
+    await login(page, "RISK_MANAGER");
+    await page.goto("/properties");
+    await openCreatedProperty(page, propertyName);
+    const detailUrl = page.url();
+
+    // Cancelling leaves the property untouched.
+    await page.getByRole("button", { name: "השבתת נכס" }).click();
+    const confirmDialog = page.getByRole("dialog", { name: "השבתת נכס" });
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByRole("button", { name: "ביטול" }).click();
+    await expect(confirmDialog).toBeHidden();
+    await expect(page).toHaveURL(detailUrl);
+
+    // Confirming deactivates it and returns to the list, where it no longer appears.
+    await page.getByRole("button", { name: "השבתת נכס" }).click();
+    await confirmDialog.getByRole("button", { name: "השבתה" }).click();
+    await expect(page).toHaveURL(/\/properties$/, { timeout: 15_000 });
+    await expect(page.getByText(propertyName, { exact: true })).toHaveCount(0);
+  });
 });
 
 test.describe("Nonexistent property", () => {

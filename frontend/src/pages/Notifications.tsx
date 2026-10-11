@@ -32,6 +32,7 @@ import {
   type NotificationRecipient,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import NotificationRecipientDialog from "../components/NotificationRecipientDialog";
 import { ROLE_LABELS, formatDateTime } from "../format";
 
@@ -59,6 +60,7 @@ export default function Notifications() {
 
   const [dialogRecipient, setDialogRecipient] = useState<NotificationRecipient | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmDialog, confirm] = useConfirmDialog();
 
   const preview = useQuery({ queryKey: ["notifications-preview"], queryFn: previewNotifications, enabled: canRead });
   const log = useQuery({ queryKey: ["notifications-log"], queryFn: () => fetchNotificationLog(), enabled: canRead });
@@ -133,10 +135,13 @@ export default function Notifications() {
                 color="warning"
                 startIcon={<SendIcon />}
                 disabled={dispatchMutation.isPending || (preview.data?.length ?? 0) === 0}
-                onClick={() => {
-                  if (window.confirm("לשלוח (באופן מדומה) את כל ההתראות הפעילות לכל הנמענים המתאימים?")) {
-                    dispatchMutation.mutate();
-                  }
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: "שליחת התראות",
+                    message: "לשלוח (באופן מדומה) את כל ההתראות הפעילות לכל הנמענים המתאימים?",
+                    confirmLabel: "שליחה",
+                  });
+                  if (confirmed) dispatchMutation.mutate();
                 }}
               >
                 שליחה עכשיו
@@ -285,10 +290,14 @@ export default function Notifications() {
                           <IconButton
                             size="small"
                             disabled={removeRecipientMutation.isPending}
-                            onClick={() => {
-                              if (window.confirm(`למחוק את הנמען "${r.display_name}"?`)) {
-                                removeRecipientMutation.mutate(r.recipient_id);
-                              }
+                            onClick={async () => {
+                              const confirmed = await confirm({
+                                title: "מחיקת נמען",
+                                message: `למחוק את הנמען "${r.display_name}"?`,
+                                confirmLabel: "מחיקה",
+                                destructive: true,
+                              });
+                              if (confirmed) removeRecipientMutation.mutate(r.recipient_id);
                             }}
                           >
                             <DeleteIcon fontSize="small" />
@@ -305,6 +314,7 @@ export default function Notifications() {
       </Card>
 
       <NotificationRecipientDialog open={dialogOpen} recipient={dialogRecipient} onClose={() => setDialogOpen(false)} />
+      {confirmDialog}
     </Stack>
   );
 }

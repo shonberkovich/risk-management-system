@@ -35,6 +35,7 @@ import {
   type IncidentMedia,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import {
   CLAIM_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -83,6 +84,7 @@ function MediaThumbnail({ media, canDelete }: { media: IncidentMedia; canDelete:
   });
   const isImage = media.file_type.startsWith("image/");
   const queryClient = useQueryClient();
+  const [confirmDialog, confirm] = useConfirmDialog();
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteIncidentMedia(media.media_id),
@@ -96,8 +98,14 @@ function MediaThumbnail({ media, canDelete }: { media: IncidentMedia; canDelete:
           <IconButton
             size="small"
             disabled={deleteMutation.isPending}
-            onClick={() => {
-              if (window.confirm("למחוק את הקובץ הזה?")) deleteMutation.mutate();
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: "מחיקת מדיה",
+                message: "למחוק את הקובץ הזה?",
+                confirmLabel: "מחיקה",
+                destructive: true,
+              });
+              if (confirmed) deleteMutation.mutate();
             }}
             sx={{
               position: "absolute",
@@ -139,6 +147,7 @@ function MediaThumbnail({ media, canDelete }: { media: IncidentMedia; canDelete:
           </Typography>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

@@ -4,7 +4,7 @@
  * instead of being swallowed.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,11 +63,13 @@ describe("Documents — delete permission", () => {
   it("shows it to RISK_MANAGER and reports a failed delete instead of swallowing it", async () => {
     mocks.useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "דנה", role: "RISK_MANAGER" } });
     mocks.deleteDocumentMock.mockRejectedValue(new Error("500"));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await selectProperty();
 
     await userEvent.click(screen.getByRole("button", { name: "מחק מסמך" }));
+    const dialog = await screen.findByRole("dialog", { name: "מחיקת מסמך" });
+    expect(mocks.deleteDocumentMock).not.toHaveBeenCalled(); // nothing happens before confirming
+    await userEvent.click(within(dialog).getByRole("button", { name: "מחיקה" }));
 
     expect(mocks.deleteDocumentMock).toHaveBeenCalledWith(9);
     expect(await screen.findByText("מחיקת המסמך נכשלה. נסו שוב.")).toBeInTheDocument();
@@ -75,12 +77,14 @@ describe("Documents — delete permission", () => {
 
   it("does nothing when the confirmation is cancelled", async () => {
     mocks.useAuthMock.mockReturnValue({ user: { user_id: 7, full_name: "אדמין", role: "ADMIN" } });
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     renderPage();
     await selectProperty();
 
     await userEvent.click(screen.getByRole("button", { name: "מחק מסמך" }));
+    const dialog = await screen.findByRole("dialog", { name: "מחיקת מסמך" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ביטול" }));
 
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mocks.deleteDocumentMock).not.toHaveBeenCalled();
   });
 });

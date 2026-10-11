@@ -35,6 +35,7 @@ import {
   type DocumentFile,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import { DOCUMENT_TYPE_LABELS, formatDate } from "../format";
 
 const ENTITY_TYPE_LABELS: Record<DocumentEntityType, string> = {
@@ -114,6 +115,7 @@ export default function Documents() {
   const [uploadedBy, setUploadedBy] = useState<number | "">("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirmDialog();
 
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
@@ -168,7 +170,14 @@ export default function Documents() {
   };
 
   const handleDelete = async (documentId: number) => {
-    if (!entity || !window.confirm("למחוק את המסמך?")) return;
+    if (!entity) return;
+    const confirmed = await confirm({
+      title: "מחיקת מסמך",
+      message: "למחוק את המסמך?",
+      confirmLabel: "מחיקה",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setUploadError(null);
     try {
       await deleteDocument(documentId);
@@ -308,6 +317,7 @@ export default function Documents() {
       ) : (
         <Alert severity="info">בחרו סוג ישות וישות ספציפית כדי לצפות במסמכים המשויכים אליה או להעלות מסמך חדש.</Alert>
       )}
+      {confirmDialog}
     </Stack>
   );
 }

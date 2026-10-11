@@ -133,9 +133,12 @@ test.describe("Roles / Role-Permissions (ADMIN-only)", () => {
     const allRolesRow = page.locator("tbody tr", { hasText: permissionKey });
     await expect(allRolesRow).toBeVisible();
 
-    // --- Delete via the confirm() dialog flow ---
-    page.once("dialog", (dialog) => dialog.accept());
+    // --- Delete via the in-app confirm dialog ---
     await allRolesRow.getByRole("button", { name: "מחיקה" }).click();
+    const confirmDialog = page.getByRole("dialog", { name: "מחיקת הרשאה" });
+    await expect(confirmDialog).toContainText(permissionKey);
+    await confirmDialog.getByRole("button", { name: "מחיקה" }).click();
+    await expect(confirmDialog).toBeHidden();
     await expect(page.locator("tbody tr", { hasText: permissionKey })).toHaveCount(0, { timeout: 10_000 });
   });
 });

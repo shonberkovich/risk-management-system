@@ -47,6 +47,7 @@ import {
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useAIAssistant } from "../components/AIAssistant/AIAssistantContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import PropertyDialog from "../components/PropertyDialog";
 import RiskSurveyDialog from "../components/RiskSurveyDialog";
 import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatDateTime, formatIls, formatIlsCompact } from "../format";
@@ -161,6 +162,7 @@ export default function PropertyDetail() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirmDialog();
 
   const property = useQuery({
     queryKey: ["property", propertyId],
@@ -226,7 +228,13 @@ export default function PropertyDetail() {
   };
 
   const handleDeactivate = async () => {
-    if (!window.confirm("להשבית את הנכס? הנכס לא יופיע יותר ברשימת הנכסים הפעילים.")) return;
+    const confirmed = await confirm({
+      title: "השבתת נכס",
+      message: "להשבית את הנכס? הנכס לא יופיע יותר ברשימת הנכסים הפעילים.",
+      confirmLabel: "השבתה",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setDeactivateError(null);
     try {
       await deactivateProperty(propertyId);
@@ -674,6 +682,7 @@ export default function PropertyDetail() {
         existing={p.risk_profile}
         onClose={() => setSurveyOpen(false)}
       />
+      {confirmDialog}
     </Stack>
   );
 }
