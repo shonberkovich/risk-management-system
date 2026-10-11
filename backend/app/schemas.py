@@ -30,6 +30,16 @@ def _fits_encrypted_column(value: str | None) -> str | None:
 
 EncryptedColumnText = Annotated[str | None, AfterValidator(_fits_encrypted_column)]
 
+# Same idea for numbers. Money columns are DECIMAL(18,2), so 16 digits before the
+# point: from 1e16 up SQL Server raises an arithmetic overflow (a 500). The bound
+# also rejects inf/NaN, which Python's JSON parser accepts. SignedMoney is for the
+# financial-statement lines that can legitimately be negative (a net loss).
+MONEY_MAX = 1e16
+Money = Annotated[float, Field(ge=0, lt=MONEY_MAX)]
+SignedMoney = Annotated[float, Field(gt=-MONEY_MAX, lt=MONEY_MAX)]
+Latitude = Annotated[float, Field(ge=-90, le=90)]
+Longitude = Annotated[float, Field(ge=-180, le=180)]
+
 
 # --- Users ---
 # UserOut: read-only lookup (name + role) for UI pickers such as mitigation-task
@@ -183,7 +193,7 @@ class RiskProfileCreate(BaseModel):
     flood_risk_score: int = Field(ge=1, le=5)
     fire_risk_score: int = Field(ge=1, le=5)
     earthquake_risk_score: int = Field(ge=1, le=5)
-    mfl_amount: float
+    mfl_amount: Money
     has_sprinklers: bool
     notes: str | None = None
     near_hazmat_site: bool = False
@@ -196,7 +206,7 @@ class RiskProfileUpdate(BaseModel):
     flood_risk_score: int | None = Field(default=None, ge=1, le=5)
     fire_risk_score: int | None = Field(default=None, ge=1, le=5)
     earthquake_risk_score: int | None = Field(default=None, ge=1, le=5)
-    mfl_amount: float | None = None
+    mfl_amount: Money | None = None
     has_sprinklers: bool | None = None
     notes: str | None = None
     near_hazmat_site: bool | None = None
@@ -238,11 +248,11 @@ class PropertyCreate(BaseModel):
     address: str = Field(max_length=300)  # Properties.address NVARCHAR(300)
     region: str = Field(max_length=50)  # Properties.region NVARCHAR(50)
     region_id: int | None = None
-    latitude: float
-    longitude: float
+    latitude: Latitude
+    longitude: Longitude
     asset_type: AssetType
-    replacement_value: float = Field(ge=0)
-    book_value: float = Field(ge=0)
+    replacement_value: Money
+    book_value: Money
     primary_manager_id: int | None = None
 
 
@@ -256,11 +266,11 @@ class PropertyUpdate(BaseModel):
     address: str | None = Field(default=None, max_length=300)
     region: str | None = Field(default=None, max_length=50)
     region_id: int | None = None
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
     asset_type: AssetType | None = None
-    replacement_value: float | None = Field(default=None, ge=0)
-    book_value: float | None = Field(default=None, ge=0)
+    replacement_value: Money | None = None
+    book_value: Money | None = None
     primary_manager_id: int | None = None
     is_active: bool | None = None
 
@@ -300,10 +310,10 @@ class IncidentCreate(BaseModel):
     hazard_type: HazardType
     severity_level: SeverityLevel
     operational_impact: OperationalImpact
-    initial_estimated_loss: float = Field(ge=0)
+    initial_estimated_loss: Money
     description: str
     ai_classified: bool = False
-    ai_confidence: float | None = None
+    ai_confidence: float | None = Field(default=None, ge=0, le=1)  # DECIMAL(4,3), a 0..1 share
     is_draft: bool = False
     business_interruption_requested: bool = False
     area_or_building: str | None = Field(default=None, max_length=150)  # Incidents NVARCHAR(150)
@@ -344,7 +354,7 @@ class IncidentUpdate(BaseModel):
     hazard_type: HazardType | None = None
     severity_level: SeverityLevel | None = None
     operational_impact: OperationalImpact | None = None
-    initial_estimated_loss: float | None = Field(default=None, ge=0)
+    initial_estimated_loss: Money | None = None
     description: str | None = None
     business_interruption_requested: bool | None = None
     area_or_building: str | None = Field(default=None, max_length=150)
@@ -378,15 +388,15 @@ class ClaimOut(BaseModel):
 class ClaimCreate(BaseModel):
     incident_id: int
     policy_id: int
-    claimed_amount: float = Field(ge=0)
-    deductible_applied: float = Field(default=0, ge=0)
+    claimed_amount: Money
+    deductible_applied: Money = 0
     adjuster_name: EncryptedColumnText = None
     expected_payment_date: date | None = None
 
 
 class ClaimUpdate(BaseModel):
     claim_status: ClaimStatus | None = None
-    approved_amount: float | None = Field(default=None, ge=0)
+    approved_amount: Money | None = None
     adjuster_name: EncryptedColumnText = None
     expected_payment_date: date | None = None
 
@@ -403,7 +413,7 @@ class ClaimPaymentOut(BaseModel):
 
 class ClaimPaymentCreate(BaseModel):
     payment_date: date
-    amount: float
+    amount: float = Field(lt=MONEY_MAX)  # zero/negative gets the router's own 400
     reference_number: EncryptedColumnText = None
     payment_type: PaymentType
 
@@ -418,12 +428,12 @@ class ClaimReserveOut(BaseModel):
 
 
 class ClaimReserveCreate(BaseModel):
-    reserve_amount: float = Field(ge=0)
+    reserve_amount: Money
     expected_payment_date: date | None = None
 
 
 class ClaimReserveUpdate(BaseModel):
-    reserve_amount: float | None = Field(default=None, ge=0)
+    reserve_amount: Money | None = None
     expected_payment_date: date | None = None
 
 
@@ -463,12 +473,12 @@ class PolicyCreate(BaseModel):
     insurer_name: str = Field(max_length=150)  # Insurance_Policies.insurer_name NVARCHAR(150)
     start_date: date
     end_date: date
-    total_limit: float = Field(ge=0)
-    deductible_default: float = Field(ge=0)
-    annual_premium: float = Field(ge=0)
+    total_limit: Money
+    deductible_default: Money
+    annual_premium: Money
     status: PolicyStatus = "ACTIVE"
-    per_event_limit: float | None = Field(default=None, ge=0)
-    bi_waiting_period_hours: int | None = Field(default=None, ge=0)
+    per_event_limit: Money | None = None
+    bi_waiting_period_hours: int | None = Field(default=None, ge=0, le=32767)  # SMALLINT
     exclusions: str | None = None
 
 
@@ -476,12 +486,12 @@ class PolicyUpdate(BaseModel):
     insurer_name: str | None = Field(default=None, max_length=150)
     start_date: date | None = None
     end_date: date | None = None
-    total_limit: float | None = Field(default=None, ge=0)
-    deductible_default: float | None = Field(default=None, ge=0)
-    annual_premium: float | None = Field(default=None, ge=0)
+    total_limit: Money | None = None
+    deductible_default: Money | None = None
+    annual_premium: Money | None = None
     status: PolicyStatus | None = None
-    per_event_limit: float | None = Field(default=None, ge=0)
-    bi_waiting_period_hours: int | None = Field(default=None, ge=0)
+    per_event_limit: Money | None = None
+    bi_waiting_period_hours: int | None = Field(default=None, ge=0, le=32767)  # SMALLINT
     exclusions: str | None = None
 
 
@@ -494,7 +504,7 @@ class PolicyAssetOut(BaseModel):
 
 class PolicyAssetCreate(BaseModel):
     property_id: int
-    specific_deductible: float | None = Field(default=None, ge=0)
+    specific_deductible: Money | None = None
 
 
 # --- Incident Media ---
@@ -561,16 +571,16 @@ class MitigationTaskOut(BaseModel):
 class MitigationTaskCreate(BaseModel):
     property_id: int
     title: str = Field(max_length=200)  # Mitigation_Tasks.title NVARCHAR(200)
-    cost_estimate: float = Field(ge=0)
-    expected_annual_savings: float = Field(default=0, ge=0)
+    cost_estimate: Money
+    expected_annual_savings: Money = 0
     due_date: date
     assigned_to_user_id: int | None = None
 
 
 class MitigationTaskUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
-    cost_estimate: float | None = Field(default=None, ge=0)
-    expected_annual_savings: float | None = Field(default=None, ge=0)
+    cost_estimate: Money | None = None
+    expected_annual_savings: Money | None = None
     due_date: date | None = None
     status: MitigationStatus | None = None
     assigned_to_user_id: int | None = None
@@ -1024,15 +1034,15 @@ class FinancialStatementCreate(BaseModel):
     statement. total_liabilities/total_equity/gross_profit/operating_profit are
     optional (nullable on the model, see models.FinancialStatement) so a statement can
     be entered from a simpler income-statement-only source and completed later."""
-    year: int
-    total_assets: float
-    revenue: float
-    net_income: float
-    insurance_expense: float
-    total_liabilities: float | None = None
-    total_equity: float | None = None
-    gross_profit: float | None = None
-    operating_profit: float | None = None
+    year: int = Field(ge=1900, le=2100)
+    total_assets: Money
+    revenue: Money
+    net_income: SignedMoney
+    insurance_expense: Money
+    total_liabilities: Money | None = None
+    total_equity: SignedMoney | None = None
+    gross_profit: SignedMoney | None = None
+    operating_profit: SignedMoney | None = None
 
 
 class MultiYearTrendOut(BaseModel):
