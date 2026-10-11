@@ -304,8 +304,9 @@ def _reject_future_timestamp(v: datetime | None) -> datetime | None:
 
 
 class IncidentCreate(BaseModel):
+    # No reported_by_user_id: the reporter is always the authenticated caller (an
+    # unknown key in the body is ignored, like any extra field).
     property_id: int
-    reported_by_user_id: int | None = None
     incident_timestamp: datetime
     hazard_type: HazardType
     severity_level: SeverityLevel

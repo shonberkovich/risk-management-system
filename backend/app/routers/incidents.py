@@ -227,7 +227,7 @@ def list_incidents(
     stmt = select(models.Incident).order_by(models.Incident.incident_timestamp.desc())
     if status:
         stmt = stmt.where(models.Incident.status == status)
-    if property_id:
+    if property_id is not None:
         stmt = stmt.where(models.Incident.property_id == property_id)
     return db.scalars(stmt).all()
 
@@ -306,11 +306,11 @@ def create_incident(
     runs under _CREATE_LOCK so there's no window for two concurrent requests
     to both pass the duplicate check before either has committed.
 
-    The reporter defaults to the authenticated caller — the report form never
-    sends reported_by_user_id, so it used to be stored as NULL for every report,
-    which also made the duplicate check below match *any* user's report of the
-    same hazard on the same property within the window."""
-    reported_by_user_id = payload.reported_by_user_id or current_user.user_id
+    The reporter is always the authenticated caller. The body used to accept a
+    reported_by_user_id, which let any role file a report in another user's name
+    (and a nonexistent id was an FK error, a 500); the report form never sent it.
+    Recording the caller also keeps the duplicate check below per reporter."""
+    reported_by_user_id = current_user.user_id
     with _CREATE_LOCK:
         if idempotency_key:
             _purge_idempotency_cache_locked()

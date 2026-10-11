@@ -1,6 +1,8 @@
 """Integration tests: POST/GET/PATCH /api/incidents against a real FastAPI TestClient
 (routing + RBAC + ORM together), not just the service layer. See TODO_SPEC.md stage 10
 ("בדיקות אינטגרציה ל-API — אירועים")."""
+import pytest
+
 from tests.conftest import auth_headers
 
 
@@ -224,6 +226,36 @@ def test_create_incident_records_the_authenticated_reporter(client, db, make_pro
     incident = db.get(models.Incident, resp.json()["incident_id"])
     db.refresh(incident)
     assert incident.reported_by_user_id == reporter.user_id
+
+
+@pytest.mark.parametrize("claimed_reporter", ["other_user", 999_999])
+def test_a_client_supplied_reporter_is_ignored(client, db, make_property, make_user, claimed_reporter):
+    """A caller can't file a report in someone else's name, and an unknown id is not
+    an FK error (500)."""
+    from app import models
+
+    prop = make_property()
+    reporter = make_user(role="FIELD_WORKER")
+    if claimed_reporter == "other_user":
+        claimed_reporter = make_user(role="RISK_MANAGER").user_id
+    resp = client.post(
+        "/api/incidents",
+        json=_incident_payload(prop.property_id, reported_by_user_id=claimed_reporter),
+        headers=auth_headers(reporter),
+    )
+    assert resp.status_code == 201, resp.text
+
+    incident = db.get(models.Incident, resp.json()["incident_id"])
+    db.refresh(incident)
+    assert incident.reported_by_user_id == reporter.user_id
+
+
+def test_property_filter_zero_matches_no_property(client, make_property, make_incident):
+    """property_id=0 is a filter like any other (no property has id 0), not "no filter"."""
+    make_incident(make_property().property_id)
+    resp = client.get("/api/incidents", params={"property_id": 0})
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 def test_same_hazard_reported_by_two_users_is_not_treated_as_a_duplicate(client, make_property, make_user):
