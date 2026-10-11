@@ -118,6 +118,51 @@ def test_send_email_rejects_unknown_in_reply_to(client, make_user):
     assert resp.status_code == 404
 
 
+def test_cannot_reply_to_an_email_outside_your_mailbox(client, make_user):
+    # A non-participant gets the same 404 as for a nonexistent id — no existence
+    # oracle — and no reply is created (so they never join that thread).
+    user_a = make_user(role="RISK_MANAGER")
+    user_b = make_user(role="PROPERTY_MANAGER")
+    outsider = make_user(role="CFO")
+    private_id = _send(client, auth_headers(user_a), to=[user_b.user_id], subject="פרטי").json()["email_id"]
+
+    foreign = _send(client, auth_headers(outsider), to=[outsider.user_id], in_reply_to=private_id)
+    unknown = _send(client, auth_headers(outsider), to=[outsider.user_id], in_reply_to=999_999)
+
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json() == unknown.json()
+    sent = client.get("/api/emails", params={"folder": "SENT"}, headers=auth_headers(outsider)).json()
+    assert sent == []
+
+
+def test_cannot_schedule_a_reply_to_an_email_outside_your_mailbox(client, make_user):
+    user_a = make_user(role="RISK_MANAGER")
+    user_b = make_user(role="PROPERTY_MANAGER")
+    outsider = make_user(role="CFO")
+    private_id = _send(client, auth_headers(user_a), to=[user_b.user_id]).json()["email_id"]
+
+    resp = client.post(
+        "/api/emails/schedule",
+        json={
+            "to": [outsider.user_id], "subject": "Re", "body_html": "<p>x</p>",
+            "in_reply_to": private_id, "scheduled_for": "2099-01-01T09:00:00Z",
+        },
+        headers=auth_headers(outsider),
+    )
+    assert resp.status_code == 404
+
+
+def test_sender_can_reply_to_their_own_sent_email(client, make_user):
+    user_a = make_user(role="RISK_MANAGER")
+    user_b = make_user(role="PROPERTY_MANAGER")
+    root_id = _send(client, auth_headers(user_a), to=[user_b.user_id]).json()["email_id"]
+
+    resp = _send(client, auth_headers(user_a), to=[user_b.user_id], subject="תזכורת", in_reply_to=root_id)
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["thread_id"] == root_id
+
+
 def test_thread_reply_returns_full_thread_to_participants(client, make_user):
     user_a = make_user(role="RISK_MANAGER")
     user_b = make_user(role="PROPERTY_MANAGER")
