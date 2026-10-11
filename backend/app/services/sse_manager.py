@@ -23,6 +23,11 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 
+# Put on a stream's queue by close_all(): tells routers/sse.py's stream loop to end
+# the response rather than keep waiting for the next event. A unique object, so no
+# broadcast event dict can ever be mistaken for it.
+CLOSE_STREAM = object()
+
 
 class ConnectionManager:
     """Holds the set of open `asyncio.Queue`s per `user_id`. A user's stream can
@@ -33,13 +38,21 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         self._connections: dict[int, set[asyncio.Queue]] = defaultdict(set)
+        self._closed = False
 
     def connect(self, user_id: int) -> asyncio.Queue:
         """Registers a new queue for `user_id` (one per open tab/connection) and
         returns it. The caller (routers/sse.py) reads from this queue for the
         lifetime of one SSE stream and must call disconnect() with the same
-        queue when the stream ends."""
+        queue when the stream ends.
+
+        After close_all() (the server is shutting down) the queue comes back
+        already holding CLOSE_STREAM and is not registered, so a stream that
+        squeezes in during shutdown ends straight away instead of being missed."""
         queue: asyncio.Queue = asyncio.Queue()
+        if self._closed:
+            queue.put_nowait(CLOSE_STREAM)
+            return queue
         self._connections[user_id].add(queue)
         return queue
 
@@ -64,6 +77,21 @@ class ConnectionManager:
         connection right now — see module docstring."""
         for queue in self._connections.get(user_id, ()):
             queue.put_nowait(event)
+
+    def close_all(self) -> None:
+        """Ends every open stream, for every user: puts CLOSE_STREAM on each queue,
+        and makes later connect() calls return already-closed queues. Called once
+        the server starts shutting down (main.py's lifespan wires it to the shutdown
+        signal, see app/shutdown_signals.py) — the server waits for every open
+        response to finish before it exits, and an SSE stream never finishes on its
+        own. Each stream deregisters itself through disconnect() as it ends. A
+        browser's EventSource retries on its own after a clean end; if that retry
+        is rejected (e.g. 401 once the access token in its URL has expired) it
+        stops for good, and the email views' polling covers that tab instead."""
+        self._closed = True
+        for queues in self._connections.values():
+            for queue in queues:
+                queue.put_nowait(CLOSE_STREAM)
 
     def connection_count(self, user_id: int) -> int:
         """Number of currently-open queues for `user_id`. Mainly for tests that
@@ -90,3 +118,7 @@ def disconnect(user_id: int, queue: asyncio.Queue) -> None:
 
 def broadcast(user_id: int, event: dict) -> None:
     manager.broadcast(user_id, event)
+
+
+def close_all() -> None:
+    manager.close_all()

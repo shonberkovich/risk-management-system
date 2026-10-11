@@ -9,19 +9,22 @@ singleton, so tests can't leak state into each other.
 
 Full success-path streaming (a valid token actually receiving `new_email`
 events over the wire) is intentionally not exercised with FastAPI's TestClient:
-the endpoint's generator only ever terminates on client-disconnect/heartbeat-
-forever, so driving it through a synchronous test client would hang rather than
-return. That behavior is instead verified by direct reasoning plus the
+the endpoint's generator only terminates on client disconnect or server shutdown
+(heartbeating forever otherwise), so driving it through a synchronous test client
+would hang rather than return. The server-shutdown path (CLOSE_STREAM: deliver
+what's already queued, end, deregister) is instead driven directly against the
+generator by test_event_stream_ends_when_the_server_shuts_down. The
+client-disconnect paths are verified by direct reasoning plus the
 ConnectionManager tests below: routers/sse.py registers exactly one queue per
 stream via sse_manager.connect() and deregisters it in a `finally` block via
 sse_manager.disconnect() (see that module's docstring) regardless of *how* the
-generator exits (normal break on request.is_disconnected(), or any exception
-propagating out of a `yield`, including CancelledError/GeneratorExit) — so the
-same "always exactly one connect + one eventual disconnect, and disconnect is
-idempotent" guarantees ConnectionManager.disconnect provides here are exactly
-what prevents a queue leak over the life of the process. What *is* practical
-and is tested here: the endpoint's auth dependency rejects a missing or invalid
-token before any StreamingResponse/generator is ever created.
+generator exits (break on request.is_disconnected() or on CLOSE_STREAM, or any
+exception propagating out of a `yield`, including CancelledError/GeneratorExit) —
+so the same "always exactly one connect + one eventual disconnect, and
+disconnect is idempotent" guarantees ConnectionManager.disconnect provides here
+are exactly what prevents a queue leak over the life of the process. Also tested
+here: the endpoint's auth dependency rejects a missing or invalid token before
+any StreamingResponse/generator is ever created.
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ import asyncio
 
 import pytest
 
-from app.services.sse_manager import ConnectionManager
+from app.services.sse_manager import CLOSE_STREAM, ConnectionManager
 
 
 def test_connect_returns_a_queue_and_supports_multiple_per_user():
@@ -110,6 +113,72 @@ def test_many_connect_disconnect_cycles_leave_no_residue():
 
     assert manager.connection_count(7) == 0
     assert 7 not in manager._connections
+
+
+# --- Server shutdown (close_all) ----------------------------------------------
+
+def test_close_all_ends_every_open_queue_for_every_user():
+    manager = ConnectionManager()
+    queues = [manager.connect(user_id=1), manager.connect(user_id=1), manager.connect(user_id=2)]
+
+    manager.close_all()
+
+    for q in queues:
+        assert q.get_nowait() is CLOSE_STREAM
+
+
+def test_connect_after_close_all_returns_an_already_closed_unregistered_queue():
+    manager = ConnectionManager()
+    manager.close_all()
+
+    q = manager.connect(user_id=1)
+
+    assert q.get_nowait() is CLOSE_STREAM
+    assert manager.connection_count(1) == 0
+    manager.disconnect(1, q)  # the stream's `finally` still calls this — must stay safe
+
+
+class _ConnectedRequest:
+    async def is_disconnected(self) -> bool:
+        return False
+
+
+def test_event_stream_ends_when_the_server_shuts_down(monkeypatch):
+    """Regression: the stream used to end only when the client disconnected, so
+    uvicorn's graceful shutdown — which waits for every open response — never
+    finished while a tab was open: Ctrl+C and every --reload left the dev server
+    hanging. close_all must end it promptly (well before the 20s heartbeat), after
+    delivering anything already queued, and the stream must deregister itself."""
+    from app.routers import sse
+    from app.services import sse_manager
+
+    manager = ConnectionManager()
+    monkeypatch.setattr(sse_manager, "manager", manager)
+
+    async def scenario():
+        chunks = []
+
+        async def consume():
+            async for chunk in sse._event_stream(_ConnectedRequest(), user_id=7):
+                chunks.append(chunk)
+
+        task = asyncio.create_task(consume())
+        for _ in range(100):
+            if manager.connection_count(7):
+                break
+            await asyncio.sleep(0.01)
+        assert manager.connection_count(7) == 1
+
+        manager.broadcast(7, {"type": "new_email", "email_id": 1})
+        manager.close_all()
+        await asyncio.wait_for(task, timeout=2)
+        return chunks
+
+    chunks = asyncio.run(scenario())
+
+    assert len(chunks) == 1
+    assert chunks[0].startswith("event: new_email\n")
+    assert manager.connection_count(7) == 0
 
 
 # --- GET /api/sse/stream auth -------------------------------------------------

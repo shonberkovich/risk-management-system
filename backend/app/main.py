@@ -35,7 +35,9 @@ from app.routers import (
     sse,
     users,
 )
+from app.services import sse_manager
 from app.services.scheduler import start_scheduled_email_poller
+from app.shutdown_signals import chain_shutdown_signal_handlers
 
 
 @asynccontextmanager
@@ -45,9 +47,18 @@ async def lifespan(app: FastAPI):
     # and why it's skipped entirely under pytest). `poller_task` is None under
     # pytest, in which case there's nothing to cancel on shutdown either.
     poller_task = start_scheduled_email_poller()
+    # End every open SSE stream as soon as the server starts shutting down — the
+    # server waits for all open responses first, so an endless stream would hang
+    # Ctrl+C and every `--reload` (see app/shutdown_signals.py). The signal handler
+    # only hands off to the loop; close_all itself runs on the loop's thread.
+    loop = asyncio.get_running_loop()
+    restore_signal_handlers = chain_shutdown_signal_handlers(
+        lambda: loop.call_soon_threadsafe(sse_manager.close_all)
+    )
     try:
         yield
     finally:
+        restore_signal_handlers()
         if poller_task is not None:
             poller_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
