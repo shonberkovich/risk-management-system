@@ -2,6 +2,7 @@ import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import DeleteIcon from "@mui/icons-material/Delete";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Grid from "@mui/material/Grid";
@@ -43,6 +44,10 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
   // means "checked, nothing usable"; a missing key means "not checked yet" (still loading or
   // not an image at all).
   const [exifByFile, setExifByFile] = useState<Map<File, ExifSummary | null>>(new Map());
+  // Names of the files the last pick rejected as too large — shown inline rather than via
+  // window.alert(), which embedded browsers suppress (the user then never learns why the
+  // file didn't appear).
+  const [tooLargeNames, setTooLargeNames] = useState<string[]>([]);
 
   useEffect(() => {
     const pending = files.filter((f) => f.type.startsWith("image/") && !exifByFile.has(f));
@@ -68,11 +73,7 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
     const incoming = Array.from(fileList);
     const tooLarge = incoming.filter((f) => f.size > MAX_FILE_BYTES);
     const accepted = incoming.filter((f) => f.size <= MAX_FILE_BYTES);
-    if (tooLarge.length > 0) {
-      window.alert(
-        `הקבצים הבאים חורגים מהגודל המרבי המותר (25MB) ולא נוספו: ${tooLarge.map((f) => f.name).join(", ")}`,
-      );
-    }
+    setTooLargeNames(tooLarge.map((f) => f.name));
     if (accepted.length > 0) onFilesChange([...files, ...accepted]);
   };
 
@@ -126,6 +127,12 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
           </Button>
         </Grid>
       </Grid>
+
+      {tooLargeNames.length > 0 && (
+        <Alert severity="warning" onClose={() => setTooLargeNames([])}>
+          הקבצים הבאים חורגים מהגודל המרבי המותר (25MB) ולא נוספו: {tooLargeNames.join(", ")}
+        </Alert>
+      )}
 
       {files.length > 0 && (
         <Stack spacing={1}>

@@ -92,8 +92,9 @@ test.describe("Notifications", () => {
       });
       await expect(page.getByText("אין כרגע התראות סף פעילות הממתינות לניתוב.")).toBeVisible();
     } else {
-      page.once("dialog", (dialog) => dialog.accept());
       await sendButton.click();
+      const confirmDialog = page.getByRole("dialog", { name: "שליחת התראות" });
+      await confirmDialog.getByRole("button", { name: "שליחה" }).click();
       await expect(page.getByText(/נשלחו \d+ התראות \(מדומות\)\./)).toBeVisible({ timeout: 15_000 });
     }
   });

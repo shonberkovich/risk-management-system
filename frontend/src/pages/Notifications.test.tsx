@@ -5,7 +5,7 @@
  * "no active threshold alerts" banner.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -110,7 +110,6 @@ describe("Notifications", () => {
       { recipient_role: "RISK_MANAGER", recipient_name: "דנה כהן", channel: "EMAIL", contact: "dana@x.com", alert_type: "critical_incident", severity: "critical", title: "כותרת ההתראה", message: "x", property_ids: [1], value: 1, threshold: 1, status: null },
     ]);
     dispatchNotificationsMock.mockResolvedValue([{ recipient_role: "RISK_MANAGER" }]);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "RISK_MANAGER" } });
     renderPage();
 
@@ -122,7 +121,12 @@ describe("Notifications", () => {
     expect(sendButton.closest("button")).not.toBeDisabled();
     await userEvent.click(sendButton);
 
-    expect(window.confirm).toHaveBeenCalled();
+    // The confirmation is an in-app dialog (a native window.confirm() is silently
+    // suppressed in embedded browsers, which made this button do nothing there).
+    const dialog = await screen.findByRole("dialog", { name: "שליחת התראות" });
+    expect(dispatchNotificationsMock).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "שליחה" }));
+
     expect(dispatchNotificationsMock).toHaveBeenCalled();
     expect(await screen.findByText(/נשלחו 1 התראות/)).toBeInTheDocument();
   });
@@ -131,12 +135,15 @@ describe("Notifications", () => {
     previewNotificationsMock.mockResolvedValue([
       { recipient_role: "RISK_MANAGER", recipient_name: "דנה כהן", channel: "EMAIL", contact: "dana@x.com", alert_type: "critical_incident", severity: "critical", title: "כותרת ההתראה", message: "x", property_ids: [1], value: 1, threshold: 1, status: null },
     ]);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADMIN" } });
     renderPage();
 
-    await userEvent.click(await screen.findByText("שליחה עכשיו"));
+    await screen.findByText("אירוע קריטי");
+    await userEvent.click(screen.getByText("שליחה עכשיו"));
+    const dialog = await screen.findByRole("dialog", { name: "שליחת התראות" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ביטול" }));
 
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(dispatchNotificationsMock).not.toHaveBeenCalled();
   });
 });

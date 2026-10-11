@@ -1,9 +1,9 @@
 /**
  * Component tests for Roles.tsx — the page-level ADMIN-only gate, filtering
- * by role, the delete confirm/cancel flow (window.confirm), and dialog wiring.
+ * by role, the delete confirm/cancel flow (in-app confirm dialog), and dialog wiring.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,38 +76,42 @@ describe("Roles", () => {
   });
 
   it("confirming the delete prompt calls deleteRolePermission", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     deleteRolePermissionMock.mockResolvedValue(undefined);
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADMIN" } });
     renderPage();
     await screen.findByText("users:manage");
 
     await userEvent.click(screen.getAllByLabelText("מחיקה")[0]);
+    const dialog = await screen.findByRole("dialog", { name: "מחיקת הרשאה" });
+    expect(within(dialog).getByText(/users:manage/)).toBeInTheDocument();
+    expect(deleteRolePermissionMock).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "מחיקה" }));
 
-    expect(window.confirm).toHaveBeenCalled();
     expect(deleteRolePermissionMock.mock.calls[0][0]).toBe(1);
   });
 
   it("canceling the delete prompt does not call deleteRolePermission", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADMIN" } });
     renderPage();
     await screen.findByText("users:manage");
 
     await userEvent.click(screen.getAllByLabelText("מחיקה")[0]);
+    const dialog = await screen.findByRole("dialog", { name: "מחיקת הרשאה" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ביטול" }));
 
-    expect(window.confirm).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(deleteRolePermissionMock).not.toHaveBeenCalled();
   });
 
   it("shows an error alert if deletion fails", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     deleteRolePermissionMock.mockRejectedValue(new Error("network"));
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADMIN" } });
     renderPage();
     await screen.findByText("users:manage");
 
     await userEvent.click(screen.getAllByLabelText("מחיקה")[0]);
+    const dialog = await screen.findByRole("dialog", { name: "מחיקת הרשאה" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "מחיקה" }));
 
     expect(await screen.findByText("מחיקת ההרשאה נכשלה.")).toBeInTheDocument();
   });
