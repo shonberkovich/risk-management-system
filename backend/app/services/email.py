@@ -123,8 +123,15 @@ def _fan_out_recipients(
     TODO_SPEC.md "משימה 18" step 3: right after that same rules-engine call,
     `_maybe_send_auto_reply` gets the same per-recipient look — see its own
     docstring for the out-of-office check, loop guard, and rate limit."""
+    addressed: set[int] = set()
     for recipient_type, user_ids in (("TO", to), ("CC", cc), ("BCC", bcc)):
         for user_id in user_ids:
+            # One mailbox copy per person. Someone listed twice (in To and CC, or twice
+            # in one field) keeps the most prominent role, To > CC > BCC. Two rows would
+            # list the email twice in their inbox and double-count it as unread.
+            if user_id in addressed:
+                continue
+            addressed.add(user_id)
             recipient_row = models.EmailRecipient(
                 email_id=email.email_id,
                 user_id=user_id,
