@@ -17,7 +17,8 @@ Once authenticated, the handler registers one queue with the process-wide
 `sse_manager` keyed by that caller's own `user_id` and streams whatever is put on
 it — the manager's API has no way to address any other user's queue, so one
 user's stream cannot leak another's events (see sse_manager.ConnectionManager's
-docstring).
+docstring). The stream runs until the client disconnects or the server starts
+shutting down (sse_manager.close_all, wired up in main.py's lifespan).
 """
 from __future__ import annotations
 
@@ -52,10 +53,9 @@ def _get_current_user_id_from_query(
     The session is closed here, right after the lookup: `get_db`'s own cleanup only
     runs once the response has finished, which for this endpoint means when the
     long-lived stream closes. Holding it that long pinned one of the engine's pooled
-    connections (5 + 10 overflow) per open tab — and the Vite dev proxy keeps
-    upstream streams open even after the browser leaves — so a handful of streams
-    froze every DB-backed endpoint (login included) until the server restarted.
-    Closing twice is harmless."""
+    connections (5 + 10 overflow) for as long as each tab stayed open, so ~15 open
+    tabs froze every DB-backed endpoint (login included). Closing twice is
+    harmless."""
     if not token:
         raise _UNAUTHORIZED
     try:
@@ -80,6 +80,11 @@ async def _event_stream(request: Request, user_id: int):
             except asyncio.TimeoutError:
                 yield ": ping\n\n"
                 continue
+            if event is sse_manager.CLOSE_STREAM:
+                # The server is shutting down (sse_manager.close_all). End the
+                # response: uvicorn waits for every open one before the old worker
+                # exits, so an endless stream would hang Ctrl+C and every --reload.
+                break
             yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
     finally:
         # Runs on the normal break above, on the client disconnecting mid-`yield`
