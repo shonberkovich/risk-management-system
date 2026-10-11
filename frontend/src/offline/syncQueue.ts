@@ -19,11 +19,19 @@
 //                      mid-upload for its photos).
 //
 // Deliberately still scoped down from a general-purpose offline framework: queued operations
-// are processed in order, one at a time, stopping at the first failure so a still-offline
-// device doesn't burn through retries out of order. And "draft-update"/"draft-submit" only
+// are processed in order, one at a time. A failure that may well succeed later (no network,
+// a 5xx, an expired session) stops the run, so a still-offline device doesn't burn through
+// retries out of order. A failure that never will — the server answered with a 4xx such as
+// "this draft was already submitted" or a validation error — marks just that item as failed
+// (with the server's reason) and the run moves on: one bad item must not hold back every
+// report queued after it. Failed items wait for the user to retry or discard them; later
+// items for the same draft/incident wait too, so a draft's own operations stay in order.
+// And "draft-update"/"draft-submit" only
 // ever apply to a draft that was already created online — a draft whose very *first* save
 // happens while offline has no server-side id yet to update, so that case queues as "create"
 // (with is_draft: true) instead; see IncidentReport.tsx's saveDraftMutation.
+import { isAxiosError } from "axios";
+
 import {
   createIncident,
   submitDraftIncident,
@@ -59,10 +67,16 @@ export interface QueuedIncidentReport {
   operation: QueuedOperation;
   queuedAt: string;
   lastError?: string;
+  /** Set when the server rejected the item outright (a 4xx that a retry won't change):
+   * automatic syncs skip it until the user retries or discards it. */
+  failed?: boolean;
 }
 
 export interface SyncQueueState {
+  /** Items still waiting for an automatic sync. */
   pendingCount: number;
+  /** Items the server rejected — they need the user (retry or discard). */
+  failedCount: number;
   syncing: boolean;
 }
 
@@ -98,7 +112,8 @@ export function isOfflineStorageAvailable(): boolean {
 
 async function notify() {
   const items = await getQueuedReports().catch(() => [] as QueuedIncidentReport[]);
-  const state: SyncQueueState = { pendingCount: items.length, syncing };
+  const failedCount = items.filter((item) => item.failed).length;
+  const state: SyncQueueState = { pendingCount: items.length - failedCount, failedCount, syncing };
   listeners.forEach((listener) => listener(state));
 }
 
@@ -170,7 +185,7 @@ async function removeFromQueue(id: number): Promise<void> {
   });
 }
 
-async function recordFailure(id: number, message: string): Promise<void> {
+async function updateRecord(id: number, change: (record: QueuedIncidentReport) => void): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -179,13 +194,78 @@ async function recordFailure(id: number, message: string): Promise<void> {
     getRequest.onsuccess = () => {
       const record = getRequest.result as QueuedIncidentReport | undefined;
       if (record) {
-        record.lastError = message;
+        change(record);
         store.put(record);
       }
     };
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+function recordFailure(id: number, message: string, permanent: boolean): Promise<void> {
+  return updateRecord(id, (record) => {
+    record.lastError = message;
+    record.failed = permanent || undefined;
+  });
+}
+
+/** A rejection that retrying the same request won't change: a 4xx from the server, other
+ * than an expired session (401), a request timeout (408) or rate limiting (429). */
+function isPermanentFailure(err: unknown): boolean {
+  if (!isAxiosError(err) || !err.response) return false;
+  const status = err.response.status;
+  return status >= 400 && status < 500 && ![401, 408, 429].includes(status);
+}
+
+/** The server's own reason when it gave one (FastAPI's `detail`, a string or a list of
+ * validation errors), else the error's message. */
+function failureMessage(err: unknown): string {
+  if (isAxiosError(err)) {
+    const detail = (err.response?.data as { detail?: unknown } | undefined)?.detail;
+    if (typeof detail === "string" && detail) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+        .filter(Boolean);
+      if (messages.length) return messages.join("; ");
+    }
+  }
+  return err instanceof Error ? err.message : "שגיאת סנכרון לא ידועה";
+}
+
+/** The server-side draft/incident an operation acts on, if it already exists. */
+function targetIncidentId(operation: QueuedOperation): number | null {
+  switch (operation.kind) {
+    case "draft-update":
+    case "draft-submit":
+      return operation.draftId;
+    case "media":
+      return operation.incidentId;
+    default:
+      return null;
+  }
+}
+
+/** Items the server rejected, oldest first — for showing them with their reason. */
+export async function getFailedReports(): Promise<QueuedIncidentReport[]> {
+  return (await getQueuedReports()).filter((item) => item.failed);
+}
+
+/** Drops a queued item for good (the user gave up on it). */
+export async function discardQueuedReport(id: number): Promise<void> {
+  await removeFromQueue(id);
+  await notify();
+}
+
+/** Puts a failed item back in line and tries to sync right away. */
+export async function retryQueuedReport(id: number): Promise<SyncResult> {
+  await updateRecord(id, (record) => {
+    delete record.failed;
+    delete record.lastError;
+  });
+  await notify();
+  return trySync();
 }
 
 async function uploadQueuedFiles(incidentId: number, files: QueuedFile[]): Promise<void> {
@@ -227,7 +307,8 @@ export interface SyncResult {
   failed: number;
 }
 
-/** Flushes the queue in FIFO order; stops at the first failure to preserve ordering on retry. */
+/** Flushes the queue in FIFO order. Stops at the first failure that may be temporary (to
+ * preserve ordering on retry); a permanent rejection only sets that item aside. */
 export async function trySync(): Promise<SyncResult> {
   if (syncing || !navigator.onLine || !isOfflineStorageAvailable()) {
     return { succeeded: 0, failed: 0 };
@@ -238,11 +319,19 @@ export async function trySync(): Promise<SyncResult> {
   let failed = 0;
   try {
     const items = await getQueuedReports();
+    // Drafts/incidents with an earlier operation still unresolved (failed, now or before):
+    // their later operations wait, so one draft's edits never apply out of order.
+    const heldTargets = new Set<number>();
     for (const item of items) {
       // Defensive skip for a pre-v2 record (flat {payload, files}, no `operation`) left over
       // from before this queue supported draft-update/draft-submit/media — see DB_VERSION note.
       if (!item.operation) {
         await removeFromQueue(item.id);
+        continue;
+      }
+      const target = targetIncidentId(item.operation);
+      if (item.failed || (target !== null && heldTargets.has(target))) {
+        if (target !== null) heldTargets.add(target);
         continue;
       }
       try {
@@ -251,8 +340,10 @@ export async function trySync(): Promise<SyncResult> {
         succeeded += 1;
       } catch (err) {
         failed += 1;
-        await recordFailure(item.id, err instanceof Error ? err.message : "שגיאת סנכרון לא ידועה");
-        break; // likely still offline/flaky — stop and retry the whole queue next trigger
+        const permanent = isPermanentFailure(err);
+        await recordFailure(item.id, failureMessage(err), permanent);
+        if (!permanent) break; // likely still offline/flaky — stop and retry the whole queue next trigger
+        if (target !== null) heldTargets.add(target);
       }
     }
   } finally {

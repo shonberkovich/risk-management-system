@@ -19,6 +19,7 @@ import { Link as RouterLink, useNavigate } from "react-router-dom";
 
 import { fetchHomeFrontAlerts, fetchIncidents, fetchWeatherAlerts } from "../api/client";
 import AlertsBanner from "../components/AlertsBanner";
+import FailedSyncReports from "../components/FailedSyncReports";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { subscribeToSyncQueue, trySync } from "../offline/syncQueue";
 import {
@@ -121,6 +122,8 @@ export default function FieldWorkerDashboard() {
           </Stack>
         </CardContent>
       </Card>
+
+      <FailedSyncReports />
 
       <Button
         variant="contained"

@@ -24,6 +24,7 @@ import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import ShieldIcon from "@mui/icons-material/Shield";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import SyncIcon from "@mui/icons-material/Sync";
+import SyncProblemIcon from "@mui/icons-material/SyncProblem";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import WifiIcon from "@mui/icons-material/Wifi";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
@@ -254,6 +255,30 @@ const navIconSx = (isDark: boolean) =>
 
 // Same read-role set as routers/notifications.py's _NOTIFICATIONS_ROLES.
 const NOTIFICATIONS_ROLES = ["RISK_MANAGER", "CFO"];
+
+/** Shown only while the server has rejected offline-queued reports (they won't sync on
+ * their own) — links to the report screen, which lists them with retry/discard. */
+function FailedSyncChip() {
+  const [failedCount, setFailedCount] = useState(0);
+
+  useEffect(() => subscribeToSyncQueue((state) => setFailedCount(state.failedCount)), []);
+
+  if (failedCount === 0) return null;
+  return (
+    <Tooltip title="השרת דחה דיווחים שנשמרו במכשיר — לחצו לפרטים">
+      <Chip
+        component={Link}
+        to="/report-incident"
+        clickable
+        icon={<SyncProblemIcon fontSize="small" />}
+        label={failedCount === 1 ? "דיווח לא סונכרן" : `${failedCount} דיווחים לא סונכרנו`}
+        size="small"
+        color="error"
+        sx={{ height: 26, fontWeight: 500 }}
+      />
+    </Tooltip>
+  );
+}
 
 /** Small chip: shows live online/offline state and, when relevant, the offline-sync queue. */
 function ConnectionStatus() {
@@ -555,6 +580,7 @@ export default function Navbar() {
             <Box sx={{ display: { xs: "none", md: "block" } }}>
               <ConnectionStatus />
             </Box>
+            <FailedSyncChip />
 
             <ThemeToggle />
 

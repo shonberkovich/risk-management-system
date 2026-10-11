@@ -1,3 +1,4 @@
+import { AxiosError, type AxiosResponse } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { IncidentCreate } from "../api/client";
@@ -22,13 +23,23 @@ vi.mock("../api/client", () => ({
 // delete of the same name. Isolating each test by clearing the object store directly (below)
 // avoids that entirely.
 import {
+  discardQueuedReport,
   enqueueDraftSubmit,
+  enqueueDraftUpdate,
   enqueueIncidentReport,
+  getFailedReports,
   getQueuedReports,
   isOfflineStorageAvailable,
+  retryQueuedReport,
   subscribeToSyncQueue,
   trySync,
 } from "./syncQueue";
+
+/** What axios rejects with when the server answers `status` with FastAPI's {detail}. */
+function httpError(status: number, detail: unknown): AxiosError {
+  const response = { status, statusText: "", data: { detail }, headers: {}, config: {} } as AxiosResponse;
+  return new AxiosError(`Request failed with status code ${status}`, "ERR_BAD_REQUEST", undefined, undefined, response);
+}
 
 const DB_NAME = "rmis-offline";
 const STORE_NAME = "incident-queue";
@@ -181,6 +192,87 @@ describe("syncQueue", () => {
 
     expect(result).toEqual({ succeeded: 1, failed: 0 });
     expect(await getQueuedReports()).toHaveLength(0);
+  });
+
+  describe("when the server rejects an item outright (4xx)", () => {
+    it("sets it aside with the server's reason and still syncs the reports queued after it", async () => {
+      updateDraftIncident.mockRejectedValueOnce(httpError(400, "לא ניתן לערוך אירוע שכבר הוגש"));
+      createIncident.mockResolvedValue({ incident_id: 50, incident_code: "INC-0050" });
+      const states: { pendingCount: number; failedCount: number }[] = [];
+      const unsubscribe = subscribeToSyncQueue((s) => states.push(s));
+
+      await enqueueDraftSubmit(42, { description: "הגשה כפולה" }, []);
+      await enqueueIncidentReport({ ...BASE_PAYLOAD, description: "דיווח חדש" }, []);
+      const result = await trySync();
+
+      expect(result).toEqual({ succeeded: 1, failed: 1 });
+      expect(createIncident).toHaveBeenCalledTimes(1);
+      const remaining = await getQueuedReports();
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]).toMatchObject({ failed: true, lastError: "לא ניתן לערוך אירוע שכבר הוגש" });
+      expect(await getFailedReports()).toHaveLength(1);
+      await vi.waitFor(() => expect(states[states.length - 1]).toMatchObject({ pendingCount: 0, failedCount: 1 }));
+      unsubscribe();
+    });
+
+    it("does not retry a rejected item on later automatic syncs", async () => {
+      createIncident.mockRejectedValue(httpError(422, [{ msg: "incident_timestamp cannot be in the future" }]));
+      await enqueueIncidentReport(BASE_PAYLOAD, []);
+
+      await trySync();
+      const second = await trySync();
+
+      expect(second).toEqual({ succeeded: 0, failed: 0 });
+      expect(createIncident).toHaveBeenCalledTimes(1);
+      expect((await getQueuedReports())[0].lastError).toBe("incident_timestamp cannot be in the future");
+    });
+
+    it("holds back later operations on the same draft so they never apply out of order", async () => {
+      updateDraftIncident.mockRejectedValueOnce(httpError(404, "Incident not found"));
+      await enqueueDraftUpdate(7, { description: "עריכה ראשונה" }, []);
+      await enqueueDraftSubmit(7, { description: "הגשה" }, []);
+
+      const result = await trySync();
+
+      expect(result).toEqual({ succeeded: 0, failed: 1 });
+      expect(updateDraftIncident).toHaveBeenCalledTimes(1);
+      expect(submitDraftIncident).not.toHaveBeenCalled();
+      const remaining = await getQueuedReports();
+      expect(remaining.map((r) => [r.operation.kind, r.failed ?? false])).toEqual([
+        ["draft-update", true],
+        ["draft-submit", false],
+      ]);
+    });
+
+    it("an expired session (401) or a server error (5xx) still stops the run for a later retry", async () => {
+      createIncident.mockRejectedValueOnce(httpError(401, "Not authenticated")).mockRejectedValueOnce(httpError(503, "busy"));
+      await enqueueIncidentReport({ ...BASE_PAYLOAD, description: "ראשון" }, []);
+      await enqueueIncidentReport({ ...BASE_PAYLOAD, description: "שני" }, []);
+
+      expect(await trySync()).toEqual({ succeeded: 0, failed: 1 });
+      expect(await trySync()).toEqual({ succeeded: 0, failed: 1 });
+
+      expect(createIncident).toHaveBeenCalledTimes(2);
+      const remaining = await getQueuedReports();
+      expect(remaining).toHaveLength(2);
+      expect(remaining.every((r) => !r.failed)).toBe(true);
+    });
+
+    it("retryQueuedReport puts it back in line and syncs it; discardQueuedReport drops it", async () => {
+      createIncident
+        .mockRejectedValueOnce(httpError(400, "שגיאה"))
+        .mockRejectedValueOnce(httpError(400, "שגיאה"))
+        .mockResolvedValueOnce({ incident_id: 8, incident_code: "INC-0008" });
+      await enqueueIncidentReport({ ...BASE_PAYLOAD, description: "לנסות שוב" }, []);
+      await enqueueIncidentReport({ ...BASE_PAYLOAD, description: "למחוק" }, []);
+      await trySync();
+      const [toRetry, toDiscard] = await getFailedReports();
+
+      expect(await retryQueuedReport(toRetry.id)).toEqual({ succeeded: 1, failed: 0 });
+      await discardQueuedReport(toDiscard.id);
+
+      expect(await getQueuedReports()).toHaveLength(0);
+    });
   });
 
   it("isOfflineStorageAvailable reflects indexedDB presence on window", () => {
