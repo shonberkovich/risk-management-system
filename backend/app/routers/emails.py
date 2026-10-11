@@ -165,6 +165,21 @@ def _require_recipient_row(db: Session, email_id: int, user_id: int) -> models.E
     return row
 
 
+def _validate_new_email(
+    db: Session, payload: schemas.EmailCreate | schemas.EmailScheduleCreate, user_id: int
+) -> None:
+    """Shared by send and schedule. Every addressed user must exist, and a reply may
+    only reference an email in the caller's own mailbox: without that check anyone
+    could reply into any thread by id, confirm that arbitrary email_ids exist (201 vs
+    404), and join a stranger's thread (surfacing its root subject/sender wherever the
+    thread is linked to an entity). Same 404 as every other per-email endpoint."""
+    for recipient_id in {*payload.to, *payload.cc, *payload.bcc}:
+        if db.get(models.User, recipient_id) is None:
+            raise HTTPException(404, f"Recipient user_id {recipient_id} not found")
+    if payload.in_reply_to is not None:
+        _require_recipient_row(db, payload.in_reply_to, user_id)
+
+
 def _require_sender(db: Session, email_id: int, user_id: int) -> models.Email:
     """Attachment upload's own authorization check: only the email's sender may
     attach files to it (see module docstring). 404, not 403, for "not yours or
@@ -346,9 +361,7 @@ def schedule_email(
     HTTP method — moot here since they're different methods, but kept
     consistent with the GET /scheduled placement right below, which does
     share GET /{email_id}'s single-segment shape)."""
-    for user_id in {*payload.to, *payload.cc, *payload.bcc}:
-        if db.get(models.User, user_id) is None:
-            raise HTTPException(404, f"Recipient user_id {user_id} not found")
+    _validate_new_email(db, payload, current_user.user_id)
 
     try:
         email = email_service.schedule_email(db, current_user.user_id, payload)
@@ -434,9 +447,7 @@ def send_email(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    for user_id in {*payload.to, *payload.cc, *payload.bcc}:
-        if db.get(models.User, user_id) is None:
-            raise HTTPException(404, f"Recipient user_id {user_id} not found")
+    _validate_new_email(db, payload, current_user.user_id)
 
     try:
         email = email_service.send_email(db, current_user.user_id, payload)
