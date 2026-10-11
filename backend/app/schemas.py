@@ -30,6 +30,19 @@ def _fits_encrypted_column(value: str | None) -> str | None:
 
 EncryptedColumnText = Annotated[str | None, AfterValidator(_fits_encrypted_column)]
 
+
+def _not_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("שדה חובה — לא ניתן להשאיר ריק")
+    return value
+
+
+# For the text that names or describes a record (a title, a name, an incident's
+# description): "" or "   " passes a plain `str` and gets stored as a blank row.
+# The forms already require .trim(); this is the same rule for direct API calls.
+# The value is stored as sent, not stripped.
+NonBlankStr = Annotated[str, AfterValidator(_not_blank)]
+
 # Same idea for numbers. Money columns are DECIMAL(18,2), so 16 digits before the
 # point: from 1e16 up SQL Server raises an arithmetic overflow (a 500). The bound
 # also rejects inf/NaN, which Python's JSON parser accepts. SignedMoney is for the
@@ -124,7 +137,7 @@ class UserAutoResponderUpdate(BaseModel):
 
 
 class UserCreate(BaseModel):
-    full_name: str = Field(max_length=100)  # Users.full_name NVARCHAR(100)
+    full_name: NonBlankStr = Field(max_length=100)  # Users.full_name NVARCHAR(100)
     email: str = Field(max_length=200)  # Users.email NVARCHAR(200)
     role: UserRole
     password: str | None = None  # None = no local password (SSO-only), same as seed.py's convention
@@ -140,7 +153,7 @@ class RolePermissionOut(BaseModel):
 
 class RolePermissionCreate(BaseModel):
     role: UserRole
-    permission_key: str = Field(max_length=100)  # Role_Permissions.permission_key NVARCHAR(100)
+    permission_key: NonBlankStr = Field(max_length=100)  # Role_Permissions.permission_key NVARCHAR(100)
     description: str | None = Field(default=None, max_length=200)
 
 
@@ -156,7 +169,7 @@ class UserUpdate(PartialUpdate):
     rather than separate dedicated endpoints, same convention as ClaimUpdate covering
     claim_status changes. A null password means "keep the current one"."""
     NULLABLE = frozenset({"password"})
-    full_name: str | None = Field(default=None, max_length=100)
+    full_name: NonBlankStr | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=200)
     role: UserRole | None = None
     password: str | None = None
@@ -263,10 +276,10 @@ class PropertyCreate(BaseModel):
     """Payload for POST /api/properties. Mirrors Property's non-generated columns —
     property_id/created_at/updated_at are server-assigned, is_active defaults to True
     (a property is created active; use DELETE to deactivate)."""
-    property_code: str = Field(max_length=30)  # matches Properties.property_code NVARCHAR(30)
-    name: str = Field(max_length=200)  # Properties.name NVARCHAR(200)
-    address: str = Field(max_length=300)  # Properties.address NVARCHAR(300)
-    region: str = Field(max_length=50)  # Properties.region NVARCHAR(50)
+    property_code: NonBlankStr = Field(max_length=30)  # matches Properties.property_code NVARCHAR(30)
+    name: NonBlankStr = Field(max_length=200)  # Properties.name NVARCHAR(200)
+    address: NonBlankStr = Field(max_length=300)  # Properties.address NVARCHAR(300)
+    region: NonBlankStr = Field(max_length=50)  # Properties.region NVARCHAR(50)
     region_id: int | None = None
     latitude: Latitude
     longitude: Longitude
@@ -282,10 +295,10 @@ class PropertyUpdate(PartialUpdate):
     full-replace connotation — chosen to match how the other write routers in this
     codebase already use PUT/PATCH interchangeably for partial updates."""
     NULLABLE = frozenset({"region_id", "primary_manager_id"})
-    property_code: str | None = Field(default=None, max_length=30)
-    name: str | None = Field(default=None, max_length=200)
-    address: str | None = Field(default=None, max_length=300)
-    region: str | None = Field(default=None, max_length=50)
+    property_code: NonBlankStr | None = Field(default=None, max_length=30)
+    name: NonBlankStr | None = Field(default=None, max_length=200)
+    address: NonBlankStr | None = Field(default=None, max_length=300)
+    region: NonBlankStr | None = Field(default=None, max_length=50)
     region_id: int | None = None
     latitude: Latitude | None = None
     longitude: Longitude | None = None
@@ -333,7 +346,7 @@ class IncidentCreate(BaseModel):
     severity_level: SeverityLevel
     operational_impact: OperationalImpact
     initial_estimated_loss: Money
-    description: str
+    description: NonBlankStr
     ai_classified: bool = False
     ai_confidence: float | None = Field(default=None, ge=0, le=1)  # DECIMAL(4,3), a 0..1 share
     is_draft: bool = False
@@ -378,7 +391,7 @@ class IncidentUpdate(PartialUpdate):
     severity_level: SeverityLevel | None = None
     operational_impact: OperationalImpact | None = None
     initial_estimated_loss: Money | None = None
-    description: str | None = None
+    description: NonBlankStr | None = None
     business_interruption_requested: bool | None = None
     area_or_building: str | None = Field(default=None, max_length=150)
     reported_coordinates: str | None = Field(default=None, max_length=50)
@@ -494,8 +507,8 @@ class PolicyOut(BaseModel):
 
 
 class PolicyCreate(BaseModel):
-    policy_number: str = Field(max_length=50)  # Insurance_Policies.policy_number NVARCHAR(50)
-    insurer_name: str = Field(max_length=150)  # Insurance_Policies.insurer_name NVARCHAR(150)
+    policy_number: NonBlankStr = Field(max_length=50)  # Insurance_Policies.policy_number NVARCHAR(50)
+    insurer_name: NonBlankStr = Field(max_length=150)  # Insurance_Policies.insurer_name NVARCHAR(150)
     start_date: date
     end_date: date
     total_limit: Money
@@ -509,7 +522,7 @@ class PolicyCreate(BaseModel):
 
 class PolicyUpdate(PartialUpdate):
     NULLABLE = frozenset({"per_event_limit", "bi_waiting_period_hours", "exclusions"})
-    insurer_name: str | None = Field(default=None, max_length=150)
+    insurer_name: NonBlankStr | None = Field(default=None, max_length=150)
     start_date: date | None = None
     end_date: date | None = None
     total_limit: Money | None = None
@@ -596,7 +609,7 @@ class MitigationTaskOut(BaseModel):
 
 class MitigationTaskCreate(BaseModel):
     property_id: int
-    title: str = Field(max_length=200)  # Mitigation_Tasks.title NVARCHAR(200)
+    title: NonBlankStr = Field(max_length=200)  # Mitigation_Tasks.title NVARCHAR(200)
     cost_estimate: Money
     expected_annual_savings: Money = 0
     due_date: date
@@ -605,7 +618,7 @@ class MitigationTaskCreate(BaseModel):
 
 class MitigationTaskUpdate(PartialUpdate):
     NULLABLE = frozenset({"assigned_to_user_id"})
-    title: str | None = Field(default=None, max_length=200)
+    title: NonBlankStr | None = Field(default=None, max_length=200)
     cost_estimate: Money | None = None
     expected_annual_savings: Money | None = None
     due_date: date | None = None
@@ -777,8 +790,8 @@ class NotificationRecipientOut(BaseModel):
 
 
 class NotificationRecipientCreate(BaseModel):
-    role: str = Field(max_length=30)  # Notification_Recipients: role(30), display_name(100), email(200), phone(30)
-    display_name: str = Field(max_length=100)
+    role: NonBlankStr = Field(max_length=30)  # Notification_Recipients: role(30), display_name(100), email(200), phone(30)
+    display_name: NonBlankStr = Field(max_length=100)
     email: str = Field(max_length=200)
     phone: str = Field(max_length=30)
     channels: list[NotificationChannel] = Field(max_length=3)  # stored comma-joined in NVARCHAR(30)
@@ -787,8 +800,8 @@ class NotificationRecipientCreate(BaseModel):
 
 
 class NotificationRecipientUpdate(PartialUpdate):
-    role: str | None = Field(default=None, max_length=30)
-    display_name: str | None = Field(default=None, max_length=100)
+    role: NonBlankStr | None = Field(default=None, max_length=30)
+    display_name: NonBlankStr | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=200)
     phone: str | None = Field(default=None, max_length=30)
     channels: list[NotificationChannel] | None = Field(default=None, max_length=3)
@@ -1238,7 +1251,7 @@ class LabelCreate(BaseModel):
     """Body for POST /api/folders (Task 16 steps 1/3) — the spec's own literal
     path for what this codebase treats as a per-user label, not another
     EmailRecipient.folder value; see models.Label's docstring."""
-    name: str = Field(max_length=100)  # Labels.name NVARCHAR(100)
+    name: NonBlankStr = Field(max_length=100)  # Labels.name NVARCHAR(100)
     color: str = Field(max_length=20)  # Labels.color NVARCHAR(20)
 
 
@@ -1278,7 +1291,7 @@ class EmailRuleCondition(BaseModel):
     against the message's own subject / sanitized body_html text."""
     field: EmailRuleConditionField
     operator: EmailRuleConditionOperator
-    value: str
+    value: NonBlankStr  # "" would match every message ("" in any text), as the rule form already forbids
 
 
 EmailRuleActionType = Literal["add_label", "move_to_folder", "mark_as_read"]
@@ -1301,7 +1314,7 @@ class EmailRuleCreate(BaseModel):
     """Body for POST /api/rules (Task 17 step 1, the spec's own literal path).
     At least one condition and one action — a rule with none of either could
     never usefully fire/do anything."""
-    name: str = Field(max_length=200)  # Email_Rules.name NVARCHAR(200)
+    name: NonBlankStr = Field(max_length=200)  # Email_Rules.name NVARCHAR(200)
     conditions: list[EmailRuleCondition] = Field(min_length=1)
     actions: list[EmailRuleAction] = Field(min_length=1)
     is_active: bool = True
@@ -1596,7 +1609,7 @@ class EmailTemplateOut(BaseModel):
 
 
 class EmailTemplateCreate(BaseModel):
-    name: str = Field(max_length=200)  # Email_Templates.name NVARCHAR(200)
+    name: NonBlankStr = Field(max_length=200)  # Email_Templates.name NVARCHAR(200)
     subject_template: str = Field(max_length=500)  # NVARCHAR(500)
     body_template: str
 
@@ -1605,6 +1618,6 @@ class EmailTemplateUpdate(PartialUpdate):
     """All fields optional — a PATCH may touch just the name, just the body, etc.
     Same `exclude_unset` convention as RolePermissionUpdate/MitigationTaskUpdate
     elsewhere in this file."""
-    name: str | None = Field(default=None, max_length=200)
+    name: NonBlankStr | None = Field(default=None, max_length=200)
     subject_template: str | None = Field(default=None, max_length=500)
     body_template: str | None = None
