@@ -45,6 +45,7 @@ import {
   type SeverityLevel,
 } from "../api/client";
 import MediaUploader from "../components/MediaUploader";
+import FailedSyncReports from "../components/FailedSyncReports";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS, parseServerDate, toDatetimeLocalValue } from "../format";
 import { useTokens } from "../ui/useTokens";
@@ -494,6 +495,8 @@ export default function IncidentReport() {
       >
         במקרה של סכנת חיים חייג 102/100 מיד
       </Alert>
+
+      <FailedSyncReports />
 
       {pendingSyncCount > 0 && (
         <Alert
