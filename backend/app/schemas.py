@@ -2,7 +2,7 @@ import re
 from datetime import date, datetime, timezone
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 HazardType = Literal["FLOOD", "FIRE", "STRUCTURAL_FAILURE", "THEFT", "ELECTRICAL", "OTHER"]
 SeverityLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -464,10 +464,16 @@ class ClaimOut(BaseModel):
 class ClaimCreate(BaseModel):
     incident_id: int
     policy_id: int
-    claimed_amount: Money
+    claimed_amount: Annotated[float, Field(gt=0, lt=MONEY_MAX)]  # a zero claim claims nothing
     deductible_applied: Money = 0
     adjuster_name: EncryptedColumnText = None
     expected_payment_date: date | None = None
+
+    @model_validator(mode="after")
+    def _deductible_within_claim(self):
+        if self.deductible_applied > self.claimed_amount:
+            raise ValueError("ההשתתפות העצמית לא יכולה לעלות על הסכום הנתבע")
+        return self
 
 
 class ClaimUpdate(PartialUpdate):

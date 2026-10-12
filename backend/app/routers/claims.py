@@ -17,6 +17,37 @@ _CLAIMS_WRITE_ROLES = ("RISK_MANAGER", "CFO", "ADJUSTER", "ADMIN")
 
 _TERMINAL_CLAIM_STATUSES = {"SETTLED", "REJECTED"}
 
+# The documented lifecycle (docs/README.md): DRAFT -> SUBMITTED -> IN_ADJUSTMENT ->
+# APPROVED/REJECTED -> SETTLED. A claim only moves forward (it may skip an
+# intermediate review step), SETTLED only follows APPROVED, and REJECTED is open to any
+# claim that has nothing paid on it. Going back (APPROVED -> DRAFT) or settling a claim
+# that was never approved (which also auto-closes its incident) was accepted before.
+_STATUS_ORDER = {"DRAFT": 0, "SUBMITTED": 1, "IN_ADJUSTMENT": 2, "APPROVED": 3}
+_CLAIM_STATUS_LABELS = {
+    "DRAFT": "טיוטה",
+    "SUBMITTED": "הוגשה",
+    "IN_ADJUSTMENT": "בבירור שמאים",
+    "APPROVED": "אושרה",
+    "REJECTED": "נדחתה",
+    "SETTLED": "נסגרה",
+}  # frontend format.ts CLAIM_STATUS_LABELS
+
+
+def _transition_allowed(current: str, new: str) -> bool:
+    if new == current:
+        return True
+    if new == "SETTLED":
+        return current == "APPROVED"
+    if new == "REJECTED":
+        return current not in _TERMINAL_CLAIM_STATUSES
+    return new in _STATUS_ORDER and current in _STATUS_ORDER and _STATUS_ORDER[new] > _STATUS_ORDER[current]
+
+
+def _paid_so_far(db: Session, claim_id: int) -> float:
+    return float(
+        db.scalar(select(func.sum(models.ClaimPayment.amount)).where(models.ClaimPayment.claim_id == claim_id)) or 0
+    )
+
 # --- Idempotent/duplicate-safe creation (TODO_SPEC.md §2, "Race Conditions
 # ביצירת אירועים/תביעות") --------------------------------------------------
 #
@@ -149,6 +180,15 @@ def create_claim(
         policy = db.get(models.InsurancePolicy, payload.policy_id)
         if not policy:
             raise HTTPException(404, "Policy not found")
+        # Same rule as GET /incidents/{id}/eligible-policies, which FileClaimDialog
+        # offers: an active policy that insures the incident's property and whose period
+        # includes the incident date.
+        if db.get(models.PolicyAsset, (policy.policy_id, incident.property_id)) is None:
+            raise HTTPException(400, "הפוליסה שנבחרה אינה מכסה את הנכס של האירוע")
+        if policy.status != "ACTIVE":
+            raise HTTPException(400, "ניתן לפתוח תביעה רק על פוליסה פעילה")
+        if not policy.start_date <= incident.incident_timestamp.date() <= policy.end_date:
+            raise HTTPException(400, "מועד האירוע אינו בתקופת הכיסוי של הפוליסה")
 
         if not idempotency_key:
             duplicate_cutoff = models.utcnow() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)
@@ -199,7 +239,32 @@ def update_claim(
     if claim.claim_status in _TERMINAL_CLAIM_STATUSES:
         raise HTTPException(400, "לא ניתן לעדכן תביעה שכבר נסגרה או נדחתה")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    new_status = updates.get("claim_status", claim.claim_status)
+    approved = float(updates.get("approved_amount", claim.approved_amount))
+    paid = _paid_so_far(db, claim_id)
+    if not _transition_allowed(claim.claim_status, new_status):
+        raise HTTPException(
+            400,
+            f'לא ניתן להעביר תביעה מסטטוס "{_CLAIM_STATUS_LABELS[claim.claim_status]}" '
+            f'ל"{_CLAIM_STATUS_LABELS[new_status]}" — תביעה מתקדמת רק קדימה, ו"נסגרה" רק אחרי "אושרה"',
+        )
+    if new_status == "REJECTED" and paid > 0:
+        raise HTTPException(400, "לא ניתן לדחות תביעה שכבר שולמו עליה תשלומים")
+    if new_status in _PAYABLE_CLAIM_STATUSES and approved <= 0:
+        raise HTTPException(400, "יש להזין סכום מאושר לפני אישור או סגירה של התביעה")
+    # The payment guard below only compares against approved_amount, so it is itself
+    # bounded: by the claim, by the policy's limits, and from below by what was paid.
+    if approved > float(claim.claimed_amount) + 0.005:
+        raise HTTPException(400, "הסכום המאושר לא יכול לעלות על הסכום הנתבע")
+    policy = db.get(models.InsurancePolicy, claim.policy_id)
+    limits = [float(v) for v in (policy.total_limit, policy.per_event_limit) if v is not None] if policy else []
+    if limits and approved > min(limits) + 0.005:
+        raise HTTPException(400, "הסכום המאושר חורג מגבול האחריות של הפוליסה")
+    if approved < paid - 0.005:
+        raise HTTPException(400, "הסכום המאושר לא יכול להיות נמוך מהסכום ששולם עד כה")
+
+    for field, value in updates.items():
         setattr(claim, field, value)
 
     if claim.claim_status in _TERMINAL_CLAIM_STATUSES:
@@ -245,19 +310,27 @@ def create_claim_payment(
     # and could be used to bypass the exceeds-approved-amount guard below (submit a
     # negative payment first to create headroom, then overpay). Enforce it here instead
     # of loosening this check.
-    if payload.amount <= 0:
+    # Amounts are stored as DECIMAL(18,2): round first, so a sub-agora amount can't pass
+    # this check and then be stored as a 0.00 payment.
+    amount = round(payload.amount, 2)
+    if amount <= 0:
         raise HTTPException(400, "סכום התשלום חייב להיות חיובי")
 
-    paid_so_far = db.scalar(
-        select(func.sum(models.ClaimPayment.amount)).where(models.ClaimPayment.claim_id == claim_id)
-    ) or 0
-    if float(paid_so_far) + payload.amount > float(claim.approved_amount) + 0.01:
+    # Both sides are exact agorot, so the tolerance only absorbs float noise (0.01 let
+    # a real one-agora overpayment through).
+    if _paid_so_far(db, claim_id) + amount > float(claim.approved_amount) + 0.005:
         raise HTTPException(400, "סכום התשלום חורג מהסכום המאושר לתביעה")
+
+    incident = db.get(models.Incident, claim.incident_id)
+    if incident and payload.payment_date < incident.incident_timestamp.date():
+        raise HTTPException(400, "מועד התשלום לא יכול להיות לפני מועד האירוע")
+    if payload.payment_date > date.today():
+        raise HTTPException(400, "מועד התשלום לא יכול להיות בעתיד")
 
     payment = models.ClaimPayment(
         claim_id=claim_id,
         payment_date=payload.payment_date,
-        amount=payload.amount,
+        amount=amount,
         reference_number=payload.reference_number,
         payment_type=payload.payment_type,
     )

@@ -32,7 +32,7 @@ def test_property_name_longer_than_column_is_422(client, make_user):
 def test_encrypted_adjuster_name_is_capped_by_encoded_size(client, make_user, make_property, make_incident, make_policy):
     headers = auth_headers(make_user(role="RISK_MANAGER"))
     incident = make_incident(make_property().property_id)
-    policy = make_policy()
+    policy = make_policy(covers=incident.property_id)
     base = {"incident_id": incident.incident_id, "policy_id": policy.policy_id, "claimed_amount": 1000}
 
     # 70 Hebrew letters = 140 UTF-8 bytes -> its Fernet token would overflow NVARCHAR(255).

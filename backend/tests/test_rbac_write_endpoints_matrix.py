@@ -99,7 +99,7 @@ def test_create_claim_role_matrix(client, make_user, make_property, make_inciden
     for role in ALL_ROLES:
         prop = make_property()
         incident = make_incident(prop.property_id)
-        policy = make_policy()
+        policy = make_policy(covers=prop.property_id)
         payload = {"incident_id": incident.incident_id, "policy_id": policy.policy_id, "claimed_amount": 10_000}
         user = make_user(role=role)
         resp = client.post("/api/claims", json=payload, headers=auth_headers(user))

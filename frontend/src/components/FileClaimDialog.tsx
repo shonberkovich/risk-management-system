@@ -14,6 +14,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { createClaim, fetchEligiblePolicies, type Incident } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
+
+const MONEY_MAX = 1e16; // schemas.Money: DECIMAL(18,2)
+const FIELD_LABELS = {
+  policy_id: "פוליסה מכסה",
+  claimed_amount: "סכום נתבע",
+  deductible_applied: "השתתפות עצמית",
+  adjuster_name: "שם שמאי",
+};
 
 export default function FileClaimDialog({
   open,
@@ -36,15 +45,6 @@ export default function FileClaimDialog({
     enabled: open && !!incident,
   });
 
-  useEffect(() => {
-    if (open && incident) {
-      setPolicyId("");
-      setClaimedAmount(String(incident.initial_estimated_loss));
-      setDeductible("");
-      setAdjusterName("");
-    }
-  }, [open, incident]);
-
   const mutation = useMutation({
     mutationFn: () =>
       createClaim({
@@ -61,7 +61,27 @@ export default function FileClaimDialog({
     },
   });
 
-  const canSubmit = !!policyId && Number(claimedAmount) > 0;
+  useEffect(() => {
+    if (open && incident) {
+      mutation.reset(); // the previous attempt's error doesn't belong to this opening
+      setPolicyId("");
+      setClaimedAmount(String(incident.initial_estimated_loss));
+      setDeductible("");
+      setAdjusterName("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on (re)open only
+  }, [open, incident]);
+
+  // schemas.ClaimCreate: claimed > 0, and the deductible can't exceed it.
+  const claimed = Number(claimedAmount);
+  const deductibleValue = Number(deductible || 0);
+  const claimedError = !Number.isFinite(claimed) || claimed <= 0 || claimed >= MONEY_MAX;
+  const deductibleError = !Number.isFinite(deductibleValue) || deductibleValue < 0
+    ? "יש להזין סכום אפס ומעלה"
+    : !claimedError && deductibleValue > claimed
+      ? "ההשתתפות העצמית לא יכולה לעלות על הסכום הנתבע"
+      : null;
+  const canSubmit = !!policyId && !claimedError && !deductibleError;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -94,6 +114,9 @@ export default function FileClaimDialog({
                 label="סכום נתבע (₪)"
                 type="number"
                 fullWidth
+                inputProps={{ min: 0 }}
+                error={claimedAmount !== "" && claimedError}
+                helperText={claimedAmount !== "" && claimedError ? "יש להזין סכום גדול מאפס" : undefined}
                 value={claimedAmount}
                 onChange={(e) => setClaimedAmount(e.target.value)}
               />
@@ -103,6 +126,9 @@ export default function FileClaimDialog({
                 label="השתתפות עצמית (₪)"
                 type="number"
                 fullWidth
+                inputProps={{ min: 0 }}
+                error={!!deductibleError}
+                helperText={deductibleError ?? undefined}
                 value={deductible}
                 onChange={(e) => setDeductible(e.target.value)}
               />
@@ -116,7 +142,9 @@ export default function FileClaimDialog({
             onChange={(e) => setAdjusterName(e.target.value)}
           />
 
-          {mutation.isError && <Alert severity="error">פתיחת התביעה נכשלה.</Alert>}
+          {mutation.isError && (
+            <Alert severity="error">{apiErrorMessage(mutation.error, "פתיחת התביעה נכשלה.", FIELD_LABELS)}</Alert>
+          )}
           <Typography variant="caption" color="text.secondary">
             פתיחת תביעה תעדכן אוטומטית את סטטוס האירוע ל"תביעה הוגשה".
           </Typography>

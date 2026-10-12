@@ -91,6 +91,17 @@ export const CLAIM_STATUS_LABELS: Record<string, string> = {
   SETTLED: "נסגרה",
 };
 
+const CLAIM_STATUS_ORDER = ["DRAFT", "SUBMITTED", "IN_ADJUSTMENT", "APPROVED"];
+
+/** The statuses a claim can be set to from `current` (itself included), mirroring
+ * backend routers/claims.py _transition_allowed: forward only (a review step may be
+ * skipped), SETTLED only after APPROVED, REJECTED while nothing has been paid. */
+export function claimStatusOptions(current: string, paidAmount: number): string[] {
+  if (current === "SETTLED" || current === "REJECTED") return [current];
+  const forward = CLAIM_STATUS_ORDER.slice(Math.max(CLAIM_STATUS_ORDER.indexOf(current), 0));
+  return [...forward, ...(paidAmount > 0 ? [] : ["REJECTED"]), ...(current === "APPROVED" ? ["SETTLED"] : [])];
+}
+
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   ADVANCE: "מקדמה",
   FINAL_SETTLEMENT: "סילוק סופי",

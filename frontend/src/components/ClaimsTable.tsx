@@ -90,7 +90,7 @@ export default function ClaimsTable({
                     </Tooltip>
                   )}
                   {onPayments && (
-                    <Tooltip title={PAYABLE_STATUSES.has(r.claim_status) ? "רזרבות ותשלומים" : "צפייה בתשלומים"}>
+                    <Tooltip title={PAYABLE_STATUSES.has(r.claim_status) ? "רישום תשלומים" : "צפייה בתשלומים"}>
                       <IconButton size="small" onClick={() => onPayments(r)}>
                         <PaymentsIcon fontSize="small" />
                       </IconButton>
