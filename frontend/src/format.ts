@@ -133,3 +133,14 @@ export const SEVERITY_COLORS: Record<string, "success" | "warning" | "error" | "
   HIGH: "error",
   CRITICAL: "error",
 };
+
+/** Same shape rule as the backend (schemas._EMAIL_RE): one "@", a dot in the domain, no spaces. */
+export const isValidEmail = (value: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+
+/** Same rule as the backend (schemas._valid_phone_or_empty): digits with spaces, dashes or
+ * parentheses, an optional leading "+", 7-15 digits. */
+export const isValidPhone = (value: string) =>
+  /^\+?[\d\s()-]+$/.test(value) && (value.match(/\d/g)?.length ?? 0) >= 7 && (value.match(/\d/g)?.length ?? 0) <= 15;
+
+/** Minimum length for a new password (schemas._valid_new_password). */
+export const MIN_PASSWORD_LENGTH = 8;

@@ -66,7 +66,7 @@ def test_build_notifications_uses_default_recipients_when_table_empty(db, make_p
 
     routed = notifications.build_notifications(db, geo_exposure_threshold_ratio=0.1)
     assert routed  # at least one alert got routed
-    assert all(r["recipient_role"] in ("risk_manager", "cfo") for r in routed)
+    assert all(r["recipient_role"] in ("RISK_MANAGER", "CFO") for r in routed)
 
 
 def test_dispatch_notifications_persists_log_rows_and_marks_simulated(db, make_property, make_risk_profile):

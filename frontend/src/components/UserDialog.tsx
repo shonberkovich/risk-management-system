@@ -15,7 +15,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { createUser, updateUser, type UserAdmin } from "../api/client";
-import { ROLE_LABELS } from "../format";
+import { apiErrorMessage } from "../api/errors";
+import { isValidEmail, MIN_PASSWORD_LENGTH, ROLE_LABELS } from "../format";
+
+const FIELD_LABELS = { full_name: "שם מלא", email: "אימייל", role: "תפקיד", password: "סיסמה" };
 
 const ROLE_OPTIONS = Object.keys(ROLE_LABELS);
 
@@ -30,17 +33,46 @@ const emptyForm = {
 export default function UserDialog({
   open,
   user,
+  isSelf = false,
   onClose,
 }: {
   open: boolean;
   user: UserAdmin | null;
+  /** Editing the signed-in admin: the backend refuses changing your own role or disabling yourself. */
+  isSelf?: boolean;
   onClose: () => void;
 }) {
   const [form, setForm] = useState(emptyForm);
   const queryClient = useQueryClient();
   const isEdit = user !== null;
 
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (isEdit) {
+        return updateUser(user!.user_id, {
+          full_name: form.full_name.trim(),
+          email: form.email.trim(),
+          role: form.role,
+          password: form.password.trim() ? form.password : undefined,
+          is_active: form.is_active,
+        });
+      }
+      return createUser({
+        full_name: form.full_name.trim(),
+        email: form.email.trim(),
+        role: form.role,
+        password: form.password.trim() ? form.password : null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      onClose();
+    },
+  });
+
   useEffect(() => {
+    mutation.reset(); // the previous attempt's error doesn't belong to this opening
     if (user) {
       setForm({
         full_name: user.full_name,
@@ -52,34 +84,12 @@ export default function UserDialog({
     } else {
       setForm(emptyForm);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on (re)open only
   }, [user, open]);
 
-  const mutation = useMutation({
-    mutationFn: () => {
-      if (isEdit) {
-        return updateUser(user!.user_id, {
-          full_name: form.full_name.trim(),
-          email: form.email.trim(),
-          role: form.role,
-          password: form.password.trim() ? form.password.trim() : undefined,
-          is_active: form.is_active,
-        });
-      }
-      return createUser({
-        full_name: form.full_name.trim(),
-        email: form.email.trim(),
-        role: form.role,
-        password: form.password.trim() || null,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users-admin"] });
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      onClose();
-    },
-  });
-
-  const canSubmit = form.full_name.trim() && form.email.trim() && form.role;
+  const emailError = form.email.trim() !== "" && !isValidEmail(form.email.trim());
+  const passwordError = form.password.trim() !== "" && form.password.length < MIN_PASSWORD_LENGTH;
+  const canSubmit = form.full_name.trim() && form.email.trim() && form.role && !emailError && !passwordError;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -103,6 +113,8 @@ export default function UserDialog({
                 type="email"
                 fullWidth
                 value={form.email}
+                error={emailError}
+                helperText={emailError ? "כתובת אימייל לא תקינה" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
             </Grid>
@@ -112,6 +124,8 @@ export default function UserDialog({
                 label="תפקיד"
                 fullWidth
                 value={form.role}
+                disabled={isSelf}
+                helperText={isSelf ? "לא ניתן לשנות את התפקיד של עצמך" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
               >
                 {ROLE_OPTIONS.map((r) => (
@@ -126,7 +140,10 @@ export default function UserDialog({
                 label={isEdit ? "איפוס סיסמה (השאירו ריק לשמירת הקיימת)" : "סיסמה (ריק = ללא סיסמה מקומית, SSO בלבד)"}
                 type="password"
                 fullWidth
+                inputProps={{ maxLength: 128 }}
                 value={form.password}
+                error={passwordError}
+                helperText={passwordError ? `לפחות ${MIN_PASSWORD_LENGTH} תווים` : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
               />
             </Grid>
@@ -136,6 +153,7 @@ export default function UserDialog({
                   control={
                     <Switch
                       checked={form.is_active}
+                      disabled={isSelf}
                       onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
                     />
                   }
@@ -147,7 +165,7 @@ export default function UserDialog({
 
           {mutation.isError && (
             <Alert severity="error">
-              {isEdit ? "עדכון המשתמש נכשל." : "יצירת המשתמש נכשלה — ייתכן שהאימייל כבר קיים."}
+              {apiErrorMessage(mutation.error, isEdit ? "עדכון המשתמש נכשל." : "יצירת המשתמש נכשלה.", FIELD_LABELS)}
             </Alert>
           )}
           {!isEdit && (

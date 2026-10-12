@@ -497,8 +497,8 @@ def run():
     # into the DB (same routing behavior: risk manager sees every alert on EMAIL+PUSH,
     # CFO only critical ones on EMAIL+SMS).
     notification_recipients = [
-        ("risk_manager", "מנהל הסיכונים", "risk.manager@example-rmis.local", "+972-50-000-0001", "EMAIL,PUSH", "warning", 1),
-        ("cfo", "סמנכ\"ל הכספים (CFO)", "cfo@example-rmis.local", "+972-50-000-0002", "EMAIL,SMS", "critical", 1),
+        ("RISK_MANAGER", "מנהל הסיכונים", "risk.manager@example-rmis.local", "+972-50-000-0001", "EMAIL,PUSH", "warning", 1),
+        ("CFO", "סמנכ\"ל הכספים (CFO)", "cfo@example-rmis.local", "+972-50-000-0002", "EMAIL,SMS", "critical", 1),
     ]
     cur.executemany(
         """INSERT INTO Notification_Recipients

@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 from typing import Annotated, ClassVar, Literal
 
@@ -42,6 +43,42 @@ def _not_blank(value: str) -> str:
 # The forms already require .trim(); this is the same rule for direct API calls.
 # The value is stored as sent, not stripped.
 NonBlankStr = Annotated[str, AfterValidator(_not_blank)]
+
+# Contact details that something is later sent to (a login, a notification). Only
+# the shape is checked: one "@", a dot in the domain, no spaces.
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+# Digits with the usual separators and an optional leading "+", 7-15 digits (E.164).
+_PHONE_RE = re.compile(r"\+?[\d\s()-]+")
+
+
+def _valid_email(value: str) -> str:
+    if not _EMAIL_RE.fullmatch(value):
+        raise ValueError("כתובת אימייל לא תקינה")
+    return value
+
+
+def _valid_email_or_empty(value: str) -> str:
+    return value if value == "" else _valid_email(value)
+
+
+def _valid_phone_or_empty(value: str) -> str:
+    if value == "":
+        return value
+    digits = sum(c.isdigit() for c in value)
+    if not _PHONE_RE.fullmatch(value) or not 7 <= digits <= 15:
+        raise ValueError("מספר טלפון לא תקין")
+    return value
+
+
+def _valid_new_password(value: str) -> str:
+    """"" means "no password" on create (SSO-only) and "keep it" on update, like None."""
+    if value != "" and (len(value) < 8 or not value.strip()):
+        raise ValueError("הסיסמה חייבת להכיל לפחות 8 תווים")
+    return value
+
+
+EmailAddress = Annotated[str, AfterValidator(_valid_email)]
+NewPassword = Annotated[str, AfterValidator(_valid_new_password)]
 
 # Same idea for numbers. Money columns are DECIMAL(18,2), so 16 digits before the
 # point: from 1e16 up SQL Server raises an arithmetic overflow (a 500). The bound
@@ -138,9 +175,10 @@ class UserAutoResponderUpdate(BaseModel):
 
 class UserCreate(BaseModel):
     full_name: NonBlankStr = Field(max_length=100)  # Users.full_name NVARCHAR(100)
-    email: str = Field(max_length=200)  # Users.email NVARCHAR(200)
+    email: EmailAddress = Field(max_length=200)  # Users.email NVARCHAR(200)
     role: UserRole
-    password: str | None = None  # None = no local password (SSO-only), same as seed.py's convention
+    # None/"" = no local password (SSO-only), same as seed.py's convention
+    password: NewPassword | None = Field(default=None, max_length=128)
 
 
 class RolePermissionOut(BaseModel):
@@ -170,9 +208,9 @@ class UserUpdate(PartialUpdate):
     claim_status changes. A null password means "keep the current one"."""
     NULLABLE = frozenset({"password"})
     full_name: NonBlankStr | None = Field(default=None, max_length=100)
-    email: str | None = Field(default=None, max_length=200)
+    email: EmailAddress | None = Field(default=None, max_length=200)
     role: UserRole | None = None
-    password: str | None = None
+    password: NewPassword | None = Field(default=None, max_length=128)
     is_active: bool | None = None
 
 
@@ -792,20 +830,22 @@ class NotificationRecipientOut(BaseModel):
 
 
 class NotificationRecipientCreate(BaseModel):
-    role: NonBlankStr = Field(max_length=30)  # Notification_Recipients: role(30), display_name(100), email(200), phone(30)
+    # Notification_Recipients: role(30), display_name(100), email(200), phone(30).
+    # email/phone may each be "" (the dialog asks for at least one of them).
+    role: UserRole
     display_name: NonBlankStr = Field(max_length=100)
-    email: str = Field(max_length=200)
-    phone: str = Field(max_length=30)
+    email: Annotated[str, AfterValidator(_valid_email_or_empty)] = Field(max_length=200)
+    phone: Annotated[str, AfterValidator(_valid_phone_or_empty)] = Field(max_length=30)
     channels: list[NotificationChannel] = Field(max_length=3)  # stored comma-joined in NVARCHAR(30)
     min_severity: NotificationSeverity = "warning"
     is_active: bool = True
 
 
 class NotificationRecipientUpdate(PartialUpdate):
-    role: NonBlankStr | None = Field(default=None, max_length=30)
+    role: UserRole | None = None
     display_name: NonBlankStr | None = Field(default=None, max_length=100)
-    email: str | None = Field(default=None, max_length=200)
-    phone: str | None = Field(default=None, max_length=30)
+    email: Annotated[str, AfterValidator(_valid_email_or_empty)] | None = Field(default=None, max_length=200)
+    phone: Annotated[str, AfterValidator(_valid_phone_or_empty)] | None = Field(default=None, max_length=30)
     channels: list[NotificationChannel] | None = Field(default=None, max_length=3)
     min_severity: NotificationSeverity | None = None
     is_active: bool | None = None

@@ -1089,7 +1089,7 @@ export interface NotificationLogEntry {
 
 export interface NotificationRecipient {
   recipient_id: number;
-  role: string;
+  role: string;  // a UserRole value (schemas.NotificationRecipientCreate.role)
   display_name: string;
   email: string;
   phone: string;

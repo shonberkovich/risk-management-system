@@ -129,7 +129,12 @@ export default function Users() {
         </Typography>
       )}
 
-      <UserDialog open={dialogOpen} user={dialogUser} onClose={() => setDialogOpen(false)} />
+      <UserDialog
+        open={dialogOpen}
+        user={dialogUser}
+        isSelf={dialogUser !== null && dialogUser.user_id === me?.user_id}
+        onClose={() => setDialogOpen(false)}
+      />
     </Stack>
   );
 }

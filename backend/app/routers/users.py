@@ -158,7 +158,7 @@ def create_user(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(400, "Email already exists")
+        raise HTTPException(400, "כתובת האימייל כבר קיימת במערכת")
     db.refresh(user)
     return user
 
@@ -177,6 +177,10 @@ def update_user(
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("is_active") is False and user_id == admin.user_id:
         raise HTTPException(400, "לא ניתן להשבית את המשתמש המחובר (עצמך)")
+    # Same lock-out as disabling yourself: an ADMIN who demotes themselves loses this
+    # screen mid-session, and if they were the only ADMIN nobody can undo it.
+    if "role" in updates and updates["role"] != user.role and user_id == admin.user_id:
+        raise HTTPException(400, "לא ניתן לשנות את התפקיד של המשתמש המחובר (עצמך)")
 
     password = updates.pop("password", None)
     if password:
@@ -188,7 +192,7 @@ def update_user(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(400, "Email already exists")
+        raise HTTPException(400, "כתובת האימייל כבר קיימת במערכת")
     db.refresh(user)
     return user
 
