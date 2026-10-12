@@ -20,11 +20,14 @@ import {
   checkSeismicActivity,
   fetchIncidents,
   fetchProperties,
+  submitDraftIncident,
   updateIncidentStatus,
   type Incident,
   type IncidentStatus,
 } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import FileClaimDialog from "../components/FileClaimDialog";
 import IncidentsTable from "../components/IncidentsTable";
 import { INCIDENT_STATUS_LABELS } from "../format";
@@ -47,6 +50,7 @@ export default function Incidents() {
   const [status, setStatus] = useState<IncidentStatus | "">("");
   const [claimIncident, setClaimIncident] = useState<Incident | null>(null);
   const queryClient = useQueryClient();
+  const [confirmDialog, confirm] = useConfirmDialog();
   const canTriggerSeismicScan = !!user && SEISMIC_TRIGGER_ROLES.includes(user.role);
   const canChangeStatus = !!user && STATUS_WRITE_ROLES.includes(user.role);
   const canFileClaim = !!user && CLAIMS_WRITE_ROLES.includes(user.role);
@@ -90,6 +94,23 @@ export default function Incidents() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incidents"] }),
   });
 
+  // Same endpoint the report wizard's "submit" uses; here for drafts nobody will reopen
+  // in the wizard — e.g. the seismic scan's auto-created drafts, which wait for a go/no-go.
+  const submitDraftMutation = useMutation({
+    mutationFn: (id: number) => submitDraftIncident(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incidents"] }),
+  });
+
+  const closeIncident = async (inc: Incident) => {
+    const confirmed = await confirm({
+      title: "סגירת אירוע",
+      message: `לסגור את אירוע ${inc.incident_code} ללא תביעה? לא ניתן לפתוח אירוע סגור מחדש.`,
+      confirmLabel: "סגירה",
+      destructive: true,
+    });
+    if (confirmed) statusMutation.mutate({ id: inc.incident_id, newStatus: "CLOSED" });
+  };
+
   if (incidents.isLoading) {
     return (
       <Stack alignItems="center" sx={{ py: 8 }}>
@@ -125,6 +146,16 @@ export default function Incidents() {
         </Alert>
       )}
       {seismicScanMutation.isError && <Alert severity="error">סריקת הרעידות נכשלה. נסו שוב.</Alert>}
+      {statusMutation.isError && (
+        <Alert severity="error" onClose={() => statusMutation.reset()}>
+          {apiErrorMessage(statusMutation.error, "עדכון סטטוס האירוע נכשל. נסו שוב.")}
+        </Alert>
+      )}
+      {submitDraftMutation.isError && (
+        <Alert severity="error" onClose={() => submitDraftMutation.reset()}>
+          {apiErrorMessage(submitDraftMutation.error, "הגשת הטיוטה נכשלה. נסו שוב.")}
+        </Alert>
+      )}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
@@ -227,15 +258,15 @@ export default function Incidents() {
                 ? (inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "UNDER_INVESTIGATION" })
                 : undefined
             }
-            onClose={
-              canChangeStatus ? (inc) => statusMutation.mutate({ id: inc.incident_id, newStatus: "CLOSED" }) : undefined
-            }
+            onClose={canChangeStatus ? closeIncident : undefined}
             onFileClaim={canFileClaim ? setClaimIncident : undefined}
+            onSubmitDraft={canChangeStatus ? (inc) => submitDraftMutation.mutate(inc.incident_id) : undefined}
           />
         </CardContent>
       </Card>
 
       <FileClaimDialog open={!!claimIncident} incident={claimIncident} onClose={() => setClaimIncident(null)} />
+      {confirmDialog}
     </Stack>
   );
 }

@@ -9,25 +9,37 @@
  * same bug class fixed in Policies.tsx/Mitigation.tsx/Claims.tsx.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchIncidentsMock, fetchPropertiesMock, checkSeismicActivityMock, useAuthMock, fileClaimDialogSpy } =
-  vi.hoisted(() => ({
-    fetchIncidentsMock: vi.fn(),
-    fetchPropertiesMock: vi.fn(),
-    checkSeismicActivityMock: vi.fn(),
-    useAuthMock: vi.fn(),
-    fileClaimDialogSpy: vi.fn(),
-  }));
+const {
+  fetchIncidentsMock,
+  fetchPropertiesMock,
+  checkSeismicActivityMock,
+  updateIncidentStatusMock,
+  submitDraftIncidentMock,
+  useAuthMock,
+  fileClaimDialogSpy,
+} = vi.hoisted(() => ({
+  fetchIncidentsMock: vi.fn(),
+  fetchPropertiesMock: vi.fn(),
+  checkSeismicActivityMock: vi.fn(),
+  updateIncidentStatusMock: vi.fn(),
+  submitDraftIncidentMock: vi.fn(),
+  useAuthMock: vi.fn(),
+  fileClaimDialogSpy: vi.fn(),
+}));
 
 vi.mock("../api/client", () => ({
   fetchIncidents: fetchIncidentsMock,
   fetchProperties: fetchPropertiesMock,
   checkSeismicActivity: checkSeismicActivityMock,
-  updateIncidentStatus: vi.fn(),
+  updateIncidentStatus: updateIncidentStatusMock,
+  submitDraftIncident: submitDraftIncidentMock,
 }));
 vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../components/FileClaimDialog", () => ({
@@ -118,5 +130,68 @@ describe("Incidents — write-role gates", () => {
     expect(screen.queryByLabelText("סגור אירוע (ללא תביעה)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("פתח תביעה")).not.toBeInTheDocument();
     expect(screen.getByLabelText("תיק אירוע מלא")).toBeInTheDocument(); // read-only nav stays
+  });
+});
+
+describe("Incidents — drafts and status changes", () => {
+  const DRAFT = { ...INCIDENT, incident_id: 2, incident_code: "INC-002", is_draft: true };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchPropertiesMock.mockResolvedValue([]);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "ADMIN" } });
+  });
+
+  it("marks a draft and offers only submitting it (the backend refuses status changes and claims on drafts)", async () => {
+    fetchIncidentsMock.mockResolvedValue([DRAFT]);
+    submitDraftIncidentMock.mockResolvedValue({ ...DRAFT, is_draft: false });
+    renderPage();
+    await screen.findByText("INC-002");
+
+    expect(screen.getByText("טיוטה")).toBeInTheDocument();
+    expect(screen.queryByLabelText("העבר לבדיקה")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("סגור אירוע (ללא תביעה)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("פתח תביעה")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("הגש טיוטה"));
+    await waitFor(() => expect(submitDraftIncidentMock).toHaveBeenCalledWith(2));
+  });
+
+  it("does not offer submitting a draft to a role outside the status-write set", async () => {
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "CFO" } });
+    fetchIncidentsMock.mockResolvedValue([DRAFT]);
+    renderPage();
+    await screen.findByText("INC-002");
+    expect(screen.queryByLabelText("הגש טיוטה")).not.toBeInTheDocument();
+  });
+
+  it("asks before closing, and closes only on confirm", async () => {
+    fetchIncidentsMock.mockResolvedValue([INCIDENT]);
+    updateIncidentStatusMock.mockResolvedValue({ ...INCIDENT, status: "CLOSED" });
+    renderPage();
+    await screen.findByText("INC-001");
+
+    await userEvent.click(screen.getByLabelText("סגור אירוע (ללא תביעה)"));
+    const dialog = await screen.findByRole("dialog", { name: "סגירת אירוע" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ביטול" }));
+    expect(updateIncidentStatusMock).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByLabelText("סגור אירוע (ללא תביעה)"));
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "סגירת אירוע" })).getByRole("button", { name: "סגירה" }));
+    await waitFor(() => expect(updateIncidentStatusMock).toHaveBeenCalledWith(1, "CLOSED"));
+  });
+
+  it("shows why a status change failed", async () => {
+    const config = { headers: {} } as InternalAxiosRequestConfig;
+    const response = {
+      data: { detail: "לא ניתן להחזיר סטטוס אירוע לאחור" }, status: 400, statusText: "", headers: {}, config,
+    } as AxiosResponse;
+    updateIncidentStatusMock.mockRejectedValue(new AxiosError("400", "ERR_BAD_REQUEST", config, null, response));
+    fetchIncidentsMock.mockResolvedValue([INCIDENT]);
+    renderPage();
+    await screen.findByText("INC-001");
+
+    await userEvent.click(screen.getByLabelText("העבר לבדיקה"));
+    expect(await screen.findByText("לא ניתן להחזיר סטטוס אירוע לאחור")).toBeInTheDocument();
   });
 });

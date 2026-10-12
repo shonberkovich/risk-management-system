@@ -1,5 +1,6 @@
 import GavelIcon from "@mui/icons-material/Gavel";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import SendIcon from "@mui/icons-material/Send";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import Chip from "@mui/material/Chip";
@@ -31,6 +32,7 @@ export default function IncidentsTable({
   onInvestigate,
   onClose,
   onFileClaim,
+  onSubmitDraft,
 }: {
   rows: Incident[];
   propertyNames: Record<number, string>;
@@ -41,6 +43,9 @@ export default function IncidentsTable({
   onInvestigate?: (incident: Incident) => void;
   onClose?: (incident: Incident) => void;
   onFileClaim?: (incident: Incident) => void;
+  // A draft (is_draft) has no workflow until it's submitted — the backend refuses a
+  // status change or a claim on it — so a draft row offers only this action.
+  onSubmitDraft?: (incident: Incident) => void;
 }) {
   const navigate = useNavigate();
 
@@ -79,7 +84,10 @@ export default function IncidentsTable({
               <TableCell align="left">{formatIls(inc.initial_estimated_loss)}</TableCell>
               <TableCell>{formatDate(inc.incident_timestamp)}</TableCell>
               <TableCell>
-                <Chip size="small" label={INCIDENT_STATUS_LABELS[inc.status] ?? inc.status} color={STATUS_COLOR[inc.status]} />
+                <Stack direction="row" spacing={0.5}>
+                  <Chip size="small" label={INCIDENT_STATUS_LABELS[inc.status] ?? inc.status} color={STATUS_COLOR[inc.status]} />
+                  {inc.is_draft && <Chip size="small" variant="outlined" label="טיוטה" />}
+                </Stack>
               </TableCell>
               <TableCell align="center">
                 <Stack direction="row" spacing={0.5} justifyContent="center">
@@ -88,21 +96,28 @@ export default function IncidentsTable({
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  {onInvestigate && inc.status === "NEW" && (
+                  {onSubmitDraft && inc.is_draft && (
+                    <Tooltip title="הגש טיוטה">
+                      <IconButton size="small" onClick={() => onSubmitDraft(inc)}>
+                        <SendIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {onInvestigate && !inc.is_draft && inc.status === "NEW" && (
                     <Tooltip title="העבר לבדיקה">
                       <IconButton size="small" onClick={() => onInvestigate(inc)}>
                         <PlayArrowIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   )}
-                  {onFileClaim && inc.status !== "CLOSED" && (
+                  {onFileClaim && !inc.is_draft && inc.status !== "CLOSED" && (
                     <Tooltip title="פתח תביעה">
                       <IconButton size="small" onClick={() => onFileClaim(inc)}>
                         <GavelIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   )}
-                  {onClose && (inc.status === "NEW" || inc.status === "UNDER_INVESTIGATION") && (
+                  {onClose && !inc.is_draft && (inc.status === "NEW" || inc.status === "UNDER_INVESTIGATION") && (
                     <Tooltip title="סגור אירוע (ללא תביעה)">
                       <IconButton size="small" onClick={() => onClose(inc)}>
                         <TaskAltIcon fontSize="small" />

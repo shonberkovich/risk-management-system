@@ -141,6 +141,10 @@ def create_claim(
             raise HTTPException(404, "Incident not found")
         if incident.status == "CLOSED":
             raise HTTPException(400, "לא ניתן לפתוח תביעה עבור אירוע סגור")
+        if incident.is_draft:
+            # Filing a claim also moves the incident to CLAIM_FILED, which would
+            # freeze it (PATCH /incidents/{id} only edits drafts) while still a draft.
+            raise HTTPException(400, "לא ניתן לפתוח תביעה עבור טיוטת אירוע — יש להגיש אותה תחילה")
 
         policy = db.get(models.InsurancePolicy, payload.policy_id)
         if not policy:
