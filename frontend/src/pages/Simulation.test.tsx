@@ -1,10 +1,11 @@
 /**
  * Component tests for Simulation.tsx — running a portfolio vs. a per-property
  * simulation with the right params, the initial hint / error states, and the
- * results KPI cards.
+ * results KPI cards; only properties with a risk profile are offered, and the runs
+ * slider stays within routers/simulation.py's runs x horizon budget.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +25,10 @@ vi.mock("../components/SimulationDistributionChart", () => ({ default: () => <di
 
 import Simulation from "./Simulation";
 
-const PROPERTIES = [{ property_id: 7, name: "מרכז לוגיסטי תל אביב" }];
+const PROPERTIES = [
+  { property_id: 7, name: "מרכז לוגיסטי תל אביב", risk_profile: { risk_score: 40 } },
+  { property_id: 8, name: "מחסן ללא פרופיל", risk_profile: null },
+];
 
 const PORTFOLIO_RESULT = {
   iterations: 10000,
@@ -134,5 +138,37 @@ describe("Simulation", () => {
 
     expect(await screen.findByText("מריץ סימולציה...")).toBeInTheDocument();
     expect(screen.getByText("מריץ סימולציה...").closest("button")).toBeDisabled();
+  });
+
+  it("offers only properties that have a risk profile", async () => {
+    renderPage();
+    await screen.findByText(/בחר היקף/);
+    await userEvent.click(screen.getByLabelText("היקף"));
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByRole("option", { name: "מרכז לוגיסטי תל אביב" })).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: "מחסן ללא פרופיל" })).not.toBeInTheDocument();
+  });
+
+  it("lowers the most runs a long horizon allows and clamps the chosen value", async () => {
+    fetchPortfolioSimulationMock.mockResolvedValue({ ...PORTFOLIO_RESULT, iterations: 2000, horizon_years: 50 });
+    renderPage();
+    const [runs, horizon] = screen.getAllByRole("slider");
+    fireEvent.change(runs, { target: { value: 100000 } });
+    expect(runs).toHaveAttribute("aria-valuenow", "100000");
+
+    fireEvent.change(horizon, { target: { value: 50 } });
+    expect(runs).toHaveAttribute("aria-valuemax", "2000");
+    expect(runs).toHaveAttribute("aria-valuenow", "2000");
+    expect(screen.getByText(/\(עד 2,000 באופק זה\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("הרץ סימולציה"));
+    expect(fetchPortfolioSimulationMock).toHaveBeenCalledWith({ iterations: 2000, horizon_years: 50 });
+  });
+
+  it("keeps the full range at a one-year horizon", () => {
+    renderPage();
+    const [runs] = screen.getAllByRole("slider");
+    expect(runs).toHaveAttribute("aria-valuemax", "100000");
+    expect(screen.queryByText(/באופק זה/)).not.toBeInTheDocument();
   });
 });

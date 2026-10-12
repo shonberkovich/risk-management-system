@@ -19,6 +19,7 @@ import {
   fetchProperties,
   fetchPropertySimulation,
 } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
 import KpiCard from "../components/KpiCard";
 import SimulationDistributionChart from "../components/SimulationDistributionChart";
 import { formatIlsCompact } from "../format";
@@ -28,13 +29,20 @@ import { formatIlsCompact } from "../format";
 // reject with a 422.
 const ITERATIONS_MIN = 1_000;
 const ITERATIONS_MAX = 100_000;
-const ITERATIONS_MARKS = [1_000, 10_000, 25_000, 50_000, 100_000].map((v) => ({
-  value: v,
-  label: v.toLocaleString("he-IL"),
-}));
+const ITERATIONS_STEP = 1_000;
+const ITERATIONS_MARK_VALUES = [1_000, 10_000, 25_000, 50_000, 100_000];
 const HORIZON_MIN = 1;
 const HORIZON_MAX = 50;
 const HORIZON_MARKS = [1, 5, 10, 25, 50].map((v) => ({ value: v, label: String(v) }));
+// routers/simulation.py MAX_SIMULATED_YEARS: runs x horizon years may not exceed this,
+// so a longer horizon lowers the most runs the slider offers.
+const MAX_SIMULATED_YEARS = 100_000;
+
+/** The most runs allowed at this horizon, on the slider's 1,000 step. */
+function maxIterationsFor(horizonYears: number): number {
+  const byBudget = Math.floor(MAX_SIMULATED_YEARS / horizonYears / ITERATIONS_STEP) * ITERATIONS_STEP;
+  return Math.max(ITERATIONS_MIN, Math.min(ITERATIONS_MAX, byBudget));
+}
 
 export default function Simulation() {
   const [scope, setScope] = useState<"portfolio" | number>("portfolio");
@@ -47,6 +55,13 @@ export default function Simulation() {
   } | null>(null);
 
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
+  // Only properties with a risk profile can be simulated (the backend 404s the rest).
+  const simulatable = (properties.data ?? []).filter((p) => p.risk_profile);
+  const iterationsMax = maxIterationsFor(horizonYears);
+  const iterationsMarks = ITERATIONS_MARK_VALUES.filter((v) => v <= iterationsMax).map((v) => ({
+    value: v,
+    label: v.toLocaleString("he-IL"),
+  }));
 
   const portfolioResult = useQuery({
     queryKey: ["simulation-portfolio", runParams],
@@ -66,6 +81,11 @@ export default function Simulation() {
   });
 
   const activeQuery = runParams?.scope === "portfolio" ? portfolioResult : propertyResult;
+
+  function changeHorizon(years: number) {
+    setHorizonYears(years);
+    setIterations((current) => Math.min(current, maxIterationsFor(years)));
+  }
   const result = activeQuery.data;
   const horizonSuffix = result && result.horizon_years > 1 ? ` (${result.horizon_years} שנים)` : "";
 
@@ -95,7 +115,7 @@ export default function Simulation() {
               sx={{ minWidth: 220 }}
             >
               <MenuItem value="portfolio">כל התיק (Portfolio)</MenuItem>
-              {properties.data?.map((p) => (
+              {simulatable.map((p) => (
                 <MenuItem key={p.property_id} value={p.property_id}>
                   {p.name}
                 </MenuItem>
@@ -105,15 +125,16 @@ export default function Simulation() {
             <Box sx={{ minWidth: 260, px: 1 }}>
               <Typography variant="caption" color="text.secondary">
                 מספר הרצות: {iterations.toLocaleString("he-IL")}
+                {iterationsMax < ITERATIONS_MAX && ` (עד ${iterationsMax.toLocaleString("he-IL")} באופק זה)`}
               </Typography>
               <Slider
                 size="small"
                 value={iterations}
                 onChange={(_, v) => setIterations(v as number)}
                 min={ITERATIONS_MIN}
-                max={ITERATIONS_MAX}
-                step={1000}
-                marks={ITERATIONS_MARKS}
+                max={iterationsMax}
+                step={ITERATIONS_STEP}
+                marks={iterationsMarks}
                 valueLabelDisplay="auto"
                 valueLabelFormat={(v) => v.toLocaleString("he-IL")}
               />
@@ -126,7 +147,7 @@ export default function Simulation() {
               <Slider
                 size="small"
                 value={horizonYears}
-                onChange={(_, v) => setHorizonYears(v as number)}
+                onChange={(_, v) => changeHorizon(v as number)}
                 min={HORIZON_MIN}
                 max={HORIZON_MAX}
                 step={1}
@@ -148,7 +169,9 @@ export default function Simulation() {
       </Card>
 
       {activeQuery.isError && (
-        <Alert severity="error">שגיאה בהרצת הסימולציה. ודא שהנכס נבחר תקין ובעל פרופיל סיכון.</Alert>
+        <Alert severity="error">
+          {apiErrorMessage(activeQuery.error, "שגיאה בהרצת הסימולציה. ודא שהנכס נבחר תקין ובעל פרופיל סיכון.")}
+        </Alert>
       )}
 
       {!runParams && !result && (
