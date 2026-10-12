@@ -373,7 +373,7 @@ def _reject_future_timestamp(v: datetime | None) -> datetime | None:
     now_utc = datetime.now(timezone.utc)
     compare_v = v if v.tzinfo is not None else v.replace(tzinfo=timezone.utc)
     if compare_v > now_utc:
-        raise ValueError("incident_timestamp cannot be in the future")
+        raise ValueError("מועד האירוע לא יכול להיות בעתיד")
     return compare_v.astimezone(timezone.utc).replace(tzinfo=None)
 
 
