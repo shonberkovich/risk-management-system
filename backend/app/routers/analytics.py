@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -129,7 +129,9 @@ def get_alerts(db: Session = Depends(get_db)):
 
 @router.get("/cashflow", response_model=schemas.CashflowSummary)
 def get_cashflow(
-    months_ahead: int = 12,
+    # Bounded: the service builds one month key per month in a Python loop, so an
+    # unbounded value (months_ahead=10**22) ran until the worker exhausted memory.
+    months_ahead: int = Query(12, ge=1, le=120),
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles(*_FINANCIAL_READ_ROLES)),
 ):

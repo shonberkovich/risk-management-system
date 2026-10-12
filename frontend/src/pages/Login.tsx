@@ -74,8 +74,9 @@ export default function Login() {
     try {
       await login(email, password);
     } catch (err) {
-      const detail = isAxiosError(err) ? (err.response?.data?.detail as string | undefined) : undefined;
-      setError(detail ?? "אירעה שגיאה בהתחברות. נסו שוב.");
+      // A 422's detail is a list of field errors, not text to render.
+      const detail = isAxiosError(err) ? err.response?.data?.detail : undefined;
+      setError(typeof detail === "string" ? detail : "אירעה שגיאה בהתחברות. נסו שוב.");
     } finally {
       setSubmitting(false);
     }
@@ -332,6 +333,7 @@ export default function Login() {
               <TextField
                 label="אימייל"
                 type="email"
+                inputProps={{ maxLength: 200 }}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username"

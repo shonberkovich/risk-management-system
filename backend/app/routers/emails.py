@@ -330,7 +330,9 @@ def list_emails(
     folder: schemas.EmailFolder = "INBOX",
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    q: str | None = Query(None, description="חיפוש חופשי בנושא, בגוף ההודעה או בשם השולח"),
+    # Capped like the text columns it searches: past ~2000 chars pyodbc binds the
+    # LIKE pattern as NVARCHAR(MAX)/ntext, which SQL Server rejects (a 500).
+    q: str | None = Query(None, max_length=200, description="חיפוש חופשי בנושא, בגוף ההודעה או בשם השולח"),
     label_id: int | None = Query(None, description="סינון לפי תגית (TODO_SPEC.md \"משימה 16\" שלב 5) — משולב עם folder/q, לא מחליף אותם"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
