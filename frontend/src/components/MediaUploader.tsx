@@ -16,7 +16,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { extractExifSummary, type ExifSummary } from "../utils/exif";
 
-const ACCEPTED_TYPES = "image/*,video/*,application/pdf";
+// Same list as backend services/storage.py ALLOWED_CONTENT_TYPES (routers/media.py
+// rejects anything else).
+const ACCEPTED_TYPES = ".jpg,.jpeg,.png,.mp4,.mov,.pdf";
+const ACCEPTED_EXTENSIONS = ["jpg", "jpeg", "png", "mp4", "mov", "pdf"];
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // mirrors backend/app/routers/media.py's _MAX_UPLOAD_BYTES
 
 interface MediaUploaderProps {
@@ -48,6 +51,9 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
   // window.alert(), which embedded browsers suppress (the user then never learns why the
   // file didn't appear).
   const [tooLargeNames, setTooLargeNames] = useState<string[]>([]);
+  // Same for files of a type the backend refuses (the camera input's image/* lets e.g.
+  // HEIC/WebP through, and a file dialog's "all files" option anything).
+  const [unsupportedNames, setUnsupportedNames] = useState<string[]>([]);
 
   useEffect(() => {
     const pending = files.filter((f) => f.type.startsWith("image/") && !exifByFile.has(f));
@@ -70,9 +76,12 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
 
   const addFiles = (fileList: FileList | null) => {
     if (!fileList) return;
+    const isSupported = (f: File) => ACCEPTED_EXTENSIONS.includes(f.name.split(".").pop()?.toLowerCase() ?? "");
     const incoming = Array.from(fileList);
-    const tooLarge = incoming.filter((f) => f.size > MAX_FILE_BYTES);
-    const accepted = incoming.filter((f) => f.size <= MAX_FILE_BYTES);
+    const unsupported = incoming.filter((f) => !isSupported(f));
+    const tooLarge = incoming.filter((f) => isSupported(f) && f.size > MAX_FILE_BYTES);
+    const accepted = incoming.filter((f) => isSupported(f) && f.size <= MAX_FILE_BYTES);
+    setUnsupportedNames(unsupported.map((f) => f.name));
     setTooLargeNames(tooLarge.map((f) => f.name));
     if (accepted.length > 0) onFilesChange([...files, ...accepted]);
   };
@@ -127,6 +136,12 @@ export default function MediaUploader({ files, onFilesChange, disabled }: MediaU
           </Button>
         </Grid>
       </Grid>
+
+      {unsupportedNames.length > 0 && (
+        <Alert severity="warning" onClose={() => setUnsupportedNames([])}>
+          סוג הקובץ לא נתמך (ניתן לצרף JPG/PNG, MP4/MOV או PDF) — לא נוספו: {unsupportedNames.join(", ")}
+        </Alert>
+      )}
 
       {tooLargeNames.length > 0 && (
         <Alert severity="warning" onClose={() => setTooLargeNames([])}>

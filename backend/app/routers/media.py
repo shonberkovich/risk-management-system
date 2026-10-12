@@ -64,6 +64,11 @@ async def upload_incident_media(
         raise HTTPException(404, "Incident not found")
     if not file.filename:
         raise HTTPException(400, "חסר שם קובץ")
+    # Incident media is shown inline as a photo/video (or opened as a PDF); any other
+    # type was stored as application/octet-stream and could never be displayed.
+    extension = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if extension not in storage.ALLOWED_CONTENT_TYPES:
+        raise HTTPException(400, "סוג קובץ לא נתמך — ניתן לצרף תמונות JPG/PNG, סרטוני MP4/MOV או PDF")
 
     file_bytes = await file.read()
     if not file_bytes:

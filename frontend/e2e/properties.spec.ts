@@ -139,8 +139,9 @@ test.describe("Property create + detail workflow", () => {
     await expect(page.getByText("מסמכים מצורפים לנכס (1)")).toBeVisible();
 
     // RISK_MANAGER is in documents.py's DELETE role set (RISK_MANAGER/ADMIN) — the delete icon
-    // should be visible and functional.
+    // should be visible and functional. Deleting asks first (components/ConfirmDialog.tsx).
     await page.getByRole("button", { name: "מחק מסמך" }).click();
+    await page.getByRole("dialog", { name: "מחיקת מסמך" }).getByRole("button", { name: "מחיקה" }).click();
     await expect(page.getByText("לא צורפו מסמכים לנכס זה עדיין.")).toBeVisible({ timeout: 15_000 });
   });
 
@@ -179,6 +180,7 @@ test.describe("Property create + detail workflow", () => {
     await login(page, "RISK_MANAGER");
     await page.goto(detailUrl);
     await page.getByRole("button", { name: "מחק מסמך" }).click();
+    await page.getByRole("dialog", { name: "מחיקת מסמך" }).getByRole("button", { name: "מחיקה" }).click();
     await expect(page.getByText("לא צורפו מסמכים לנכס זה עדיין.")).toBeVisible({ timeout: 15_000 });
   });
 

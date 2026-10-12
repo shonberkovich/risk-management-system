@@ -29,11 +29,11 @@ import {
   fetchIncidents,
   fetchPolicies,
   fetchProperties,
-  fetchUsers,
   uploadDocument,
   type DocumentEntityType,
   type DocumentFile,
 } from "../api/client";
+import { uploadEach } from "../api/uploadEach";
 import { useAuth } from "../auth/AuthContext";
 import { useConfirmDialog } from "../components/ConfirmDialog";
 import { DOCUMENT_TYPE_LABELS, formatDate } from "../format";
@@ -112,7 +112,6 @@ export default function Documents() {
   const [entityType, setEntityType] = useState<DocumentEntityType>("PROPERTY");
   const [entity, setEntity] = useState<EntityOption | null>(null);
   const [docType, setDocType] = useState<string>(DOC_TYPE_OPTIONS[0]);
-  const [uploadedBy, setUploadedBy] = useState<number | "">("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirmDialog();
@@ -121,7 +120,6 @@ export default function Documents() {
   const incidents = useQuery({ queryKey: ["incidents", "all"], queryFn: () => fetchIncidents() });
   const claims = useQuery({ queryKey: ["claims", ""], queryFn: () => fetchClaims() });
   const policies = useQuery({ queryKey: ["policies", ""], queryFn: () => fetchPolicies() });
-  const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers });
 
   // Each entity type has its own natural human-readable label (property name,
   // incident code, claim number, policy number) — this maps the currently
@@ -158,13 +156,10 @@ export default function Documents() {
     setUploading(true);
     setUploadError(null);
     try {
-      for (const file of Array.from(fileList)) {
-        await uploadDocument(entityType, entity.id, file, docType, uploadedBy === "" ? null : uploadedBy);
-      }
-      queryClient.invalidateQueries({ queryKey: ["documents", "entity", entityType, entity.id] });
-    } catch {
-      setUploadError("העלאת הקובץ נכשלה. נסו שוב.");
+      setUploadError(await uploadEach(Array.from(fileList), (file) => uploadDocument(entityType, entity.id, file, docType)));
     } finally {
+      // Also after a partial failure: the files that did go up belong in the table.
+      queryClient.invalidateQueries({ queryKey: ["documents", "entity", entityType, entity.id] });
       setUploading(false);
     }
   };
@@ -237,21 +232,6 @@ export default function Documents() {
                   {DOC_TYPE_OPTIONS.map((t) => (
                     <MenuItem key={t} value={t}>
                       {DOCUMENT_TYPE_LABELS[t]}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                <TextField
-                  select
-                  label="הועלה על ידי (אופציונלי)"
-                  value={uploadedBy}
-                  onChange={(e) => setUploadedBy(e.target.value === "" ? "" : Number(e.target.value))}
-                  sx={{ minWidth: 200 }}
-                >
-                  <MenuItem value="">לא צוין</MenuItem>
-                  {(users.data ?? []).map((u) => (
-                    <MenuItem key={u.user_id} value={u.user_id}>
-                      {u.full_name}
                     </MenuItem>
                   ))}
                 </TextField>

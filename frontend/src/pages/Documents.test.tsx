@@ -1,10 +1,12 @@
 /**
  * Documents.tsx — the delete action is only offered to the roles the backend actually
  * lets delete (RISK_MANAGER/ADMIN, routers/documents.py), and a failed delete is shown
- * instead of being swallowed.
+ * instead of being swallowed. A multi-file upload goes on past a failing file, names
+ * it, and still refreshes the list with the ones that went up; there's no "uploaded
+ * by" picker (the backend records the caller).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   deleteDocumentMock: vi.fn(),
+  uploadDocumentMock: vi.fn(),
+  fetchDocumentsForEntityMock: vi.fn(),
 }));
 
 vi.mock("../auth/AuthContext", () => ({ useAuth: mocks.useAuthMock }));
@@ -21,13 +25,13 @@ vi.mock("../api/client", () => ({
   fetchClaims: vi.fn().mockResolvedValue([]),
   fetchPolicies: vi.fn().mockResolvedValue([]),
   fetchUsers: vi.fn().mockResolvedValue([]),
-  fetchDocumentsForEntity: vi.fn().mockResolvedValue([
-    { document_id: 9, entity_type: "PROPERTY", entity_id: 3, s3_url: "x", doc_type: "SURVEY_REPORT", uploaded_by: null, uploaded_at: "2026-10-01T08:00:00" },
-  ]),
+  fetchDocumentsForEntity: mocks.fetchDocumentsForEntityMock,
   fetchDocumentSignedUrl: vi.fn().mockResolvedValue({ url: "u", download_url: "/api/documents/download?x", storage_key: "k", expires_at: "" }),
   deleteDocument: mocks.deleteDocumentMock,
-  uploadDocument: vi.fn(),
+  uploadDocument: mocks.uploadDocumentMock,
 }));
+
+const DOC = { document_id: 9, entity_type: "PROPERTY", entity_id: 3, s3_url: "x", doc_type: "SURVEY_REPORT", uploaded_by: null, uploaded_at: "2026-10-01T08:00:00" };
 
 import Documents from "./Documents";
 
@@ -48,6 +52,7 @@ async function selectProperty() {
 describe("Documents — delete permission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchDocumentsForEntityMock.mockResolvedValue([DOC]);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -86,5 +91,34 @@ describe("Documents — delete permission", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mocks.deleteDocumentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Documents — upload", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchDocumentsForEntityMock.mockResolvedValue([DOC]);
+    mocks.useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "דנה", role: "RISK_MANAGER" } });
+  });
+
+  it("has no uploader picker — the backend records the signed-in user", async () => {
+    renderPage();
+    await selectProperty();
+    expect(screen.queryByLabelText(/הועלה על ידי/)).not.toBeInTheDocument();
+  });
+
+  it("uploads the rest after a failing file, names it, and refreshes the list", async () => {
+    mocks.uploadDocumentMock.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("Network Error"));
+    renderPage();
+    await selectProperty();
+    const fetchesBefore = mocks.fetchDocumentsForEntityMock.mock.calls.length;
+
+    const input = screen.getByText("העלאת קובץ").querySelector("input[type=file]") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")] } });
+
+    expect(await screen.findByText("1 מתוך 2 קבצים לא הועלו: b.pdf — ההעלאה נכשלה")).toBeInTheDocument();
+    expect(mocks.uploadDocumentMock).toHaveBeenCalledTimes(2);
+    expect(mocks.uploadDocumentMock).toHaveBeenCalledWith("PROPERTY", 3, expect.any(File), expect.any(String));
+    await waitFor(() => expect(mocks.fetchDocumentsForEntityMock.mock.calls.length).toBeGreaterThan(fetchesBefore));
   });
 });

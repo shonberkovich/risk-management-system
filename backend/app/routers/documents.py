@@ -87,14 +87,11 @@ async def upload_document(
     entity_type: schemas.DocumentEntityType,
     entity_id: int,
     file: UploadFile,
-    doc_type: str = Query(
-        ...,
-        max_length=30,  # Documents.doc_type NVARCHAR(30)
-        description='e.g. "POLICY_DOCUMENT", "ADJUSTER_REPORT", "CORRESPONDENCE", "PHOTO", "SURVEY_REPORT"',
-    ),
-    uploaded_by: int | None = Query(None, description="Users.user_id"),
+    doc_type: schemas.DocumentType = Query(...),
+    # No uploaded_by parameter: the uploader is always the caller (a client-supplied
+    # id let anyone attribute a file to someone else, and an unknown id was a FK 500).
     db: Session = Depends(get_db),
-    _user: models.User = Depends(require_roles()),  # any authenticated role
+    current_user: models.User = Depends(require_roles()),  # any authenticated role
 ):
     _get_entity_or_404(db, entity_type, entity_id)
     if not file.filename:
@@ -113,7 +110,7 @@ async def upload_document(
         entity_id=entity_id,
         s3_url=upload_result.storage_key,
         doc_type=doc_type,
-        uploaded_by=uploaded_by,
+        uploaded_by=current_user.user_id,
         uploaded_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(document)

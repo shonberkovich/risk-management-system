@@ -599,6 +599,9 @@ class IncidentMediaOut(BaseModel):
 
 
 DocumentEntityType = Literal["INCIDENT", "CLAIM", "PROPERTY", "POLICY"]
+# The types the upload screens offer (frontend format.ts DOCUMENT_TYPE_LABELS); any
+# other value had no label to show.
+DocumentType = Literal["POLICY_DOCUMENT", "ADJUSTER_REPORT", "CORRESPONDENCE", "PHOTO", "SURVEY_REPORT"]
 
 
 class DocumentOut(BaseModel):
