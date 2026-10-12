@@ -23,10 +23,13 @@ _AUDIT_ROLES = ("ADMIN",)
 
 @router.get("", response_model=schemas.AuditLogPageOut)
 def list_audit_log(
-    entity_type: str | None = Query(None, description="לדוגמה INCIDENTS, CLAIMS, POLICIES"),
+    # Bounded by the columns (Audit_Log.entity_type NVARCHAR(50), action NVARCHAR(20)):
+    # a longer value can't match, and past 2000 chars pyodbc binds it as a type SQL
+    # Server won't compare with NVARCHAR (a 500).
+    entity_type: str | None = Query(None, max_length=50, description="לדוגמה INCIDENTS, CLAIMS, POLICIES"),
     entity_id: int | None = None,
     user_id: int | None = None,
-    action: str | None = Query(None, description="CREATE / UPDATE / DELETE"),
+    action: str | None = Query(None, max_length=20, description="CREATE / UPDATE / DELETE / DOWNLOAD"),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = Query(50, gt=0, le=500),

@@ -436,15 +436,17 @@ def run():
     )
 
     # --- Audit_Log ---
+    # entity_type uses the vocabulary middleware/audit.py writes (the API path segment,
+    # uppercased), so filtering one entity shows its seeded and live history together.
     audit_log = [
-        (1, "Incident", 1, "CREATE", None, '{"status":"NEW"}', "10.0.0.15"),
-        (1, "Incident", 1, "UPDATE", '{"status":"NEW"}', '{"status":"CLAIM_FILED"}', "10.0.0.15"),
-        (2, "Claim", 1, "UPDATE", '{"claim_status":"SUBMITTED"}', '{"claim_status":"APPROVED"}', "10.0.0.22"),
-        (7, "Insurance_Policy", 1, "UPDATE", '{"status":"PENDING_RENEWAL"}', '{"status":"ACTIVE"}', "10.0.0.5"),
-        (3, "Mitigation_Task", 1, "CREATE", None, '{"status":"OPEN"}', "10.0.0.31"),
-        (9, "Claim", 3, "UPDATE", '{"claim_status":"IN_ADJUSTMENT"}', '{"claim_status":"APPROVED"}', "10.0.0.44"),
-        (7, "User", 8, "CREATE", None, '{"role":"RISK_OFFICER"}', "10.0.0.5"),
-        (6, "Incident", 26, "CREATE", None, '{"status":"NEW","is_draft":true}', "10.0.0.61"),
+        (1, "INCIDENTS", 1, "CREATE", None, '{"status":"NEW"}', "10.0.0.15"),
+        (1, "INCIDENTS", 1, "UPDATE", '{"status":"NEW"}', '{"status":"CLAIM_FILED"}', "10.0.0.15"),
+        (2, "CLAIMS", 1, "UPDATE", '{"claim_status":"SUBMITTED"}', '{"claim_status":"APPROVED"}', "10.0.0.22"),
+        (7, "POLICIES", 1, "UPDATE", '{"status":"PENDING_RENEWAL"}', '{"status":"ACTIVE"}', "10.0.0.5"),
+        (3, "MITIGATION-TASKS", 1, "CREATE", None, '{"status":"OPEN"}', "10.0.0.31"),
+        (9, "CLAIMS", 3, "UPDATE", '{"claim_status":"IN_ADJUSTMENT"}', '{"claim_status":"APPROVED"}', "10.0.0.44"),
+        (7, "USERS", 8, "CREATE", None, '{"role":"RISK_OFFICER"}', "10.0.0.5"),
+        (6, "INCIDENTS", 26, "CREATE", None, '{"status":"NEW","is_draft":true}', "10.0.0.61"),
     ]
     cur.executemany(
         """INSERT INTO Audit_Log (user_id, entity_type, entity_id, action, old_value, new_value, ip_address)
