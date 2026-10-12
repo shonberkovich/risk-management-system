@@ -26,6 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 
+import { apiErrorMessage } from "../api/errors";
 import {
   classifyIncident,
   createIncident,
@@ -94,6 +95,21 @@ const SEVERITY_OPTIONS: { value: SeverityLevel; color: string }[] = [
   { value: "CRITICAL", color: "#FF4D79" },
 ];
 const IMPACT_OPTIONS: OperationalImpact[] = ["FULL_OPERATION", "PARTIAL_SHUTDOWN", "FULL_SHUTDOWN"];
+// Incidents.area_or_building is NVARCHAR(150) (schemas.IncidentCreate).
+const AREA_MAX_LENGTH = 150;
+// schemas.Money: DECIMAL(18,2), so below 10^16.
+const MONEY_MAX = 1e16;
+// Names for apiErrorMessage when the backend rejects a field.
+const FIELD_LABELS: Record<string, string> = {
+  property_id: "נכס",
+  incident_timestamp: "תאריך ושעת האירוע",
+  hazard_type: "סוג הנזק",
+  severity_level: "רמת חומרה",
+  operational_impact: "סטטוס פעילות בנכס",
+  initial_estimated_loss: "הערכת נזק ראשונית",
+  description: "תיאור האירוע",
+  area_or_building: "אזור / מבנה",
+};
 
 export default function IncidentReport() {
   // Pill colors: the option hexes are the dark-mode set; adapt() swaps in the deeper
@@ -213,10 +229,11 @@ export default function IncidentReport() {
     reverseGeocode(latitude, longitude)
       .then((result) => {
         if (!result.address) return;
+        const address = (result.address as string).slice(0, AREA_MAX_LENGTH);
         setAreaOrBuilding((current) => {
           if (current !== "" && current !== geocodedAreaValue.current) return current;
-          geocodedAreaValue.current = result.address as string;
-          return result.address as string;
+          geocodedAreaValue.current = address;
+          return address;
         });
       })
       .catch(() => {
@@ -432,10 +449,16 @@ export default function IncidentReport() {
     },
   });
 
+  // datetime-local values ("YYYY-MM-DDTHH:mm") compare correctly as strings. The
+  // backend rejects a future time (schemas._reject_future_timestamp).
+  const timestampInFuture = !!timestamp && timestamp > toDatetimeLocalValue(new Date());
+  const lossValue = Number(loss);
+  const lossInvalid = loss !== "" && (!Number.isFinite(lossValue) || lossValue < 0 || lossValue >= MONEY_MAX);
+
   const canNext = [
-    !!property && !!timestamp,
+    !!property && !!timestamp && !timestampInFuture,
     !!hazardType && !!severity && !!impact,
-    !!description.trim(),
+    !!description.trim() && !lossInvalid,
     true,
   ][activeStep];
 
@@ -468,6 +491,11 @@ export default function IncidentReport() {
             setSubmittedOffline(false);
             setActiveStep(0);
             setProperty(null);
+            autoSelectedPropertyId.current = null;
+            setAreaOrBuilding("");
+            geocodedAreaValue.current = null;
+            setGeocodeError(null);
+            setTimestamp(toDatetimeLocalValue(new Date()));
             setHazardType("");
             setSeverity("");
             setImpact("");
@@ -598,6 +626,7 @@ export default function IncidentReport() {
                   setAreaOrBuilding(e.target.value);
                 }}
                 placeholder="לדוגמה: מבנה B, קומה 2 — מתמלא אוטומטית ממיקום GPS אם זמין"
+                inputProps={{ maxLength: AREA_MAX_LENGTH }}
                 InputProps={{
                   endAdornment: geocoding ? <CircularProgress size={16} /> : undefined,
                 }}
@@ -607,6 +636,9 @@ export default function IncidentReport() {
                 type="datetime-local"
                 value={timestamp}
                 onChange={(e) => setTimestamp(e.target.value)}
+                inputProps={{ max: toDatetimeLocalValue(new Date()) }}
+                error={timestampInFuture}
+                helperText={timestampInFuture ? "מועד האירוע לא יכול להיות בעתיד" : undefined}
                 InputLabelProps={{ shrink: true }}
               />
             </Stack>
@@ -727,6 +759,9 @@ export default function IncidentReport() {
                 type="number"
                 value={loss}
                 onChange={(e) => setLoss(e.target.value)}
+                inputProps={{ min: 0 }}
+                error={lossInvalid}
+                helperText={lossInvalid ? "יש להזין סכום אפס ומעלה" : undefined}
               />
 
               <FormControlLabel
@@ -766,7 +801,11 @@ export default function IncidentReport() {
                   )}
                 </Stack>
               )}
-              {submitMutation.isError && <Alert severity="error">שליחת הדיווח נכשלה. נסה שוב.</Alert>}
+              {submitMutation.isError && (
+                <Alert severity="error">
+                  {apiErrorMessage(submitMutation.error, "שליחת הדיווח נכשלה. נסה שוב.", FIELD_LABELS)}
+                </Alert>
+              )}
             </Stack>
           )}
 
@@ -788,7 +827,7 @@ export default function IncidentReport() {
             </Button>
             <Button
               startIcon={saveDraftMutation.isPending ? <CircularProgress size={16} /> : undefined}
-              disabled={!property || saveDraftMutation.isPending}
+              disabled={!property || timestampInFuture || lossInvalid || saveDraftMutation.isPending}
               onClick={() => saveDraftMutation.mutate()}
               sx={{ minHeight: 48, px: 2.5, fontSize: "1rem" }}
             >
@@ -817,7 +856,7 @@ export default function IncidentReport() {
           </Stack>
           {saveDraftMutation.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              שמירת הטיוטה נכשלה. נסה שוב.
+              {apiErrorMessage(saveDraftMutation.error, "שמירת הטיוטה נכשלה. נסה שוב.", FIELD_LABELS)}
             </Alert>
           )}
         </CardContent>
