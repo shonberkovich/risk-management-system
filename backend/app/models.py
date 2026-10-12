@@ -1,8 +1,8 @@
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
-    BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Numeric, SmallInteger, Unicode, UnicodeText,
-    UniqueConstraint,
+    BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Numeric, SmallInteger, Unicode,
+    UnicodeText, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -268,6 +268,12 @@ class MitigationTask(Base):
 
 class AuditLog(Base):
     __tablename__ = "Audit_Log"
+    __table_args__ = (
+        # Mirrors schema.sql's CK_Audit_Log_action, so the SQLite test DB rejects an
+        # action the real one would (DOWNLOAD was once missing there and every such row
+        # was silently dropped on SQL Server while the tests passed).
+        CheckConstraint("action IN ('CREATE','UPDATE','DELETE','DOWNLOAD')", name="CK_Audit_Log_action"),
+    )
 
     log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("Users.user_id"), nullable=True)

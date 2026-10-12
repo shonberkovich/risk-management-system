@@ -334,10 +334,10 @@ GO
 CREATE TABLE dbo.Audit_Log (
     log_id           BIGINT IDENTITY(1,1) PRIMARY KEY,
     user_id             BIGINT NULL REFERENCES dbo.Users(user_id),
-    entity_type            NVARCHAR(50) NOT NULL,     -- e.g. 'Incident', 'Claim', 'Policy'
+    entity_type            NVARCHAR(50) NOT NULL,     -- the API path segment, e.g. 'INCIDENTS', 'CLAIMS', 'POLICIES' (middleware/audit.py)
     entity_id                 BIGINT NOT NULL,
     action                       NVARCHAR(20) NOT NULL
-        CHECK (action IN ('CREATE','UPDATE','DELETE')),
+        CONSTRAINT CK_Audit_Log_action CHECK (action IN ('CREATE','UPDATE','DELETE','DOWNLOAD')),  -- DOWNLOAD: sensitive attachment reads
     old_value                     NVARCHAR(MAX) NULL,   -- JSON snapshot before change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
     new_value                       NVARCHAR(MAX) NULL, -- JSON snapshot after change; מוצפן at-rest (Fernet, ר' app/services/encryption.py)
     timestamp                         DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),

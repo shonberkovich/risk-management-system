@@ -205,18 +205,19 @@ def test_audit_log_never_stores_passwords_or_tokens(client, make_user):
     admin = make_user(role="ADMIN", email="audit-admin@example.com")
     headers = auth_headers(admin)
 
-    client.post("/api/auth/login", json={"email": "audit-admin@example.com", "password": "Sup3r-Secret!"})
-    client.post("/api/auth/login", json={"email": "audit-admin@example.com", "password": "Wrong-Guess-1"})
+    # Only successful requests are audited, so these go through with real credentials.
+    login = client.post("/api/auth/login", json={"email": "audit-admin@example.com", "password": "Demo1234!"})
+    refresh_token = login.json()["refresh_token"]
     client.post(
         "/api/users",
         json={"full_name": "חדש", "email": "new-audit@example.com", "role": "CFO", "password": "Init1al-Pass!"},
         headers=headers,
     )
-    client.post("/api/auth/refresh", json={"refresh_token": "eyJhbGciOi.secret-refresh.token"})
+    assert client.post("/api/auth/refresh", json={"refresh_token": refresh_token}).status_code == 200
 
     entries = client.get("/api/audit-log", params={"limit": 500}, headers=headers).json()["entries"]
     stored = " ".join(e["new_value"] or "" for e in entries)
-    for secret in ("Sup3r-Secret!", "Wrong-Guess-1", "Init1al-Pass!", "secret-refresh"):
+    for secret in ("Demo1234!", "Init1al-Pass!", refresh_token):
         assert secret not in stored
     assert "audit-admin@example.com" in stored  # non-secret context is kept
     assert '"password": "***"' in stored
@@ -237,3 +238,54 @@ def test_audit_log_does_not_store_uploaded_file_contents(client, make_user, make
     entries = client.get("/api/audit-log", params={"entity_type": "DOCUMENTS"}, headers=headers).json()["entries"]
     assert entries, "the upload itself is still audited"
     assert all("confidential" not in (e["new_value"] or "") for e in entries)
+
+def test_rejected_and_unrouted_requests_are_not_audited(client, make_user, make_property):
+    """Only requests that succeeded changed anything: a 403'd delete, a 422'd create,
+    an anonymous 401, and a POST to a path with no such route (405/404) must leave no
+    row behind (they used to be logged as completed actions, with the caller's body
+    as new_value)."""
+    admin = make_user(role="ADMIN")
+    field_worker = make_user(role="FIELD_WORKER")
+    prop = make_property()
+
+    assert client.delete(f"/api/properties/{prop.property_id}", headers=auth_headers(field_worker)).status_code == 403
+    assert client.post("/api/properties", json={"name": "חסר שדות"}, headers=auth_headers(admin)).status_code == 422
+    assert client.post("/api/properties", json=_property_payload(property_code="PRP-ANON")).status_code == 401
+    assert client.post("/api/properties/987654", json={"name": "forged entry"}).status_code == 405
+    assert client.post("/api/no-such-thing", json={"name": "forged entry"}).status_code == 404
+
+    body = client.get("/api/audit-log", params={"limit": 500}, headers=auth_headers(admin)).json()
+    assert body["total"] == 0, body["entries"]
+
+
+def test_a_successful_change_is_still_audited(client, make_user):
+    admin = make_user(role="ADMIN")
+    headers = auth_headers(admin)
+    created = client.post("/api/properties", json=_property_payload(property_code="PRP-OK"), headers=headers)
+    assert created.status_code == 201
+
+    entries = client.get("/api/audit-log", params={"entity_type": "PROPERTIES"}, headers=headers).json()["entries"]
+    assert [(e["entity_id"], e["action"]) for e in entries] == [(0, "CREATE")]
+
+
+def test_audit_log_action_check_matches_the_database(db):
+    """models.AuditLog mirrors schema.sql's CK_Audit_Log_action, so an action the real
+    DB would refuse fails here too (DOWNLOAD was once missing from the real CHECK)."""
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    from app import models
+
+    db.add(models.AuditLog(entity_type="EMAIL_ATTACHMENT", entity_id=1, action="DOWNLOAD"))
+    db.flush()
+    db.add(models.AuditLog(entity_type="EMAIL_ATTACHMENT", entity_id=1, action="READ"))
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
+
+
+def test_filters_longer_than_their_columns_are_422(client, make_user):
+    headers = auth_headers(make_user(role="ADMIN"))
+    assert client.get("/api/audit-log", params={"entity_type": "Z" * 51}, headers=headers).status_code == 422
+    assert client.get("/api/audit-log", params={"action": "Z" * 21}, headers=headers).status_code == 422
+    assert client.get("/api/audit-log", params={"entity_type": "Z" * 50}, headers=headers).status_code == 200

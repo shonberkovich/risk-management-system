@@ -9,9 +9,12 @@ decoded independently here (middleware runs outside the dependency-injection gra
 audit rows still record `user_id: NULL` for anonymous/failed-auth requests rather than
 raising.
 
-Runs *after* the endpoint (in the `finally`), so `new_value` reflects the actual response
-body (what was persisted / the error returned), and the audited action is skipped
-entirely for requests that never reach a matching route (404s before routing).
+Runs *after* the endpoint and records only requests that succeeded (status < 400): a
+rejected request (401/403/404/405/422...) changed nothing, so logging it as a
+CREATE/UPDATE/DELETE made a refused delete look like a real one, and let an anonymous
+caller write arbitrary rows (its request body as new_value) into the trail by POSTing
+to any /api/ path. That also covers requests that match no route (404/405).
+`new_value` is the (redacted) JSON request body of the successful change.
 
 TODO_SPEC.md "משימה 20" step 1 — auditing two specific email actions:
 
@@ -48,6 +51,7 @@ from __future__ import annotations
 
 import json
 import re
+import logging
 from datetime import datetime, timezone
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -56,6 +60,8 @@ from starlette.requests import Request
 from app import models
 from app.database import SessionLocal
 from app.services.auth import TokenError, decode_token
+
+logger = logging.getLogger(__name__)
 
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _ACTION_BY_METHOD = {"POST": "CREATE", "PUT": "UPDATE", "PATCH": "UPDATE", "DELETE": "DELETE"}
@@ -146,6 +152,8 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         # metadata-only note for the audited-GET case).
         body_bytes = await request.body() if is_mutating else b""
         response = await call_next(request)
+        if response.status_code >= 400:
+            return response  # nothing happened, see module docstring
 
         if audited_get is not None:
             entity_type, action, entity_id = audited_get
@@ -171,7 +179,10 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             )
             db.commit()
         except Exception:
-            # Audit logging must never break the actual request — swallow and move on.
+            # Audit logging must never break the actual request, but a lost audit row
+            # shouldn't vanish without a trace either (a DB constraint once silently
+            # dropped every DOWNLOAD row).
+            logger.exception("Audit_Log write failed for %s %s", request.method, request.url.path)
             db.rollback()
         finally:
             db.close()

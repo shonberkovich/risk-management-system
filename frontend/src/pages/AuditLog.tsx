@@ -23,8 +23,14 @@ import { fetchAuditLog, fetchAuditLogEntityTypes, type AuditLogEntry } from "../
 import { useAuth } from "../auth/AuthContext";
 import { formatDateTime } from "../format";
 
-const ACTION_LABELS: Record<string, string> = { CREATE: "יצירה", UPDATE: "עדכון", DELETE: "מחיקה" };
-const ACTION_COLORS: Record<string, "success" | "info" | "error"> = { CREATE: "success", UPDATE: "info", DELETE: "error" };
+// DOWNLOAD: a sensitive attachment's signed URL was issued (middleware/audit.py).
+const ACTION_LABELS: Record<string, string> = { CREATE: "יצירה", UPDATE: "עדכון", DELETE: "מחיקה", DOWNLOAD: "הורדה" };
+const ACTION_COLORS: Record<string, "success" | "info" | "error" | "warning"> = {
+  CREATE: "success",
+  UPDATE: "info",
+  DELETE: "error",
+  DOWNLOAD: "warning",
+};
 
 /** Long JSON request bodies (old/new value) are truncated in the table and shown
  * in full on hover — mirrors the 2000-char truncation the middleware already
@@ -89,7 +95,7 @@ export default function AuditLog() {
             יומן ביקורת (Audit Log)
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            תיעוד אוטומטי של כל פעולת יצירה/עדכון/מחיקה במערכת — מי, מה, מתי, וערך קודם/חדש.
+            תיעוד אוטומטי של כל פעולת יצירה/עדכון/מחיקה שבוצעה במערכת, ושל הורדת צרופות רגישות — מי, מה, מתי, וערך קודם/חדש.
           </Typography>
         </Box>
       </Stack>
