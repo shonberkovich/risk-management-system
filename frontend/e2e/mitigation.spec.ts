@@ -137,6 +137,8 @@ test.describe("Mitigation tasks", () => {
     // accessible name, which only doubles as the button's a11y name while the tooltip
     // popper itself is closed.
     await row.locator('button:has([data-testid="AssignmentTurnedInIcon"])').click();
+    // Completing is final, so the page asks first (components/ConfirmDialog.tsx).
+    await page.getByRole("dialog", { name: "סימון משימה כבוצעה" }).getByRole("button", { name: "סימון כבוצעה" }).click();
     await expect(row).toContainText("הושלמה", { timeout: 15_000 });
     // The mark-complete icon becomes disabled once a task is COMPLETED (MitigationTable.tsx).
     await expect(row.locator('button:has([data-testid="AssignmentTurnedInIcon"])')).toBeDisabled();

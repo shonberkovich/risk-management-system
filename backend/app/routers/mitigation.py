@@ -10,7 +10,8 @@ IN_PROGRESS in the same request — being "in progress" doesn't stop a task from
 being late); a task that's OVERDUE but whose due_date has since moved to the
 future (or is COMPLETED) is not automatically OVERDUE anymore. COMPLETED is the
 one state that is never overridden by the date check, matching "סגירה" (closing)
-as a genuinely terminal action.
+as a genuinely terminal action — so a COMPLETED task's status can't be changed
+back either (its other fields stay editable).
 """
 from datetime import date
 
@@ -125,6 +126,8 @@ def update_task(
         raise HTTPException(404, "Mitigation task not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    if task.status == "COMPLETED" and updates.get("status", "COMPLETED") != "COMPLETED":
+        raise HTTPException(400, "משימה שהושלמה היא סופית — לא ניתן לפתוח אותה מחדש")
     if "assigned_to_user_id" in updates and updates["assigned_to_user_id"] is not None:
         if not db.get(models.User, updates["assigned_to_user_id"]):
             raise HTTPException(404, "Assigned user not found")
