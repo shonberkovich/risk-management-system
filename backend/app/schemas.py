@@ -178,7 +178,9 @@ class UserUpdate(PartialUpdate):
 
 # --- Auth ---
 class LoginRequest(BaseModel):
-    email: str
+    # Users.email is NVARCHAR(200); a much longer value was bound as ntext and the
+    # lookup failed in SQL Server (a 500) instead of a plain "wrong credentials".
+    email: str = Field(max_length=200)
     password: str
 
 

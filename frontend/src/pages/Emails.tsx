@@ -613,6 +613,7 @@ export default function Emails() {
               onChange={(e) => setSearch(e.target.value)}
               sx={{ mb: 1.5 }}
               slotProps={{
+                htmlInput: { maxLength: 200 },
                 input: {
                   startAdornment: (
                     <InputAdornment position="start">

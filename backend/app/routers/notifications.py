@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,7 @@ def _log_to_out(log: models.NotificationLog) -> schemas.NotificationLogOut:
 
 @router.get("/log", response_model=list[schemas.NotificationLogOut])
 def list_notification_log(
-    limit: int = 200,
+    limit: int = Query(200, ge=1, le=1000),  # a negative TOP was a SQL Server error (500)
     db: Session = Depends(get_db),
     _user: models.User = Depends(require_roles(*_NOTIFICATIONS_ROLES)),
 ):
