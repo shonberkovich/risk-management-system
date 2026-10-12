@@ -41,9 +41,10 @@ def test_after_submit_the_workflow_applies(client, make_user, make_property, mak
         f"/api/incidents/{draft.incident_id}/status", json={"status": "UNDER_INVESTIGATION"}, headers=headers
     )
     assert moved.status_code == 200, moved.text
+    policy = make_policy(covers=draft.property_id)
     claim = client.post(
         "/api/claims",
-        json={"incident_id": draft.incident_id, "policy_id": make_policy().policy_id, "claimed_amount": 1000},
+        json={"incident_id": draft.incident_id, "policy_id": policy.policy_id, "claimed_amount": 1000},
         headers=headers,
     )
     assert claim.status_code == 201, claim.text

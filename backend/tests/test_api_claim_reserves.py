@@ -24,7 +24,7 @@ def _open_incident(client, make_property, make_user):
 
 def _open_claim(client, make_property, make_user, make_policy, headers):
     incident = _open_incident(client, make_property, make_user)
-    policy = make_policy()
+    policy = make_policy(covers=incident["property_id"])
     claim = client.post(
         "/api/claims",
         json={"incident_id": incident["incident_id"], "policy_id": policy.policy_id, "claimed_amount": 150000},

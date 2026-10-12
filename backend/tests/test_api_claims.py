@@ -25,7 +25,7 @@ def _open_incident(client, make_property, make_user):
 
 def test_create_claim_moves_incident_to_claim_filed(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
-    policy = make_policy()
+    policy = make_policy(covers=incident["property_id"])
     adjuster = make_user(role="ADJUSTER")
 
     resp = client.post(
@@ -48,7 +48,7 @@ def test_create_claim_moves_incident_to_claim_filed(client, make_property, make_
 
 def test_create_claim_requires_write_role(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
-    policy = make_policy()
+    policy = make_policy(covers=incident["property_id"])
     field_worker = make_user(role="FIELD_WORKER")  # not in _CLAIMS_WRITE_ROLES
 
     resp = client.post(
@@ -73,7 +73,7 @@ def test_create_claim_for_missing_policy_is_404(client, make_property, make_user
 
 def test_create_claim_for_closed_incident_is_rejected(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
-    policy = make_policy()
+    policy = make_policy(covers=incident["property_id"])
     manager = make_user(role="RISK_MANAGER")
     headers = auth_headers(manager)
 
@@ -120,7 +120,7 @@ def test_create_claim_payment_rejects_non_positive_amount(client, make_property,
 
 def test_list_claims_is_readable_without_auth(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
-    policy = make_policy()
+    policy = make_policy(covers=incident["property_id"])
     manager = make_user(role="RISK_MANAGER")
     client.post(
         "/api/claims",

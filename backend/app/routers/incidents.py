@@ -475,10 +475,15 @@ def list_eligible_policies(
     if not incident:
         raise HTTPException(404, "Incident not found")
 
+    # Same rule routers/claims.py create_claim enforces: active, insures the property,
+    # and its period includes the incident date (a policy from another year was offered).
+    incident_date = incident.incident_timestamp.date()
     stmt = (
         select(models.InsurancePolicy)
         .join(models.PolicyAsset, models.PolicyAsset.policy_id == models.InsurancePolicy.policy_id)
         .where(models.PolicyAsset.property_id == incident.property_id)
         .where(models.InsurancePolicy.status == "ACTIVE")
+        .where(models.InsurancePolicy.start_date <= incident_date)
+        .where(models.InsurancePolicy.end_date >= incident_date)
     )
     return db.scalars(stmt).all()

@@ -197,7 +197,9 @@ def make_risk_profile(db: Session):
 def make_policy(db: Session):
     counter = {"n": 0}
 
-    def _make(**overrides) -> models.InsurancePolicy:
+    def _make(covers: int | None = None, **overrides) -> models.InsurancePolicy:
+        """covers: a property_id to insure (a Policy_Assets row) — routers/claims.py
+        only opens a claim on a policy that covers the incident's property."""
         counter["n"] += 1
         n = counter["n"]
         defaults = dict(
@@ -214,6 +216,8 @@ def make_policy(db: Session):
         defaults.update(overrides)
         policy = models.InsurancePolicy(**defaults)
         db.add(policy)
+        if covers is not None:
+            db.add(models.PolicyAsset(policy_id=policy.policy_id, property_id=covers))
         db.commit()
         return policy
 

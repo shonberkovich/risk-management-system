@@ -25,8 +25,14 @@ OPEN_CLAIM_STATUSES = {"SUBMITTED", "IN_ADJUSTMENT", "APPROVED"}
 def get_current_reserves(db: Session) -> list[models.ClaimReserve]:
     """Returns one ClaimReserve per claim_id: the most recently updated reserve row
     for each claim (a claim's reserve can be revised multiple times, so older rows
-    for the same claim are superseded, not additive)."""
-    all_reserves = db.scalars(select(models.ClaimReserve)).all()
+    for the same claim are superseded, not additive). Only claims still open count: a
+    SETTLED/REJECTED claim owes nothing more, and its reserve can't be edited any more
+    (routers/claims.py), so it used to stay in "open reserves" forever."""
+    all_reserves = db.scalars(
+        select(models.ClaimReserve)
+        .join(models.Claim, models.Claim.claim_id == models.ClaimReserve.claim_id)
+        .where(models.Claim.claim_status.not_in(("SETTLED", "REJECTED")))
+    ).all()
     latest_by_claim: dict[int, models.ClaimReserve] = {}
     for r in all_reserves:
         current = latest_by_claim.get(r.claim_id)

@@ -16,11 +16,12 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createClaimPayment, fetchClaimPayments, type ClaimTrackingRow, type PaymentType } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../auth/AuthContext";
-import { PAYMENT_TYPE_LABELS, formatDate, formatIls } from "../format";
+import { PAYMENT_TYPE_LABELS, formatDate, formatIls, todayLocalIsoDate } from "../format";
 
 const PAYABLE_STATUSES = new Set(["APPROVED", "SETTLED"]);
 const PAYMENT_TYPE_OPTIONS: PaymentType[] = ["ADVANCE", "FINAL_SETTLEMENT"];
@@ -76,9 +77,40 @@ export default function ClaimPaymentsDialog({
     },
   });
 
+  useEffect(() => {
+    mutation.reset(); // the previous claim's error doesn't belong to this opening
+    setPaymentDate("");
+    setAmount("");
+    setReference("");
+    setPaymentType("ADVANCE");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on (re)open only
+  }, [claim, open]);
+
+  // routers/claims.py create_claim_payment: whole agorot above zero, not past the
+  // approved balance, dated from the incident up to today.
+  const amountValue = Number(amount);
+  const amountError =
+    amount === ""
+      ? null
+      : !Number.isFinite(amountValue) || Math.round(amountValue * 100) <= 0
+        ? "יש להזין סכום חיובי"
+        : Math.round(amountValue * 100) > Math.round(remaining * 100)
+          ? `הסכום חורג מהיתרה לתשלום (${formatIls(remaining)})`
+          : null;
+  const today = todayLocalIsoDate();
+  const minDate = claim?.incident_date ? claim.incident_date.slice(0, 10) : undefined;
+  const dateError =
+    paymentDate === ""
+      ? null
+      : paymentDate > today
+        ? "מועד התשלום לא יכול להיות בעתיד"
+        : minDate && paymentDate < minDate
+          ? "מועד התשלום לא יכול להיות לפני מועד האירוע"
+          : null;
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>רזרבות ותשלומים — {claim?.claim_number}</DialogTitle>
+      <DialogTitle>תשלומים — {claim?.claim_number}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Stack direction="row" spacing={3}>
@@ -148,6 +180,9 @@ export default function ClaimPaymentsDialog({
                   type="date"
                   fullWidth
                   InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: minDate, max: today }}
+                  error={!!dateError}
+                  helperText={dateError ?? undefined}
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
                 />
@@ -155,6 +190,9 @@ export default function ClaimPaymentsDialog({
                   label="סכום (₪)"
                   type="number"
                   fullWidth
+                  inputProps={{ min: 0, max: remaining, step: 0.01 }}
+                  error={!!amountError}
+                  helperText={amountError ?? undefined}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
@@ -181,10 +219,12 @@ export default function ClaimPaymentsDialog({
                   onChange={(e) => setReference(e.target.value)}
                 />
               </Stack>
-              {mutation.isError && <Alert severity="error">רישום התשלום נכשל.</Alert>}
+              {mutation.isError && (
+                <Alert severity="error">{apiErrorMessage(mutation.error, "רישום התשלום נכשל.")}</Alert>
+              )}
               <Button
                 variant="contained"
-                disabled={mutation.isPending || !paymentDate || !amount}
+                disabled={mutation.isPending || !paymentDate || !amount || !!amountError || !!dateError}
                 onClick={() => mutation.mutate()}
               >
                 הוספת תשלום
