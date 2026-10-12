@@ -206,6 +206,8 @@ test.describe("Incidents list — status workflow (regression: RBAC audit commit
       await expect(row.getByText("בבדיקה")).toBeVisible({ timeout: 10_000 });
 
       await row.getByRole("button", { name: "סגור אירוע (ללא תביעה)" }).click();
+      // CLOSED is final, so the page asks first (components/ConfirmDialog.tsx).
+      await page.getByRole("dialog", { name: "סגירת אירוע" }).getByRole("button", { name: "סגירה" }).click();
       await expect(row.getByText("סגור")).toBeVisible({ timeout: 10_000 });
 
       // Closed incidents cannot change status further — both action buttons disappear.

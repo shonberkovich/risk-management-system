@@ -429,6 +429,10 @@ def update_incident_status(
     if not incident:
         raise HTTPException(404, "Incident not found")
 
+    # A draft isn't a report yet (its content may still change, and a critical one
+    # only opens its ticket on submit), so the workflow starts after PATCH .../submit.
+    if incident.is_draft:
+        raise HTTPException(400, "לא ניתן לשנות סטטוס של טיוטה — יש להגיש אותה תחילה")
     if payload.status == "CLAIM_FILED":
         raise HTTPException(400, "סטטוס 'תביעה הוגשה' נקבע אוטומטית בעת פתיחת תביעה, לא ידנית")
     if incident.status == "CLOSED":
