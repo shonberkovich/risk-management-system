@@ -16,6 +16,7 @@ import Incidents from "./pages/Incidents";
 import Integrations from "./pages/Integrations";
 import Login from "./pages/Login";
 import Mitigation from "./pages/Mitigation";
+import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
 import Policies from "./pages/Policies";
 import Profile from "./pages/ProfileSettings";
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>
   );
