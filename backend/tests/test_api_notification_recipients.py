@@ -44,7 +44,7 @@ def test_admin_can_create_update_and_delete_recipient(client, make_user):
         "/api/notifications/recipients",
         headers=headers,
         json={
-            "role": "risk_officer",
+            "role": "RISK_OFFICER",
             "display_name": "קצין סיכונים",
             "email": "ro@example.com",
             "phone": "+972-50-111",
@@ -82,7 +82,7 @@ def test_non_admin_cannot_create_recipient(client, make_user):
         "/api/notifications/recipients",
         headers=auth_headers(user),
         json={
-            "role": "risk_officer",
+            "role": "RISK_OFFICER",
             "display_name": "קצין סיכונים",
             "email": "ro@example.com",
             "phone": "+972-50-111",

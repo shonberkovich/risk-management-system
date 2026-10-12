@@ -23,7 +23,8 @@ import {
   type NotificationRecipient,
   type NotificationSeverity,
 } from "../api/client";
-import { ROLE_LABELS } from "../format";
+import { apiErrorMessage } from "../api/errors";
+import { isValidEmail, isValidPhone, ROLE_LABELS } from "../format";
 
 const ROLE_OPTIONS = Object.keys(ROLE_LABELS);
 const CHANNEL_OPTIONS: NotificationChannel[] = ["EMAIL", "SMS", "PUSH"];
@@ -54,22 +55,6 @@ export default function NotificationRecipientDialog({
   const queryClient = useQueryClient();
   const isEdit = recipient !== null;
 
-  useEffect(() => {
-    if (recipient) {
-      setForm({
-        role: recipient.role,
-        display_name: recipient.display_name,
-        email: recipient.email,
-        phone: recipient.phone,
-        channels: recipient.channels,
-        min_severity: recipient.min_severity,
-        is_active: recipient.is_active,
-      });
-    } else {
-      setForm(emptyForm);
-    }
-  }, [recipient, open]);
-
   const toggleChannel = (c: NotificationChannel) =>
     setForm((f) => ({
       ...f,
@@ -95,7 +80,32 @@ export default function NotificationRecipientDialog({
     },
   });
 
-  const canSubmit = form.display_name.trim() && form.channels.length > 0 && (form.email.trim() || form.phone.trim());
+  useEffect(() => {
+    mutation.reset(); // the previous attempt's error doesn't belong to this opening
+    if (recipient) {
+      setForm({
+        role: recipient.role,
+        display_name: recipient.display_name,
+        email: recipient.email,
+        phone: recipient.phone,
+        channels: recipient.channels,
+        min_severity: recipient.min_severity,
+        is_active: recipient.is_active,
+      });
+    } else {
+      setForm(emptyForm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on (re)open only
+  }, [recipient, open]);
+
+  const emailError = form.email.trim() !== "" && !isValidEmail(form.email.trim());
+  const phoneError = form.phone.trim() !== "" && !isValidPhone(form.phone.trim());
+  const canSubmit =
+    form.display_name.trim() &&
+    form.channels.length > 0 &&
+    (form.email.trim() || form.phone.trim()) &&
+    !emailError &&
+    !phoneError;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -149,6 +159,8 @@ export default function NotificationRecipientDialog({
                 type="email"
                 fullWidth
                 value={form.email}
+                error={emailError}
+                helperText={emailError ? "כתובת אימייל לא תקינה" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
             </Grid>
@@ -158,6 +170,8 @@ export default function NotificationRecipientDialog({
                 inputProps={{ maxLength: 30 }}
                 fullWidth
                 value={form.phone}
+                error={phoneError}
+                helperText={phoneError ? "מספר טלפון לא תקין" : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </Grid>
@@ -188,7 +202,16 @@ export default function NotificationRecipientDialog({
             </Grid>
           </Grid>
 
-          {mutation.isError && <Alert severity="error">שמירת הנמען נכשלה.</Alert>}
+          {mutation.isError && (
+            <Alert severity="error">
+              {apiErrorMessage(mutation.error, "שמירת הנמען נכשלה.", {
+                display_name: "שם תצוגה",
+                email: "אימייל",
+                phone: "טלפון",
+                role: "תפקיד",
+              })}
+            </Alert>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>

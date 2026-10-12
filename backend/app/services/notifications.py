@@ -105,7 +105,7 @@ class Recipient:
 # (EMAIL + SMS, no push app assumed for a CFO).
 DEFAULT_RECIPIENTS: list[Recipient] = [
     Recipient(
-        role="risk_manager",
+        role="RISK_MANAGER",
         display_name="מנהל הסיכונים",
         email="risk.manager@example-rmis.local",
         phone="+972-50-000-0001",
@@ -113,7 +113,7 @@ DEFAULT_RECIPIENTS: list[Recipient] = [
         min_severity="warning",
     ),
     Recipient(
-        role="cfo",
+        role="CFO",
         display_name="סמנכ\"ל הכספים (CFO)",
         email="cfo@example-rmis.local",
         phone="+972-50-000-0002",
