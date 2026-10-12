@@ -1,6 +1,7 @@
 /**
- * MediaUploader — files over the 25MB upload limit are rejected with an inline warning
- * (not window.alert(), which embedded browsers suppress) while the rest are still staged.
+ * MediaUploader — files over the 25MB upload limit, and files of a type the backend
+ * refuses (routers/media.py), are rejected with an inline warning (not window.alert(),
+ * which embedded browsers suppress) while the rest are still staged.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -59,5 +60,27 @@ describe("MediaUploader — size limit", () => {
 
     pick([fileOfSize("ok.pdf", 10)]);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("MediaUploader — file types", () => {
+  it("offers only the types the backend keeps", () => {
+    render(<MediaUploader files={[]} onFilesChange={vi.fn()} />);
+    const input = screen.getByText("העלה קובץ").querySelector("input[type=file]") as HTMLInputElement;
+    expect(input.accept).toBe(".jpg,.jpeg,.png,.mp4,.mov,.pdf");
+  });
+
+  it("stages supported files and warns about the rest by name", () => {
+    const onFilesChange = vi.fn();
+    render(<MediaUploader files={[]} onFilesChange={onFilesChange} />);
+
+    const photo = fileOfSize("photo.JPG", 10, "image/jpeg");
+    const heic = fileOfSize("IMG_1.heic", 10, "image/heic");
+    const gif = fileOfSize("anim.gif", 10, "image/gif");
+    pick([photo, heic, gif]);
+
+    expect(onFilesChange).toHaveBeenCalledWith([photo]);
+    expect(screen.getByRole("alert")).toHaveTextContent("סוג הקובץ לא נתמך");
+    expect(screen.getByRole("alert")).toHaveTextContent("IMG_1.heic, anim.gif");
   });
 });

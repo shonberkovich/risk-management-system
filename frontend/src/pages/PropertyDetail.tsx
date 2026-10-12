@@ -45,6 +45,7 @@ import {
   type DocumentFile,
   type EntityLinkedEmail,
 } from "../api/client";
+import { uploadEach } from "../api/uploadEach";
 import { useAuth } from "../auth/AuthContext";
 import { useAIAssistant } from "../components/AIAssistant/AIAssistantContext";
 import { useConfirmDialog } from "../components/ConfirmDialog";
@@ -211,19 +212,30 @@ export default function PropertyDetail() {
     setUploading(true);
     setUploadError(null);
     try {
-      for (const file of Array.from(fileList)) {
-        await uploadDocument("PROPERTY", propertyId, file, docType);
-      }
-      queryClient.invalidateQueries({ queryKey: ["documents", "entity", "PROPERTY", propertyId] });
-    } catch {
-      setUploadError("העלאת הקובץ נכשלה. נסו שוב.");
+      setUploadError(await uploadEach(Array.from(fileList), (file) => uploadDocument("PROPERTY", propertyId, file, docType)));
     } finally {
+      // Also after a partial failure: the files that did go up belong in the list.
+      queryClient.invalidateQueries({ queryKey: ["documents", "entity", "PROPERTY", propertyId] });
       setUploading(false);
     }
   };
 
+  // Same confirm + error handling as the Documents screen's delete.
   const handleDeleteDoc = async (documentId: number) => {
-    await deleteDocument(documentId);
+    const confirmed = await confirm({
+      title: "מחיקת מסמך",
+      message: "למחוק את המסמך?",
+      confirmLabel: "מחיקה",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setUploadError(null);
+    try {
+      await deleteDocument(documentId);
+    } catch {
+      setUploadError("מחיקת המסמך נכשלה. נסו שוב.");
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["documents", "entity", "PROPERTY", propertyId] });
   };
 

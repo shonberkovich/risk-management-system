@@ -822,14 +822,14 @@ export const uploadDocument = (
   entityId: number,
   file: File,
   docType: string,
-  uploadedBy?: number | null,
 ) => {
   const form = new FormData();
   form.append("file", file);
+  // The uploader is recorded server-side as the signed-in user.
   return api
     .post<DocumentFile>(`/documents/entity/${entityType}/${entityId}`, form, {
       headers: { "Content-Type": "multipart/form-data" },
-      params: { doc_type: docType, uploaded_by: uploadedBy ?? undefined },
+      params: { doc_type: docType },
     })
     .then((r) => r.data);
 };

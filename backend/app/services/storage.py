@@ -71,8 +71,10 @@ ALLOWED_CONTENT_TYPES = {
 
 # Longest file name kept from the client (extension included). The storage key adds
 # "<entity>s/<id>/<32 hex>_" in front, and has to fit Documents.s3_url /
-# Incident_Media.file_path / Email_Attachments.file_path (NVARCHAR(500)).
-MAX_FILENAME_CHARS = 150
+# Incident_Media.file_path / Email_Attachments.file_path (NVARCHAR(500)) — and, on
+# disk, Windows' 260-character MAX_PATH together with the STORAGE_ROOT path in front
+# of it (150 left too little room: the write failed with a 500).
+MAX_FILENAME_CHARS = 100
 
 _UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
 
