@@ -19,9 +19,26 @@ import {
   type MitigationStatus,
   type MitigationTask,
 } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
 import { MITIGATION_STATUS_LABELS } from "../format";
 
-const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
+// OVERDUE isn't offered: the backend derives it from the due date on every write
+// (routers/mitigation.py _sync_overdue), so choosing it did nothing.
+const STATUS_OPTIONS: MitigationStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED"];
+const MONEY_MAX = 1e16; // schemas.Money: DECIMAL(18,2)
+const FIELD_LABELS = {
+  title: "כותרת המשימה",
+  cost_estimate: "עלות משוערת",
+  expected_annual_savings: "חיסכון שנתי צפוי",
+  due_date: "תאריך יעד",
+  status: "סטטוס",
+};
+
+const invalidAmount = (value: string) => {
+  if (value === "") return false;
+  const n = Number(value);
+  return !Number.isFinite(n) || n < 0 || n >= MONEY_MAX;
+};
 
 const emptyForm = {
   property_id: "" as number | "",
@@ -48,22 +65,6 @@ export default function MitigationTaskDialog({
 
   const properties = useQuery({ queryKey: ["properties"], queryFn: fetchProperties });
   const users = useQuery({ queryKey: ["users"], queryFn: fetchUsers });
-
-  useEffect(() => {
-    if (task) {
-      setForm({
-        property_id: task.property_id,
-        title: task.title,
-        cost_estimate: String(task.cost_estimate),
-        expected_annual_savings: String(task.expected_annual_savings),
-        due_date: task.due_date.slice(0, 10),
-        status: task.status,
-        assigned_to_user_id: task.assigned_to_user_id ?? "",
-      });
-    } else {
-      setForm(emptyForm);
-    }
-  }, [task, open]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -92,8 +93,35 @@ export default function MitigationTaskDialog({
     },
   });
 
+  useEffect(() => {
+    mutation.reset(); // the previous attempt's error doesn't belong to this opening
+    if (task) {
+      setForm({
+        property_id: task.property_id,
+        title: task.title,
+        cost_estimate: String(task.cost_estimate),
+        expected_annual_savings: String(task.expected_annual_savings),
+        due_date: task.due_date.slice(0, 10),
+        status: task.status,
+        assigned_to_user_id: task.assigned_to_user_id ?? "",
+      });
+    } else {
+      setForm(emptyForm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on (re)open only
+  }, [task, open]);
+
+  const costError = invalidAmount(form.cost_estimate);
+  const savingsError = invalidAmount(form.expected_annual_savings);
+  // COMPLETED is final (the backend refuses reopening it).
+  const statusLocked = task?.status === "COMPLETED";
   const canSubmit =
-    (isEdit || form.property_id !== "") && form.title.trim() && form.cost_estimate !== "" && form.due_date;
+    (isEdit || form.property_id !== "") &&
+    form.title.trim() &&
+    form.cost_estimate !== "" &&
+    form.due_date &&
+    !costError &&
+    !savingsError;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -131,6 +159,9 @@ export default function MitigationTaskDialog({
                 label="עלות משוערת (₪)"
                 type="number"
                 fullWidth
+                inputProps={{ min: 0 }}
+                error={costError}
+                helperText={costError ? "יש להזין סכום אפס ומעלה" : undefined}
                 value={form.cost_estimate}
                 onChange={(e) => setForm((f) => ({ ...f, cost_estimate: e.target.value }))}
               />
@@ -140,6 +171,9 @@ export default function MitigationTaskDialog({
                 label="חיסכון שנתי צפוי (₪)"
                 type="number"
                 fullWidth
+                inputProps={{ min: 0 }}
+                error={savingsError}
+                helperText={savingsError ? "יש להזין סכום אפס ומעלה" : undefined}
                 value={form.expected_annual_savings}
                 onChange={(e) => setForm((f) => ({ ...f, expected_annual_savings: e.target.value }))}
               />
@@ -179,6 +213,14 @@ export default function MitigationTaskDialog({
                   label="סטטוס"
                   fullWidth
                   value={form.status}
+                  disabled={statusLocked}
+                  helperText={
+                    statusLocked
+                      ? "משימה שהושלמה היא סופית"
+                      : form.status === "OVERDUE"
+                        ? "\"באיחור\" נקבע אוטומטית לפי תאריך היעד"
+                        : undefined
+                  }
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as MitigationStatus }))}
                 >
                   {STATUS_OPTIONS.map((s) => (
@@ -186,13 +228,20 @@ export default function MitigationTaskDialog({
                       {MITIGATION_STATUS_LABELS[s]}
                     </MenuItem>
                   ))}
+                  {form.status === "OVERDUE" && (
+                    <MenuItem value="OVERDUE" disabled>
+                      {MITIGATION_STATUS_LABELS.OVERDUE}
+                    </MenuItem>
+                  )}
                 </TextField>
               </Grid>
             )}
           </Grid>
 
           {mutation.isError && (
-            <Alert severity="error">{isEdit ? "עדכון המשימה נכשל." : "יצירת המשימה נכשלה."}</Alert>
+            <Alert severity="error">
+              {apiErrorMessage(mutation.error, isEdit ? "עדכון המשימה נכשל." : "יצירת המשימה נכשלה.", FIELD_LABELS)}
+            </Alert>
           )}
         </Stack>
       </DialogContent>

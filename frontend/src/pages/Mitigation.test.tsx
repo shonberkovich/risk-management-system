@@ -6,12 +6,22 @@
  * _MITIGATION_WRITE_ROLES would 403 on submit.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchMitigationTasksMock, fetchPropertiesMock, fetchUsersMock, fetchMitigationRoiSummaryMock, useAuthMock, taskDialogSpy } =
+const {
+  fetchMitigationTasksMock,
+  fetchPropertiesMock,
+  fetchUsersMock,
+  fetchMitigationRoiSummaryMock,
+  updateMitigationTaskMock,
+  useAuthMock,
+  taskDialogSpy,
+} =
   vi.hoisted(() => ({
+    updateMitigationTaskMock: vi.fn(),
     fetchMitigationTasksMock: vi.fn(),
     fetchPropertiesMock: vi.fn(),
     fetchUsersMock: vi.fn(),
@@ -25,7 +35,7 @@ vi.mock("../api/client", () => ({
   fetchProperties: fetchPropertiesMock,
   fetchUsers: fetchUsersMock,
   fetchMitigationRoiSummary: fetchMitigationRoiSummaryMock,
-  updateMitigationTask: vi.fn(),
+  updateMitigationTask: updateMitigationTaskMock,
 }));
 vi.mock("../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../components/MitigationTaskDialog", () => ({
@@ -94,5 +104,44 @@ describe("Mitigation — write-role gate", () => {
     renderPage();
     await screen.findByText("התקנת מתזים");
     expect(taskDialogSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("Mitigation — mark complete", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchMitigationTasksMock.mockResolvedValue([TASK]);
+    fetchPropertiesMock.mockResolvedValue([]);
+    fetchUsersMock.mockResolvedValue([]);
+    fetchMitigationRoiSummaryMock.mockResolvedValue([]);
+    useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "x", role: "RISK_MANAGER" } });
+  });
+
+  it("asks first (completing is final) and only completes on confirm", async () => {
+    updateMitigationTaskMock.mockResolvedValue({ ...TASK, status: "COMPLETED" });
+    renderPage();
+    await screen.findByText("התקנת מתזים");
+
+    await userEvent.click(within(screen.getByLabelText("סימון כבוצע")).getByRole("button"));
+    const dialog = await screen.findByRole("dialog", { name: "סימון משימה כבוצעה" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "ביטול" }));
+    expect(updateMitigationTaskMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await userEvent.click(within(screen.getByLabelText("סימון כבוצע")).getByRole("button"));
+    const again = await screen.findByRole("dialog", { name: "סימון משימה כבוצעה" });
+    await userEvent.click(within(again).getByRole("button", { name: "סימון כבוצעה" }));
+    await waitFor(() => expect(updateMitigationTaskMock).toHaveBeenCalledWith(1, { status: "COMPLETED" }));
+  });
+
+  it("shows why marking complete failed", async () => {
+    updateMitigationTaskMock.mockRejectedValue(new Error("boom"));
+    renderPage();
+    await screen.findByText("התקנת מתזים");
+    await userEvent.click(within(screen.getByLabelText("סימון כבוצע")).getByRole("button"));
+    await userEvent.click(
+      within(await screen.findByRole("dialog", { name: "סימון משימה כבוצעה" })).getByRole("button", { name: "סימון כבוצעה" }),
+    );
+    expect(await screen.findByText("סימון המשימה כבוצעה נכשל. נסו שוב.")).toBeInTheDocument();
   });
 });

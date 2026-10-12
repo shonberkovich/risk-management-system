@@ -14,6 +14,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import Alert from "@mui/material/Alert";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
@@ -26,7 +27,9 @@ import {
   type MitigationStatus,
   type MitigationTask,
 } from "../api/client";
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../auth/AuthContext";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import KpiCard from "../components/KpiCard";
 import MitigationReportPrintable from "../components/MitigationReportPrintable";
 import MitigationRoiDialog from "../components/MitigationRoiDialog";
@@ -80,6 +83,16 @@ export default function Mitigation() {
     mutationFn: (taskId: number) => updateMitigationTask(taskId, { status: "COMPLETED" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["mitigation-tasks"] }),
   });
+  const [confirmDialog, confirm] = useConfirmDialog();
+
+  async function confirmMarkComplete(task: MitigationRow) {
+    const confirmed = await confirm({
+      title: "סימון משימה כבוצעה",
+      message: `לסמן את "${task.title}" כבוצעה? משימה שהושלמה היא סופית ולא ניתן לפתוח אותה מחדש.`,
+      confirmLabel: "סימון כבוצעה",
+    });
+    if (confirmed) markComplete.mutate(task.task_id);
+  }
 
   const rows: MitigationRow[] = useMemo(() => {
     const propertyNames = new Map((properties.data ?? []).map((p) => [p.property_id, p.name]));
@@ -216,11 +229,16 @@ export default function Mitigation() {
               ))}
             </TextField>
           </Stack>
+          {markComplete.isError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => markComplete.reset()}>
+              {apiErrorMessage(markComplete.error, "סימון המשימה כבוצעה נכשל. נסו שוב.")}
+            </Alert>
+          )}
           <MitigationTable
             rows={rows}
             onEdit={canWrite ? openEdit : undefined}
             onShowRoi={(t) => setRoiTaskId(t.task_id)}
-            onMarkComplete={canWrite ? (t) => markComplete.mutate(t.task_id) : undefined}
+            onMarkComplete={canWrite ? confirmMarkComplete : undefined}
           />
         </CardContent>
       </Card>
@@ -229,6 +247,7 @@ export default function Mitigation() {
         <MitigationTaskDialog open={dialogOpen} task={dialogTask} onClose={() => setDialogOpen(false)} />
       )}
       <MitigationRoiDialog open={roiTaskId !== null} taskId={roiTaskId} onClose={() => setRoiTaskId(null)} />
+      {confirmDialog}
 
       {/* Off-screen (not display:none — html2canvas needs a laid-out element to capture)
           printable layout for the PDF export button above. Reuses `rows` — the same

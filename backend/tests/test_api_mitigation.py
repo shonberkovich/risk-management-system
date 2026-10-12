@@ -292,3 +292,26 @@ def test_task_roi_breakdown_zero_savings_has_null_payback(client, make_user, mak
 
     assert resp.status_code == 200
     assert resp.json()["payback_years"] is None
+
+
+def test_a_completed_task_cannot_be_reopened(client, make_user, make_property):
+    """COMPLETED is terminal: moving it back to OPEN/IN_PROGRESS is a 400, while its
+    other fields stay editable and re-sending COMPLETED (a full-form save) is fine."""
+    headers = auth_headers(make_user(role="RISK_MANAGER"))
+    task_id = client.post(
+        "/api/mitigation-tasks", json=_create_payload(make_property().property_id), headers=headers
+    ).json()["task_id"]
+    assert client.patch(
+        f"/api/mitigation-tasks/{task_id}", json={"status": "COMPLETED"}, headers=headers
+    ).status_code == 200
+
+    for status in ("OPEN", "IN_PROGRESS", "OVERDUE"):
+        resp = client.patch(f"/api/mitigation-tasks/{task_id}", json={"status": status}, headers=headers)
+        assert resp.status_code == 400, status
+        assert "סופית" in resp.json()["detail"]
+
+    resp = client.patch(
+        f"/api/mitigation-tasks/{task_id}", json={"title": "כותרת מעודכנת", "status": "COMPLETED"}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "COMPLETED"
