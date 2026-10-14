@@ -18,9 +18,12 @@ import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 
 import {
+  AgentChatStreamError,
   proposeMitigationTask,
   sendAgentChatMessage,
+  streamAgentChatMessage,
   type ActionProposal,
+  type AgentChatResponse,
   type AgentType,
 } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
@@ -33,15 +36,14 @@ interface AgentTurn {
   agent?: AgentType;
   actionCard?: { actionId: number; proposal: ActionProposal };
   error?: string;
+  /** Answer still arriving over /agent-chat/stream (no agent label yet). */
+  streaming?: boolean;
 }
 
-// Progressive ("typewriter") reveal of an agent answer already fully received.
-// The orchestrator's routing decision has to finish before any agent output
-// exists at all (unlike executive-summary's real token stream, which starts
-// writing immediately) — so this is a client-side approximation of streaming
-// rather than a true SSE/incremental read, chosen to keep TODO_SPEC.md §6's
-// "answer appears gradually, like ChatGPT" UX without reworking the
-// orchestrator's single-JSON-response shape. Mounts once per turn (turns are
+// Smooth ("typewriter") reveal of an agent answer. Chat answers arrive as a real
+// token stream (/agent-chat/stream), so `text` grows while this is mounted; the
+// reveal just evens out the bursty chunks. Answers received whole (the property
+// analysis below) reveal the same way. Mounts once per turn (turns are
 // append-only, so index-as-key never remounts an existing turn).
 const REVEAL_CHARS_PER_TICK = 4;
 const REVEAL_TICK_MS = 12;
@@ -110,22 +112,39 @@ export default function AIAssistant() {
     setMessage("");
     setTurns((prev) => [...prev, { role: "user", text: trimmed }]);
     setLoading(true);
+    // Replaces the trailing in-progress answer bubble (if any) with `turn` (or just
+    // drops it, for null), else appends `turn`.
+    const putAnswer = (turn: AgentTurn | null) =>
+      setTurns((prev) => {
+        const rest = prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
+        return turn ? [...rest, turn] : rest;
+      });
     try {
-      const result = await sendAgentChatMessage(trimmed, sessionId);
+      let result: AgentChatResponse;
+      try {
+        result = await streamAgentChatMessage(trimmed, sessionId, (textSoFar) =>
+          putAnswer(textSoFar ? { role: "agent", text: textSoFar, streaming: true } : null)
+        );
+      } catch (err) {
+        // fetch() can't refresh an expired access token the way the axios client
+        // does — retry once over the plain endpoint, which handles that.
+        if (!(err instanceof AgentChatStreamError && err.status === 401)) throw err;
+        result = await sendAgentChatMessage(trimmed, sessionId);
+      }
       setSessionId(result.session_id);
-      setTurns((prev) => [...prev, { role: "agent", text: result.answer, agent: result.agent }]);
+      putAnswer({ role: "agent", text: result.answer, agent: result.agent });
     } catch (err) {
       let text = "שגיאה בפנייה לשירות ה-AI. נסו שוב מאוחר יותר.";
-      if (isAxiosError(err)) {
-        if (err.response?.status === 503) {
-          text = "שירות ה-AI אינו מוגדר כרגע (חסר מפתח API בצד השרת).";
-        } else if (err.response?.status === 429) {
-          text = "יותר מדי בקשות בזמן קצר — נסו שוב בעוד רגע.";
-        } else if (err.response?.data?.detail) {
-          text = String(err.response.data.detail);
-        }
+      const status = err instanceof AgentChatStreamError ? err.status : isAxiosError(err) ? err.response?.status : undefined;
+      const detail = err instanceof AgentChatStreamError ? err.message : isAxiosError(err) ? err.response?.data?.detail : undefined;
+      if (status === 503) {
+        text = "שירות ה-AI אינו מוגדר כרגע (חסר מפתח API בצד השרת).";
+      } else if (status === 429) {
+        text = "יותר מדי בקשות בזמן קצר — נסו שוב בעוד רגע.";
+      } else if (detail) {
+        text = String(detail);
       }
-      setTurns((prev) => [...prev, { role: "agent", text: "", error: text }]);
+      putAnswer({ role: "agent", text: "", error: text });
     } finally {
       setLoading(false);
     }
@@ -369,7 +388,7 @@ export default function AIAssistant() {
                 </Stack>
               )
             )}
-            {loading && (
+            {loading && !turns[turns.length - 1]?.streaming && (
               <Stack direction="row" spacing={1} alignItems="center">
                 <Avatar sx={{ width: 24, height: 24, bgcolor: "grey.300" }}>
                   <SmartToyIcon sx={{ fontSize: 16 }} />

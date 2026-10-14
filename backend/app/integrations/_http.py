@@ -47,6 +47,12 @@ _DEFAULT_TIMEOUT_SECONDS = 6.0
 # publish etiquette guidance asking for an identifiable client.
 USER_AGENT = "RMIS-CourseProject/1.0 (+https://github.com; educational risk-management demo)"
 
+# One pooled client for every connector, so repeat calls to the same host reuse
+# an open connection instead of paying a fresh TLS handshake each time (module-
+# level httpx.get() opened a new connection per call). httpx.Client is safe to
+# share across threads (weather.py fetches properties concurrently).
+_client = httpx.Client(timeout=_DEFAULT_TIMEOUT_SECONDS, follow_redirects=False)
+
 
 class IntegrationFetchError(RuntimeError):
     """Raised by get_json/get_text for any network-shaped failure (timeout,
@@ -65,7 +71,7 @@ def get_json(url: str, *, params: dict | None = None, headers: dict | None = Non
     if headers:
         merged_headers.update(headers)
     try:
-        resp = httpx.get(url, params=params, headers=merged_headers, timeout=_DEFAULT_TIMEOUT_SECONDS)
+        resp = _client.get(url, params=params, headers=merged_headers)
         resp.raise_for_status()
         return resp.json()
     except (httpx.HTTPError, ValueError) as exc:
@@ -80,7 +86,7 @@ def get_text(url: str, *, params: dict | None = None, headers: dict | None = Non
     if headers:
         merged_headers.update(headers)
     try:
-        resp = httpx.get(url, params=params, headers=merged_headers, timeout=_DEFAULT_TIMEOUT_SECONDS)
+        resp = _client.get(url, params=params, headers=merged_headers)
         resp.raise_for_status()
         return resp.text
     except httpx.HTTPError as exc:

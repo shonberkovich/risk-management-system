@@ -53,6 +53,8 @@ this endpoint, not baked in here.
 """
 import hashlib
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 from sqlalchemy import select
@@ -90,6 +92,11 @@ _SEVERITIES = ["ADVISORY", "WATCH", "WARNING"]
 # day, most days are calm. Expressed as "must roll under this out of 100" on
 # the stable hash below.
 _ALERT_PROBABILITY_PERCENT = 20
+
+# Real-mode reading cache: (lat, lon) -> (monotonic fetch time, payload).
+_READING_TTL_SECONDS = 600
+_reading_cache: dict[tuple[float, float], tuple[float, dict]] = {}
+_MAX_PARALLEL_FETCHES = 8
 
 
 def _stable_hash(*parts: str) -> int:
@@ -140,6 +147,23 @@ def _classify_reading(weather_condition_id: int | None, wind_speed_mps: float | 
     return None
 
 
+def _current_reading(lat: float, lon: float) -> dict:
+    """OpenWeatherMap current conditions at (lat, lon), cached for
+    `_READING_TTL_SECONDS` — current conditions don't meaningfully change
+    minute to minute, and the AI chat and dashboard both re-ask often.
+    Raises IntegrationFetchError (failures are never cached)."""
+    key = (lat, lon)
+    hit = _reading_cache.get(key)
+    if hit is not None and time.monotonic() - hit[0] < _READING_TTL_SECONDS:
+        return hit[1]
+    payload = get_json(
+        _OPENWEATHERMAP_BASE_URL,
+        params={"lat": lat, "lon": lon, "appid": settings.openweathermap_api_key, "units": "metric"},
+    ) or {}
+    _reading_cache[key] = (time.monotonic(), payload)
+    return payload
+
+
 def _fetch_weather_alerts_real(db: Session, property_ids: list[int] | None = None) -> list[dict]:
     """Real call to OpenWeatherMap's free Current Weather Data endpoint, once
     per active property — see module docstring for why this derives an alert
@@ -153,24 +177,25 @@ def _fetch_weather_alerts_real(db: Session, property_ids: list[int] | None = Non
     properties = db.scalars(stmt.order_by(models.Property.property_id)).all()
 
     now_iso = datetime.utcnow().isoformat()
-    alerts = []
-    for prop in properties:
-        lat, lon = float(prop.latitude), float(prop.longitude)
+
+    def _reading(prop: models.Property) -> dict | None:
         try:
-            payload = get_json(
-                _OPENWEATHERMAP_BASE_URL,
-                params={
-                    "lat": lat,
-                    "lon": lon,
-                    "appid": settings.openweathermap_api_key,
-                    "units": "metric",
-                },
-            )
+            return _current_reading(float(prop.latitude), float(prop.longitude))
         except IntegrationFetchError as exc:
             logger.warning("[OPENWEATHERMAP] fetch failed for property %s: %s", prop.property_code, exc)
-            continue
+            return None
 
-        payload = payload or {}
+    # One HTTP round trip per property — fetched concurrently, since run one
+    # after another they took ~14s for the 15 seeded properties (the AI chat's
+    # weather tool waited on all of it).
+    with ThreadPoolExecutor(max_workers=max(1, min(_MAX_PARALLEL_FETCHES, len(properties)))) as pool:
+        readings = list(pool.map(_reading, properties))
+
+    alerts = []
+    for prop, payload in zip(properties, readings):
+        if payload is None:
+            continue
+        lat, lon = float(prop.latitude), float(prop.longitude)
         weather_list = payload.get("weather") or []
         condition_id = weather_list[0].get("id") if weather_list and isinstance(weather_list[0], dict) else None
         wind_speed = ((payload.get("wind") or {}).get("speed"))

@@ -7,6 +7,7 @@ from typing import Literal
 
 import anthropic
 import bleach
+import httpx
 from anthropic import beta_tool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -20,8 +21,23 @@ SYSTEM_CONTEXT = """אתה עוזר AI במערכת RMIS (Risk Management Inform
 תפקידך לנתח דיווחי אירועי נזק בשפה טבעית ולסווג אותם לשדות מובנים עבור צוות ניהול הסיכונים."""
 
 
+_client: anthropic.Anthropic | None = None
+
+
 def get_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
+    """One process-wide client, so every AI call reuses the same pooled HTTPS
+    connection — a fresh client per call paid a new TLS handshake (~0.9s)
+    each time. keepalive_expiry is raised from the SDK's 5s so a connection
+    survives the pause between two chat messages."""
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key or None,
+            http_client=anthropic.DefaultHttpxClient(
+                limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100, keepalive_expiry=600.0)
+            ),
+        )
+    return _client
 
 
 class IncidentClassification(BaseModel):

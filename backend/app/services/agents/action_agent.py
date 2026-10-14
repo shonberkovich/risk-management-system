@@ -17,19 +17,17 @@ non-compliant property. Human-in-the-loop by construction:
   `mark_action_status` below), matching the models.AgentActionLog docstring's
   proposed -> confirmed/rejected lifecycle.
 
-Registers itself as `COMPLIANCE_AGENT` in `ai_orchestrator.AGENT_REGISTRY` on
-import (see that module's `register_agent`)."""
+Registers its prompt + tools as `COMPLIANCE_AGENT` in
+`ai_orchestrator.AGENT_TOOLS` on import (see `register_agent_tools`)."""
 from __future__ import annotations
 
 import json
 from datetime import date, timedelta
 
-import anthropic
 from anthropic import beta_tool
 from sqlalchemy.orm import Session
 
 from app import models
-from app.config import settings
 from app.database import SessionLocal
 from app.services import ai_orchestrator, compliance
 
@@ -184,27 +182,12 @@ def propose_mitigation_task_for_property(property_id: int) -> str:
 ACTION_AGENT_TOOLS = [get_compliance_snapshot, get_property_compliance, propose_mitigation_task_for_property]
 
 
-def _get_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
-
-
-def run_action_agent(message: str, history: list[dict]) -> str:
-    """Entry point registered as COMPLIANCE_AGENT in the orchestrator."""
-    client = _get_client()
-    runner = client.beta.messages.tool_runner(
-        model=settings.anthropic_model,
-        output_config={"effort": settings.anthropic_effort},
-        max_tokens=2048,
-        system=SYSTEM_PROMPT,
-        tools=ACTION_AGENT_TOOLS,
-        messages=[{"role": "user", "content": message}],
-    )
-    final_text = ""
-    for msg in runner:
-        for block in msg.content:
-            if block.type == "text":
-                final_text = block.text
-    return final_text or "לא הצלחתי להפיק ניתוח תאימות."
-
-
-ai_orchestrator.register_agent("COMPLIANCE_AGENT", run_action_agent)
+# In chat, get_compliance_snapshot's output is inlined into the prompt instead of
+# offered as a tool (~0.05s, DB-only): with both, the model still spent a round
+# trip calling the tool for data it already had.
+ai_orchestrator.register_agent_tools(
+    "COMPLIANCE_AGENT",
+    SYSTEM_PROMPT,
+    [get_property_compliance, propose_mitigation_task_for_property],
+    snapshot=lambda: get_compliance_snapshot.call({}),
+)

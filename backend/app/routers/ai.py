@@ -1,4 +1,6 @@
 """AI endpoints (LLM-powered), backed by Anthropic Claude."""
+import json
+
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -148,6 +150,34 @@ def agent_chat(
     except anthropic.APIConnectionError as e:
         raise HTTPException(502, "AI service unreachable") from e
     return AgentChatResponse(**result.model_dump())
+
+
+@router.post("/agent-chat/stream")
+def agent_chat_stream(
+    payload: AgentChatRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Same turn as POST /agent-chat, streamed as NDJSON so the answer shows up
+    while it's being written: {"type": "text", "delta"} chunks, {"type": "reset"}
+    (drop text streamed so far — it was preamble before a tool call), then one
+    {"type": "done", session_id, agent, reasoning, answer} — or {"type": "error",
+    "detail"} if the AI call fails mid-stream (status is already 200 by then)."""
+    _require_api_key()
+    if not payload.message.strip():
+        raise HTTPException(400, "Message is required")
+    orchestrator = AgentOrchestrator(db, session_id=payload.session_id, user=user)
+
+    def generate():
+        try:
+            for event in orchestrator.handle_stream(payload.message):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except anthropic.APIError as e:
+            db.rollback()
+            detail = f"AI service error: {e.message}" if isinstance(e, anthropic.APIStatusError) else "AI service unreachable"
+            yield json.dumps({"type": "error", "detail": detail}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
 @router.post("/actions/propose-mitigation-task", response_model=ActionProposalResponse | None)

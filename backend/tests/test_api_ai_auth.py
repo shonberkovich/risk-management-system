@@ -73,6 +73,17 @@ def test_agent_chat_with_token_passes_auth_gate(client, make_user):
     assert resp.status_code == 503
 
 
+def test_agent_chat_stream_without_token_is_401(client):
+    resp = client.post("/api/ai/agent-chat/stream", json={"message": "מה ה-TIV הכולל?"})
+    assert resp.status_code == 401
+
+
+def test_agent_chat_stream_with_token_passes_auth_gate(client, make_user):
+    user = make_user(role="FIELD_WORKER", email="fw-agent-chat-stream-test@example.com")
+    resp = client.post("/api/ai/agent-chat/stream", json={"message": "מזג אוויר"}, headers=auth_headers(user))
+    assert resp.status_code == 503
+
+
 def test_propose_mitigation_task_without_token_is_401(client):
     resp = client.post("/api/ai/actions/propose-mitigation-task", json={"property_id": 1})
     assert resp.status_code == 401
