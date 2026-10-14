@@ -73,6 +73,7 @@ def classify_intent(message: str, history: list[dict] | None = None) -> RoutingD
 
     response = client.messages.parse(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=512,
         system=_ROUTING_SYSTEM_PROMPT,
         messages=[{

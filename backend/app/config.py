@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
+    # output_config.effort for every Claude call (low|medium|high|xhigh|max). Current models
+    # think adaptively by default, which added ~3-5s per call here; "low" skips that for these
+    # short classification/summary/Q&A tasks and works on every current model (unlike
+    # thinking={"type": "disabled"}, which Opus 5.5 / Sonnet 5.5 reject with a 400).
+    anthropic_effort: str = "low"
 
     # --- Real weather connector (app/integrations/weather.py) ---
     # OpenWeatherMap "Current Weather Data" API key (free tier, api.openweathermap.org/data/2.5/
