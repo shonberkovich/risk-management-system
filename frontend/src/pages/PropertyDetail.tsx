@@ -1,4 +1,5 @@
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import BlockIcon from "@mui/icons-material/Block";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -50,6 +51,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useAIAssistant } from "../components/AIAssistant/AIAssistantContext";
 import { useConfirmDialog } from "../components/ConfirmDialog";
 import PropertyDialog from "../components/PropertyDialog";
+import PropertyExplainCard, { usePropertyExplanation } from "../components/PropertyExplainCard";
 import RiskSurveyDialog from "../components/RiskSurveyDialog";
 import { ASSET_TYPE_LABELS, DOCUMENT_TYPE_LABELS, formatDate, formatDateTime, formatIls, formatIlsCompact } from "../format";
 
@@ -164,6 +166,7 @@ export default function PropertyDetail() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirmDialog();
+  const explanation = usePropertyExplanation(propertyId);
 
   const property = useQuery({
     queryKey: ["property", propertyId],
@@ -298,6 +301,18 @@ export default function PropertyDetail() {
           )}
         </Stack>
         <Stack direction="row" spacing={1}>
+          <Tooltip title="ניתוח קצר של ציון הסיכון, האירועים והתביעות, והפעולות המשתלמות ביותר">
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={explanation.start}
+                disabled={explanation.running}
+              >
+                הסבר לי את הנכס
+              </Button>
+            </span>
+          </Tooltip>
           <Tooltip title="פותח את עוזר ה-AI עם ההקשר של הנכס הזה כדי לנתח סיכון ותאימות">
             <Button
               variant="outlined"
@@ -326,6 +341,8 @@ export default function PropertyDetail() {
       </Stack>
 
       {deactivateError && <Alert severity="error">{deactivateError}</Alert>}
+
+      <PropertyExplainCard explanation={explanation} />
 
       <Card variant="outlined">
         <CardContent>
