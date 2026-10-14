@@ -694,6 +694,23 @@ path.leaflet-interactive:hover {
   to { transform: scale(2.2); opacity: 0; }
 }
 
+/* Voice dictation mic (components/VoiceDictationButton.tsx) while listening: the
+   button breathes, rings radiate out and the (decorative — the Web Speech API
+   exposes no audio level) bars bounce. --mic-glow is set inline from the mode's
+   tokens. */
+@keyframes rmis-mic-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 18px 0 var(--mic-glow); }
+  50% { transform: scale(1.07); box-shadow: 0 0 44px 8px var(--mic-glow); }
+}
+@keyframes rmis-mic-ring {
+  from { transform: scale(1); opacity: 0.75; }
+  to { transform: scale(1.95); opacity: 0; }
+}
+@keyframes rmis-mic-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
 /* Gradient sheen used by contained buttons (theme.ts) */
 @keyframes rmis-sheen {
   from { transform: translateX(-110%); }
