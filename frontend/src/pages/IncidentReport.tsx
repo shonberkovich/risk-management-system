@@ -22,7 +22,8 @@ import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { alpha } from "@mui/material/styles";
+import { onlineManager, useMutation, useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 
@@ -47,7 +48,9 @@ import {
 } from "../api/client";
 import MediaUploader from "../components/MediaUploader";
 import FailedSyncReports from "../components/FailedSyncReports";
+import VoiceDictationButton from "../components/VoiceDictationButton";
 import { distanceKm, useGeolocation } from "../hooks/useGeolocation";
+import { useSpeechDictation } from "../hooks/useSpeechDictation";
 import { HAZARD_LABELS, OPERATIONAL_IMPACT_LABELS, SEVERITY_LABELS, parseServerDate, toDatetimeLocalValue } from "../format";
 import { useTokens } from "../ui/useTokens";
 import {
@@ -111,10 +114,16 @@ const FIELD_LABELS: Record<string, string> = {
   area_or_building: "אזור / מבנה",
 };
 
+// Dictated words go after whatever the description already holds, never over it.
+function appendDictation(base: string, spoken: string): string {
+  if (!base.trim()) return spoken;
+  return /\s$/.test(base) ? base + spoken : `${base} ${spoken}`;
+}
+
 export default function IncidentReport() {
   // Pill colors: the option hexes are the dark-mode set; adapt() swaps in the deeper
   // light-mode equivalents, and the selected-pill ink flips to white on those.
-  const { adapt, mode } = useTokens();
+  const { adapt, mode, neon } = useTokens();
   const pillInk = mode === "dark" ? "#05081A" : "#FFFFFF";
   const [activeStep, setActiveStep] = useState(0);
   const [property, setProperty] = useState<Property | null>(null);
@@ -138,6 +147,9 @@ export default function IncidentReport() {
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  // The description as it was when the current dictation started.
+  const dictationBase = useRef("");
   const draftResumeAttempted = useRef(false);
   // Tracks whether the current `property` selection came from the GPS auto-pick below
   // (vs. a deliberate manual choice) — a fresh GPS fix is allowed to update an
@@ -242,8 +254,10 @@ export default function IncidentReport() {
       .finally(() => setGeocoding(false));
   }, [geo.coords]);
 
+  // Takes the text as an argument rather than reading `description`: a dictation can
+  // end before the re-render that holds its last words.
   const classifyMutation = useMutation({
-    mutationFn: () => classifyIncident(description),
+    mutationFn: (text: string) => classifyIncident(text),
     onSuccess: (result) => {
       setAiResult(result);
       setHazardType(result.hazard_type);
@@ -253,6 +267,40 @@ export default function IncidentReport() {
       if (result.business_interruption_likely) setBusinessInterruption(true);
     },
   });
+
+  // Hebrew voice dictation into the description: the words show up live as they're
+  // spoken, and a finished dictation runs the same classification as "נתח עם AI".
+  const dictation = useSpeechDictation({
+    lang: "he-IL",
+    onTranscript: (text) => setDescription(appendDictation(dictationBase.current, text)),
+    onEnd: (text) => {
+      const full = appendDictation(dictationBase.current, text);
+      setDescription(full);
+      // classifyMutation keeps TanStack's default networkMode ("online"), which parks
+      // the request while offline; don't fire it unasked then — the button still works.
+      if (!onlineManager.isOnline()) {
+        setVoiceNotice('אין חיבור לרשת — הסיווג האוטומטי לא הופעל. ניתן ללחוץ על "נתח עם AI" כשהחיבור יחזור.');
+        return;
+      }
+      classifyMutation.mutate(full);
+    },
+  });
+  const { cancel: cancelDictation } = dictation;
+
+  // The description field only exists on this step: leaving it ends the dictation.
+  useEffect(() => {
+    if (activeStep !== 2) cancelDictation();
+  }, [activeStep, cancelDictation]);
+
+  const toggleDictation = () => {
+    if (dictation.listening) {
+      dictation.stop();
+      return;
+    }
+    dictationBase.current = description;
+    setVoiceNotice(null);
+    dictation.start();
+  };
 
   type SaveDraftResult =
     | { offline: false; incident: Incident }
@@ -508,6 +556,7 @@ export default function IncidentReport() {
             setDraftId(null);
             setDraftCode(null);
             setDraftNotice(null);
+            setVoiceNotice(null);
           }}
         >
           דווח אירוע נוסף
@@ -716,19 +765,43 @@ export default function IncidentReport() {
 
           {activeStep === 2 && (
             <Stack spacing={2}>
+              <VoiceDictationButton
+                dictation={dictation}
+                onToggle={toggleDictation}
+                busy={classifyMutation.isPending && !classifyMutation.isPaused}
+                busyLabel="מנתח את הדיווח עם AI…"
+                notice={voiceNotice}
+              />
               <TextField
                 label="תיאור האירוע"
                 multiline
                 minRows={4}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  // Typing takes over from a running dictation.
+                  if (dictation.listening) cancelDictation();
+                  setDescription(e.target.value);
+                }}
                 placeholder="לדוגמה: פיצוץ בצינור מים ראשי בקומה 1 שגרם להצפה באזור האריזה..."
+                sx={
+                  dictation.listening
+                    ? {
+                        "& .MuiOutlinedInput-root": {
+                          boxShadow: `0 0 0 4px ${alpha(neon.magenta, 0.16)}, 0 0 32px -6px ${alpha(neon.magenta, 0.55)}`,
+                        },
+                        "& .MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline": { borderColor: neon.magenta },
+                      }
+                    : undefined
+                }
               />
               <Button
                 variant="outlined"
                 startIcon={classifyMutation.isPending ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
-                disabled={!description.trim() || classifyMutation.isPending}
-                onClick={() => classifyMutation.mutate()}
+                disabled={!description.trim() || classifyMutation.isPending || dictation.listening}
+                onClick={() => {
+                  setVoiceNotice(null);
+                  classifyMutation.mutate(description);
+                }}
                 sx={{ alignSelf: "flex-start" }}
               >
                 נתח עם AI
