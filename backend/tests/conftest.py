@@ -38,6 +38,15 @@ def _bigint_as_integer_on_sqlite(type_, compiler, **kw):
     return "INTEGER"
 
 
+# Tests assume no ANTHROPIC_API_KEY (the 503 degradation path; tests that need a key
+# monkeypatch a fake one and mock the client). A real key in a developer's backend/.env
+# would otherwise flip those 503s to 200s and make real, billed Claude calls.
+@pytest.fixture(autouse=True)
+def _no_real_anthropic_key(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+
+
 @pytest.fixture()
 def engine():
     # StaticPool + check_same_thread=False: a single shared in-memory SQLite connection

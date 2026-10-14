@@ -136,6 +136,7 @@ def run_external_data_agent(message: str, history: list[dict]) -> str:
     client = _get_client()
     runner = client.beta.messages.tool_runner(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=2048,
         system=SYSTEM_PROMPT,
         tools=DATA_AGENT_TOOLS,

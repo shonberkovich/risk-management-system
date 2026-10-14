@@ -44,6 +44,7 @@ def classify_incident(description: str) -> IncidentClassification:
     client = get_client()
     response = client.messages.parse(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=1024,
         system=SYSTEM_CONTEXT,
         messages=[{
@@ -91,6 +92,7 @@ def stream_executive_summary() -> Iterator[str]:
     client = get_client()
     with client.messages.stream(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=2048,
         system=(
             "אתה מנהל סיכונים בכיר הכותב תקציר מנהלים (Executive Summary) בעברית עבור "
@@ -233,6 +235,7 @@ def ask_question(question: str) -> str:
     client = get_client()
     runner = client.beta.messages.tool_runner(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=2048,
         system=(
             "אתה עוזר נתונים למנהל סיכונים. ענה על שאלות אך ורק על סמך תוצאות הכלים שברשותך - "
@@ -305,6 +308,7 @@ def summarize_email_thread(messages: list[dict]) -> str:
     client = get_client()
     response = client.messages.create(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=512,
         system=EMAIL_AI_SYSTEM_CONTEXT,
         messages=[{
@@ -334,6 +338,7 @@ def suggest_email_reply(messages: list[dict]) -> str:
     client = get_client()
     response = client.messages.create(
         model=settings.anthropic_model,
+        output_config={"effort": settings.anthropic_effort},
         max_tokens=1024,
         system=EMAIL_AI_SYSTEM_CONTEXT,
         messages=[{
