@@ -1,17 +1,27 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sendAgentChatMessageMock, proposeMitigationTaskMock, useAuthMock } = vi.hoisted(() => ({
-  sendAgentChatMessageMock: vi.fn(),
-  proposeMitigationTaskMock: vi.fn(),
-  useAuthMock: vi.fn(),
-}));
+const { sendAgentChatMessageMock, streamAgentChatMessageMock, proposeMitigationTaskMock, useAuthMock, StreamError } =
+  vi.hoisted(() => ({
+    sendAgentChatMessageMock: vi.fn(),
+    streamAgentChatMessageMock: vi.fn(),
+    proposeMitigationTaskMock: vi.fn(),
+    useAuthMock: vi.fn(),
+    StreamError: class extends Error {
+      status: number;
+      constructor(message: string, status: number) {
+        super(message);
+        this.status = status;
+      }
+    },
+  }));
 vi.mock("../../auth/AuthContext", () => ({ useAuth: useAuthMock }));
 vi.mock("../../api/client", () => ({
+  AgentChatStreamError: StreamError,
   sendAgentChatMessage: sendAgentChatMessageMock,
+  streamAgentChatMessage: streamAgentChatMessageMock,
   proposeMitigationTask: proposeMitigationTaskMock,
   confirmAgentAction: vi.fn(),
   rejectAgentAction: vi.fn(),
@@ -20,16 +30,6 @@ vi.mock("../../api/client", () => ({
 
 import AIAssistant from "./AIAssistant";
 import { AIAssistantProvider } from "./AIAssistantContext";
-
-function axiosErrorWithStatus(status: number) {
-  return new AxiosError(
-    "Request failed",
-    String(status),
-    { headers: new AxiosHeaders() },
-    {},
-    { status, statusText: "", headers: {}, config: { headers: new AxiosHeaders() }, data: {} }
-  );
-}
 
 function renderAssistant() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -59,7 +59,7 @@ describe("AIAssistant", () => {
   });
 
   it("sends a suggested question and renders the routed agent's answer with its badge", async () => {
-    sendAgentChatMessageMock.mockResolvedValue({
+    streamAgentChatMessageMock.mockResolvedValue({
       session_id: "s1",
       agent: "DATA_AGENT",
       reasoning: "שאלת נתונים",
@@ -71,11 +71,11 @@ describe("AIAssistant", () => {
 
     expect(await screen.findByText("ה-TIV הכולל הוא 10,000,000 ₪")).toBeInTheDocument();
     expect(screen.getByText("סוכן נתונים פנימיים")).toBeInTheDocument();
-    expect(sendAgentChatMessageMock).toHaveBeenCalledWith("מהו ה-TIV הכולל של תיק הנכסים?", null);
+    expect(streamAgentChatMessageMock).toHaveBeenCalledWith("מהו ה-TIV הכולל של תיק הנכסים?", null, expect.any(Function));
   });
 
   it("reuses the session_id from the first reply on the next message", async () => {
-    sendAgentChatMessageMock.mockResolvedValue({
+    streamAgentChatMessageMock.mockResolvedValue({
       session_id: "s1",
       agent: "DATA_AGENT",
       reasoning: "x",
@@ -89,11 +89,11 @@ describe("AIAssistant", () => {
     const input = screen.getByPlaceholderText("שאלו את מערך הסוכנים...");
     await userEvent.type(input, "שאלה נוספת{Enter}");
 
-    expect(sendAgentChatMessageMock).toHaveBeenLastCalledWith("שאלה נוספת", "s1");
+    expect(streamAgentChatMessageMock).toHaveBeenLastCalledWith("שאלה נוספת", "s1", expect.any(Function));
   });
 
   it("maps a 503 to the 'AI not configured' message", async () => {
-    sendAgentChatMessageMock.mockRejectedValue(axiosErrorWithStatus(503));
+    streamAgentChatMessageMock.mockRejectedValue(new StreamError("AI not configured", 503));
     renderAssistant();
     await userEvent.click(screen.getByRole("button"));
     await userEvent.click(screen.getByText("מהו ה-TIV הכולל של תיק הנכסים?"));
@@ -107,6 +107,42 @@ describe("AIAssistant", () => {
     await userEvent.click(screen.getByRole("button"));
     const input = await screen.findByPlaceholderText("שאלו את מערך הסוכנים...");
     await userEvent.type(input, "   {Enter}");
-    expect(sendAgentChatMessageMock).not.toHaveBeenCalled();
+    expect(streamAgentChatMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the answer while it is still streaming in", async () => {
+    let finish: (value: unknown) => void = () => {};
+    streamAgentChatMessageMock.mockImplementation((_message, _session, onText: (text: string) => void) => {
+      onText("יש 9 תביעות");
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    renderAssistant();
+    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByText("מהו ה-TIV הכולל של תיק הנכסים?"));
+
+    expect(await screen.findByText("יש 9 תביעות")).toBeInTheDocument();
+    expect(screen.queryByText("סוכן נתונים פנימיים")).not.toBeInTheDocument(); // label only once done
+
+    finish({ session_id: "s1", agent: "DATA_AGENT", reasoning: "x", answer: "יש 9 תביעות פתוחות." });
+    expect(await screen.findByText("יש 9 תביעות פתוחות.")).toBeInTheDocument();
+    expect(screen.getByText("סוכן נתונים פנימיים")).toBeInTheDocument();
+  });
+
+  it("falls back to the non-streaming endpoint on a 401 (expired token)", async () => {
+    streamAgentChatMessageMock.mockRejectedValue(new StreamError("expired", 401));
+    sendAgentChatMessageMock.mockResolvedValue({
+      session_id: "s1",
+      agent: "EXTERNAL_DATA_AGENT",
+      reasoning: "x",
+      answer: "אין התרעות",
+    });
+    renderAssistant();
+    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByText("מהו ה-TIV הכולל של תיק הנכסים?"));
+
+    expect(await screen.findByText("אין התרעות")).toBeInTheDocument();
+    expect(sendAgentChatMessageMock).toHaveBeenCalledWith("מהו ה-TIV הכולל של תיק הנכסים?", null);
   });
 });

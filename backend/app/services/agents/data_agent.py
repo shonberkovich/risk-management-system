@@ -5,17 +5,22 @@ text-formatting wrappers around those modules' functions — no new external
 calls are introduced, matching services/llm.py's ASK_TOOLS pattern (the model
 picks a tool + params, never generates a request itself).
 
-Registers itself as `EXTERNAL_DATA_AGENT` in `ai_orchestrator.AGENT_REGISTRY`
-on import (see that module's `register_agent`)."""
+Registers its prompt + tools as `EXTERNAL_DATA_AGENT` in
+`ai_orchestrator.AGENT_TOOLS` on import (see `register_agent_tools`)."""
 from __future__ import annotations
 
-import anthropic
+import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 from anthropic import beta_tool
 
-from app.config import settings
 from app.database import SessionLocal
 from app.integrations import economics, gis, seismology, weather
 from app.services import ai_orchestrator
+
+logger = logging.getLogger("rmis.agents.external_data")
 
 SYSTEM_PROMPT = """אתה אנליסט סיכוני מאקרו במערכת RMIS לניהול סיכונים.
 תפקידך לאסוף נתוני מאקרו חיצוניים (מזג אוויר קיצוני, רעידות אדמה, אתרי חומרים מסוכנים בסביבת נכסים,
@@ -123,31 +128,44 @@ DATA_AGENT_TOOLS = [
 ]
 
 
-def _get_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
+# Chat snapshot of the portfolio-wide external feeds (weather alerts, recent
+# earthquakes, BOI indicators). They're slow live calls (~0.8-1.1s each), so
+# they're never fetched on a chat request's critical path: the snapshot is
+# served from memory and refreshed in the background once it's older than
+# _SNAPSHOT_TTL_SECONDS (stale-while-revalidate). Before the first refresh
+# finishes it's empty and the model just calls the tools as before.
+_SNAPSHOT_TTL_SECONDS = 300
+_SNAPSHOT_SOURCES = [
+    ("התרעות מזג אוויר", get_weather_alerts),
+    ("רעידות אדמה אחרונות", get_recent_earthquakes),
+    ("מדדים כלכליים", get_economic_indicators),
+]
+_snapshot_lock = threading.Lock()
+_snapshot_text = ""
+_snapshot_at = 0.0
+_snapshot_refreshing = False
 
 
-def run_external_data_agent(message: str, history: list[dict]) -> str:
-    """Entry point registered as EXTERNAL_DATA_AGENT in the orchestrator.
-    `history` (prior orchestrator turns) is currently not replayed into the
-    tool-use loop — each call is a fresh analysis pass over live external
-    data, since macro conditions (unlike internal records) can change
-    between turns of the same session."""
-    client = _get_client()
-    runner = client.beta.messages.tool_runner(
-        model=settings.anthropic_model,
-        output_config={"effort": settings.anthropic_effort},
-        max_tokens=2048,
-        system=SYSTEM_PROMPT,
-        tools=DATA_AGENT_TOOLS,
-        messages=[{"role": "user", "content": message}],
-    )
-    final_text = ""
-    for msg in runner:
-        for block in msg.content:
-            if block.type == "text":
-                final_text = block.text
-    return final_text or "לא הצלחתי לנתח את נתוני הסיכון החיצוניים."
+def _refresh_external_snapshot() -> None:
+    global _snapshot_text, _snapshot_at, _snapshot_refreshing
+    try:
+        with ThreadPoolExecutor(max_workers=len(_SNAPSHOT_SOURCES)) as pool:
+            results = list(pool.map(lambda source: source[1].call({}), _SNAPSHOT_SOURCES))
+        _snapshot_text = "\n".join(f"{title}:\n{text}" for (title, _), text in zip(_SNAPSHOT_SOURCES, results))
+        _snapshot_at = time.monotonic()
+    except Exception:  # noqa: BLE001 — a failed refresh just leaves the old snapshot in place
+        logger.exception("external data snapshot refresh failed")
+    finally:
+        _snapshot_refreshing = False
 
 
-ai_orchestrator.register_agent("EXTERNAL_DATA_AGENT", run_external_data_agent)
+def external_snapshot() -> str:
+    global _snapshot_refreshing
+    with _snapshot_lock:
+        if time.monotonic() - _snapshot_at >= _SNAPSHOT_TTL_SECONDS and not _snapshot_refreshing:
+            _snapshot_refreshing = True
+            threading.Thread(target=_refresh_external_snapshot, name="external-snapshot", daemon=True).start()
+    return _snapshot_text
+
+
+ai_orchestrator.register_agent_tools("EXTERNAL_DATA_AGENT", SYSTEM_PROMPT, DATA_AGENT_TOOLS, snapshot=external_snapshot)

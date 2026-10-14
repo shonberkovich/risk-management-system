@@ -13,7 +13,7 @@ fires first).
 The mocked-client tests fake `app.services.llm.get_client()` rather than the
 real `anthropic.Anthropic` — there's no existing test in this suite that
 mocks `client.messages.create` directly (test_ai_orchestrator.py mocks at the
-`classify_intent`/agent-function level instead), so this fakes the same
+`run_agent_turn`/tool-runner level instead), so this fakes the same
 `.messages.create(**kwargs) -> response` shape `llm.py` actually calls,
 capturing the kwargs so the privacy test can assert on exactly what was sent.
 """

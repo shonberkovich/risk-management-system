@@ -995,6 +995,61 @@ export const sendAgentChatMessage = (message: string, sessionId?: string | null)
     .post<AgentChatResponse>("/ai/agent-chat", { message, session_id: sessionId ?? null })
     .then((r) => r.data);
 
+/** Error from the streaming chat endpoint, carrying the HTTP status (0 when the
+ * stream itself reported a failure after the response had started). */
+export class AgentChatStreamError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+/** Same turn as sendAgentChatMessage, but over POST /api/ai/agent-chat/stream (NDJSON),
+ * so the answer can be shown while it's being written: `onText` gets the answer so far
+ * on every chunk. Uses fetch() (axios can't read a streaming body in the browser), so a
+ * 401 is not silently refreshed here — callers fall back to sendAgentChatMessage. */
+export const streamAgentChatMessage = async (
+  message: string,
+  sessionId: string | null | undefined,
+  onText: (textSoFar: string) => void,
+): Promise<AgentChatResponse> => {
+  const token = getAccessToken();
+  const res = await fetch("/api/ai/agent-chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ message, session_id: sessionId ?? null }),
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => ({}));
+    throw new AgentChatStreamError(typeof body.detail === "string" ? body.detail : `שגיאה (${res.status})`, res.status);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (value) buffered += decoder.decode(value, { stream: !done });
+    const lines = buffered.split("\n");
+    buffered = done ? "" : (lines.pop() ?? "");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line);
+      if (event.type === "text") {
+        text += event.delta;
+        onText(text);
+      } else if (event.type === "reset") {
+        text = "";
+        onText(text);
+      } else if (event.type === "done") {
+        return event as AgentChatResponse;
+      } else if (event.type === "error") {
+        throw new AgentChatStreamError(event.detail, 0);
+      }
+    }
+    if (done) throw new AgentChatStreamError("התשובה נקטעה באמצע.", 0);
+  }
+};
+
 // --- Human-in-the-loop action proposals (TODO_SPEC.md §5/§7) ---
 
 export interface ProposedMitigationTask {

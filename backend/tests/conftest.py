@@ -47,6 +47,23 @@ def _no_real_anthropic_key(monkeypatch):
     monkeypatch.setattr(settings, "anthropic_api_key", "")
 
 
+# weather.py caches real OpenWeatherMap readings per (lat, lon) for 10 minutes;
+# tests reuse the same coordinates with different mocked payloads.
+@pytest.fixture(autouse=True)
+def _clear_ai_rate_limit():
+    """The /api/ai/* limiter keys on user id, and every test's fresh in-memory DB
+    starts ids at 1 again — without this, AI tests share one counter and later
+    ones get 429s depending on test order."""
+    from app.services import rate_limit
+    rate_limit._counters.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_weather_cache():
+    from app.integrations import weather
+    weather._reading_cache.clear()
+
+
 @pytest.fixture()
 def engine():
     # StaticPool + check_same_thread=False: a single shared in-memory SQLite connection

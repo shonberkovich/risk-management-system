@@ -36,7 +36,7 @@ from app.routers import (
     sse,
     users,
 )
-from app.services import sse_manager
+from app.services import ai_orchestrator, sse_manager
 from app.services.scheduler import start_scheduled_email_poller
 from app.shutdown_signals import chain_shutdown_signal_handlers
 
@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
     # and why it's skipped entirely under pytest). `poller_task` is None under
     # pytest, in which case there's nothing to cancel on shutdown either.
     poller_task = start_scheduled_email_poller()
+    ai_orchestrator.warm_up_in_background()
     # End every open SSE stream as soon as the server starts shutting down — the
     # server waits for all open responses first, so an endless stream would hang
     # Ctrl+C and every `--reload` (see app/shutdown_signals.py). The signal handler
