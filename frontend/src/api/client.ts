@@ -1105,6 +1105,71 @@ export const streamExecutiveSummary = async () => {
   return res.body;
 };
 
+/** Error from an NDJSON AI stream, carrying the HTTP status (0 when the stream itself
+ * reported a failure after the response had started). */
+export class AiStreamError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+/** Yields each JSON event of an NDJSON response body as soon as its line is complete. */
+async function* ndjsonEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<Record<string, unknown>> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (value) buffered += decoder.decode(value, { stream: !done });
+    const lines = buffered.split("\n");
+    buffered = done ? "" : (lines.pop() ?? "");
+    for (const line of lines) {
+      if (line.trim()) yield JSON.parse(line);
+    }
+    if (done) return;
+  }
+}
+
+/** "הסבר לי את הנכס" — POST /api/ai/properties/{id}/explain streams a short Hebrew
+ * analysis as NDJSON ({type: "text", delta} … {type: "done"}). `onText` gets the text so
+ * far on every chunk; resolves with the full text. fetch() can't use the axios refresh
+ * interceptor, so on a 401 this lets an axios call refresh the token, then retries once. */
+export const streamPropertyExplanation = async (
+  propertyId: number,
+  onText: (textSoFar: string) => void,
+  signal?: AbortSignal,
+): Promise<string> => {
+  const post = () => {
+    const token = getAccessToken();
+    return fetch(`/api/ai/properties/${propertyId}/explain`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      signal,
+    });
+  };
+  let res = await post();
+  if (res.status === 401 && getRefreshToken()) {
+    await fetchCurrentUser().catch(() => undefined);
+    res = await post();
+  }
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => ({}));
+    throw new AiStreamError(typeof body.detail === "string" ? body.detail : `שגיאה (${res.status})`, res.status);
+  }
+  let text = "";
+  for await (const event of ndjsonEvents(res.body)) {
+    if (event.type === "text") {
+      text += String(event.delta ?? "");
+      onText(text);
+    } else if (event.type === "done") {
+      return text;
+    } else if (event.type === "error") {
+      throw new AiStreamError(String(event.detail ?? ""), 0);
+    }
+  }
+  throw new AiStreamError("התשובה נקטעה באמצע.", 0);
+};
+
 // --- Notifications (TODO_SPEC.md §5, "מסכי אינטגרציה והתראות") ---
 
 export type NotificationChannel = "EMAIL" | "SMS" | "PUSH";

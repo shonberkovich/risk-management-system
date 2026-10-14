@@ -11,7 +11,7 @@ from app import models
 from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import get_current_user, require_roles
-from app.services import ai_orchestrator, llm
+from app.services import ai_orchestrator, llm, property_explain
 from app.services.agents import action_agent, data_agent  # noqa: F401 — register agents on import
 from app.services.ai_orchestrator import AgentOrchestrator, AgentType
 from app.services.rate_limit import enforce_ai_rate_limit
@@ -176,6 +176,38 @@ def agent_chat_stream(
             db.rollback()
             detail = f"AI service error: {e.message}" if isinstance(e, anthropic.APIStatusError) else "AI service unreachable"
             yield json.dumps({"type": "error", "detail": detail}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
+@router.post("/properties/{property_id}/explain")
+def explain_property(
+    property_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """"הסבר לי את הנכס": a 3-4 sentence Hebrew analysis of one property, streamed
+    as NDJSON like /agent-chat/stream: {"type": "text", "delta"} chunks, then
+    {"type": "done"}, or {"type": "error", "detail"} if the AI call fails
+    mid-stream. Open to every role, like the property page itself; money
+    figures that only financial endpoints disclose are left out of the prompt
+    for roles outside _FINANCIAL_READ_ROLES (see services/property_explain.py)."""
+    _require_api_key()
+    # Built before streaming starts: a 404 is still a real status, and the DB
+    # session isn't touched once the response is under way.
+    context = property_explain.build_property_context(db, property_id, user.role)
+    if context is None:
+        raise HTTPException(404, "Property not found")
+
+    def generate():
+        try:
+            for delta in property_explain.stream_property_explanation(context):
+                yield json.dumps({"type": "text", "delta": delta}, ensure_ascii=False) + "\n"
+        except anthropic.APIError as e:
+            detail = f"AI service error: {e.message}" if isinstance(e, anthropic.APIStatusError) else "AI service unreachable"
+            yield json.dumps({"type": "error", "detail": detail}, ensure_ascii=False) + "\n"
+            return
+        yield json.dumps({"type": "done"}) + "\n"
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
