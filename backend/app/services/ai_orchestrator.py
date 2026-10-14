@@ -23,6 +23,12 @@ label being right.
 
 Downstream agents (TODO_SPEC.md §4 `data_agent.py`, §5 `action_agent.py`)
 plug their prompt + tools in via `register_agent_tools()` below.
+
+Every role is also offered the display-only `show_chart` tool
+(`services/chat_charts.py`): the model draws a chart from data it already has
+in the turn. It belongs to no agent, so it never decides the turn's label, and
+a turn whose only tool call is `show_chart` ends right there instead of paying
+another model round trip just to read the tool's acknowledgement.
 """
 from __future__ import annotations
 
@@ -42,8 +48,10 @@ from sqlalchemy.orm import Session
 from app import models
 from app.config import settings
 from app.database import SessionLocal
+from app.services import chat_charts
 from app.services import kpi as kpi_service
 from app.services import llm
+from app.services.chat_charts import CHART_TOOL_NAME
 
 AgentType = Literal["DATA_AGENT", "COMPLIANCE_AGENT", "EXTERNAL_DATA_AGENT"]
 
@@ -169,13 +177,9 @@ def _turn_request(message: str, history: list[dict], agents: list[AgentType]) ->
         sections.append("תמונת מצב נוכחית:\n" + "\n".join(snapshots))
     if "DATA_AGENT" not in agents:
         sections.append(_NO_INTERNAL_DATA_PROMPT)
+    sections.append(chat_charts.CHART_PROMPT)
     sections.append(_TAG_PROMPT)
-
-    messages: list[dict] = []
-    for turn in history[-_MAX_HISTORY_TURNS:]:
-        messages.append({"role": "user", "content": turn.get("message") or "-"})
-        messages.append({"role": "assistant", "content": turn.get("answer") or "-"})
-    messages.append({"role": "user", "content": message})
+    tools.append(chat_charts.show_chart)
 
     request = {
         "model": settings.anthropic_model,
@@ -183,9 +187,34 @@ def _turn_request(message: str, history: list[dict], agents: list[AgentType]) ->
         "max_tokens": 2048,
         "system": "\n\n".join(sections),
         "tools": tools,
-        "messages": messages,
+        "messages": _history_messages(history, message),
     }
     return request, tool_owner
+
+
+def _history_messages(history: list[dict], message: str) -> list[dict]:
+    """Prior exchanges + the new message as API messages. A past answer that
+    showed charts is replayed as the show_chart calls it made (answered by
+    their tool_result at the head of the next user turn), so a follow-up like
+    "now as a pie chart" still has the chart's numbers."""
+    messages: list[dict] = []
+    results: list[dict] = []  # tool_results owed to the previous answer's charts
+
+    def user_turn(text: str) -> dict:
+        return {"role": "user", "content": [*results, {"type": "text", "text": text}] if results else text}
+
+    for i, turn in enumerate(history[-_MAX_HISTORY_TURNS:]):
+        messages.append(user_turn(turn.get("message") or "-"))
+        answer = turn.get("answer") or "-"
+        charts = [c for raw in turn.get("charts") or [] if (c := chat_charts.sanitize_chart(raw))]
+        calls = [
+            {"type": "tool_use", "id": f"chart_{i}_{j}", "name": CHART_TOOL_NAME, "input": chart}
+            for j, chart in enumerate(charts)
+        ]
+        results = [{"type": "tool_result", "tool_use_id": call["id"], "content": chat_charts.CHART_SHOWN} for call in calls]
+        messages.append({"role": "assistant", "content": [{"type": "text", "text": answer}, *calls] if calls else answer})
+    messages.append(user_turn(message))
+    return messages
 
 
 def _owning_agent(
@@ -226,36 +255,54 @@ def _split_tag(text: str, agents: list[AgentType]) -> tuple[AgentType | None, st
 
 def run_agent_turn(
     message: str, history: list[dict], agents: list[AgentType]
-) -> tuple[AgentType, list[str], str]:
+) -> tuple[AgentType, list[str], str, list[dict]]:
     """One tool-use turn over the tools of `agents`. Returns (agent owning the
-    first tool called, names of every tool called, final answer text)."""
+    first data tool called, names of every data tool called, final answer
+    text, charts shown)."""
     request, tool_owner = _turn_request(message, history, agents)
     used: list[str] = []
+    charts: list[dict] = []
     tagged: AgentType | None = None
     final_text = ""
     for msg in llm.get_client().beta.messages.tool_runner(**request):
+        turn_text = ""
+        tool_names = [b.name for b in msg.content if b.type == "tool_use"]
         for block in msg.content:
-            if block.type == "tool_use":
-                used.append(block.name)
+            if block.type == "tool_use" and block.name == CHART_TOOL_NAME:
+                chat_charts.add_chart(charts, block.input)
             elif block.type == "text":
-                tag, final_text = _split_tag(block.text, agents)
+                tag, turn_text = _split_tag(block.text, agents)
                 tagged = tagged or tag
-    return _owning_agent(used, tool_owner, agents, tagged), used, final_text or _NO_ANSWER
+        data_tools = [name for name in tool_names if name != CHART_TOOL_NAME]
+        used.extend(data_tools)
+        if turn_text.strip() and not data_tools:
+            final_text = turn_text.strip()
+            if tool_names:
+                break  # answer + chart(s): nothing left for another round trip
+    return _owning_agent(used, tool_owner, agents, tagged), used, final_text or _NO_ANSWER, charts
 
 
 def stream_agent_turn(message: str, history: list[dict], agents: list[AgentType]) -> Iterator[dict]:
     """Streaming twin of `run_agent_turn`: yields {"type": "text", "delta"} as
-    the answer is written, {"type": "reset"} when text already sent turns out
-    to be preamble before a tool call (the client clears it), and finally
-    {"type": "final", "agent", "used", "answer"}."""
+    the answer is written, {"type": "chart", "chart"} the moment a show_chart
+    call is complete, {"type": "reset"} when text already sent turns out to be
+    preamble before a data-tool call (the client clears the text, not the
+    charts), and finally {"type": "final", "agent", "used", "answer", "charts"}."""
     request, tool_owner = _turn_request(message, history, agents)
     used: list[str] = []
+    charts: list[dict] = []
     tagged: AgentType | None = None
     final_text = ""
     for stream in llm.get_client().beta.messages.tool_runner(**request, stream=True):
         turn_text = ""
         pending: str | None = ""  # text held back until the opening tag is resolved; None once it is
         for event in stream:
+            if event.type == "content_block_stop":
+                block = event.content_block
+                if block.type == "tool_use" and block.name == CHART_TOOL_NAME:
+                    if chart := chat_charts.add_chart(charts, block.input):
+                        yield {"type": "chart", "chart": chart}
+                continue
             if not (event.type == "content_block_delta" and event.delta.type == "text_delta"):
                 continue
             delta = event.delta.text
@@ -280,17 +327,21 @@ def stream_agent_turn(message: str, history: list[dict], agents: list[AgentType]
                 turn_text += rest.strip()
                 yield {"type": "text", "delta": rest.strip()}
         tool_names = [b.name for b in stream.get_final_message().content if b.type == "tool_use"]
-        if tool_names:
-            used.extend(tool_names)
+        data_tools = [name for name in tool_names if name != CHART_TOOL_NAME]
+        if data_tools:
+            used.extend(data_tools)
             if turn_text:
                 yield {"type": "reset"}
         elif turn_text:
             final_text = turn_text
+            if tool_names:
+                break  # answer + chart(s): nothing left for another round trip
     yield {
         "type": "final",
         "agent": _owning_agent(used, tool_owner, agents, tagged),
         "used": used,
         "answer": final_text or _NO_ANSWER,
+        "charts": charts,
     }
 
 
@@ -299,6 +350,7 @@ class AgentChatResult(BaseModel):
     agent: AgentType
     reasoning: str
     answer: str
+    charts: list[chat_charts.ChatChart] = []
 
 
 class AgentOrchestrator:
@@ -353,34 +405,45 @@ class AgentOrchestrator:
 
     def handle(self, message: str) -> AgentChatResult:
         history = self._history()
-        agent, used_tools, answer = run_agent_turn(message, history, allowed_agents(self.user))
-        return self._finish(history, message, agent, used_tools, answer)
+        agent, used_tools, answer, charts = run_agent_turn(message, history, allowed_agents(self.user))
+        return self._finish(history, message, agent, used_tools, answer, charts)
 
     def handle_stream(self, message: str) -> Iterator[dict]:
-        """Streaming twin of `handle()`: relays `stream_agent_turn`'s text/reset
-        events, then persists the turn and yields {"type": "done", **AgentChatResult}."""
+        """Streaming twin of `handle()`: relays `stream_agent_turn`'s text/chart/
+        reset events, then persists the turn and yields {"type": "done", **AgentChatResult}."""
         history = self._history()
         for event in stream_agent_turn(message, history, allowed_agents(self.user)):
             if event["type"] == "final":
-                result = self._finish(history, message, event["agent"], event["used"], event["answer"])
+                result = self._finish(
+                    history, message, event["agent"], event["used"], event["answer"], event.get("charts", [])
+                )
                 yield {"type": "done", **result.model_dump()}
             else:
                 yield event
 
     def _finish(
-        self, history: list[dict], message: str, agent: AgentType, used_tools: list[str], answer: str
+        self,
+        history: list[dict],
+        message: str,
+        agent: AgentType,
+        used_tools: list[str],
+        answer: str,
+        charts: list[dict] | None = None,
     ) -> AgentChatResult:
         reasoning = (
             "נענה באמצעות: " + ", ".join(dict.fromkeys(used_tools)) if used_tools
             else "נענה מתמונת המצב, ללא כלים"
         )
 
-        history.append({"message": message, "agent": agent, "answer": answer})
+        charts = charts or []
+        turn = {"message": message, "agent": agent, "answer": answer}
+        log_payload = {"message": message, "reasoning": reasoning}
+        if charts:
+            turn["charts"] = charts
+            log_payload["charts"] = [chart["title"] for chart in charts]
+        history.append(turn)
         self._save_history(history)
-        self._log_action(
-            action_type=f"ROUTE_{agent}",
-            payload={"message": message, "reasoning": reasoning},
-        )
+        self._log_action(action_type=f"ROUTE_{agent}", payload=log_payload)
         self.db.commit()
 
         return AgentChatResult(
@@ -388,4 +451,5 @@ class AgentOrchestrator:
             agent=agent,
             reasoning=reasoning,
             answer=answer,
+            charts=charts,
         )

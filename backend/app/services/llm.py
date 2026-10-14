@@ -188,7 +188,7 @@ def query_claims(status: str = "") -> str:
             return "לא נמצאו תביעות התואמות את הסינון."
         return "\n".join(
             f"{c.claim_number} ({p.name}, {p.region}): נתבע={c.claimed_amount:.0f}, "
-            f"מאושר={c.approved_amount:.0f}, סטטוס={c.claim_status}"
+            f"מאושר={c.approved_amount:.0f}, סטטוס={c.claim_status}, תאריך אירוע={i.incident_timestamp:%Y-%m-%d}"
             for c, i, p in rows
         )
     finally:
@@ -214,7 +214,7 @@ def query_incidents(status: str = "", hazard_type: str = "") -> str:
             return "לא נמצאו אירועים התואמים את הסינון."
         return "\n".join(
             f"{i.incident_code} ({p.name}): סוג={i.hazard_type}, חומרה={i.severity_level}, "
-            f"סטטוס={i.status}, אומדן נזק={i.initial_estimated_loss:.0f}"
+            f"סטטוס={i.status}, אומדן נזק={i.initial_estimated_loss:.0f}, תאריך={i.incident_timestamp:%Y-%m-%d}"
             for i, p in rows
         )
     finally:

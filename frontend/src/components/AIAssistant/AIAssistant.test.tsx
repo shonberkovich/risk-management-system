@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { sendAgentChatMessageMock, streamAgentChatMessageMock, proposeMitigationTaskMock, useAuthMock, StreamError } =
   vi.hoisted(() => ({
@@ -42,7 +42,32 @@ function renderAssistant() {
   );
 }
 
+const LOSS_RATIO_CHART = {
+  chart_type: "bar",
+  title: "יחס הפסד לפי אזור",
+  x_label: "אזור",
+  y_label: "",
+  unit: "%",
+  series: ["יחס הפסד"],
+  points: [
+    { label: "מרכז", values: [42.5] },
+    { label: "צפון", values: [18] },
+  ],
+};
+
 describe("AIAssistant", () => {
+  beforeAll(() => {
+    // Recharts' ResponsiveContainer observes its size; jsdom has no ResizeObserver.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthMock.mockReturnValue({ user: { user_id: 1, full_name: "דנה", role: "RISK_MANAGER" } });
@@ -144,5 +169,46 @@ describe("AIAssistant", () => {
 
     expect(await screen.findByText("אין התרעות")).toBeInTheDocument();
     expect(sendAgentChatMessageMock).toHaveBeenCalledWith("מהו ה-TIV הכולל של תיק הנכסים?", null);
+  });
+
+  it("renders a chart streamed in with the answer", async () => {
+    let finish: (value: unknown) => void = () => {};
+    streamAgentChatMessageMock.mockImplementation(
+      (_message, _session, onUpdate: (text: string, charts: unknown[]) => void) => {
+        onUpdate("הנה הגרף", []);
+        onUpdate("הנה הגרף", [LOSS_RATIO_CHART]);
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      }
+    );
+    renderAssistant();
+    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByText("מהו ה-TIV הכולל של תיק הנכסים?"));
+
+    const figure = await screen.findByRole("figure", { name: "יחס הפסד לפי אזור" });
+    expect(within(figure).getByRole("rowheader", { name: "מרכז" })).toBeInTheDocument();
+    expect(within(figure).getByRole("cell", { name: "42.5%" })).toBeInTheDocument();
+    expect(within(figure).getByRole("cell", { name: "18%" })).toBeInTheDocument();
+
+    finish({ session_id: "s1", agent: "DATA_AGENT", reasoning: "x", answer: "הנה הגרף.", charts: [LOSS_RATIO_CHART] });
+    expect(await screen.findByText("הנה הגרף.")).toBeInTheDocument();
+    expect(screen.getAllByRole("figure")).toHaveLength(1); // the final answer keeps the same chart, not a second one
+  });
+
+  it("renders charts from the non-streaming fallback too", async () => {
+    streamAgentChatMessageMock.mockRejectedValue(new StreamError("expired", 401));
+    sendAgentChatMessageMock.mockResolvedValue({
+      session_id: "s1",
+      agent: "DATA_AGENT",
+      reasoning: "x",
+      answer: "הנה הגרף.",
+      charts: [{ ...LOSS_RATIO_CHART, chart_type: "pie" }],
+    });
+    renderAssistant();
+    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByText("מהו ה-TIV הכולל של תיק הנכסים?"));
+
+    expect(await screen.findByRole("figure", { name: "יחס הפסד לפי אזור" })).toBeInTheDocument();
   });
 });

@@ -25,16 +25,20 @@ import {
   type ActionProposal,
   type AgentChatResponse,
   type AgentType,
+  type ChatChart as ChatChartData,
 } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import ActionCard from "./ActionCard";
 import { useAIAssistant } from "./AIAssistantContext";
+import ChatChart from "./ChatChart";
 
 interface AgentTurn {
   role: "user" | "agent";
   text: string;
   agent?: AgentType;
   actionCard?: { actionId: number; proposal: ActionProposal };
+  /** Charts the agent drew (show_chart), shown under the answer text. */
+  charts?: ChatChartData[];
   error?: string;
   /** Answer still arriving over /agent-chat/stream (no agent label yet). */
   streaming?: boolean;
@@ -122,8 +126,12 @@ export default function AIAssistant() {
     try {
       let result: AgentChatResponse;
       try {
-        result = await streamAgentChatMessage(trimmed, sessionId, (textSoFar) =>
-          putAnswer(textSoFar ? { role: "agent", text: textSoFar, streaming: true } : null)
+        result = await streamAgentChatMessage(trimmed, sessionId, (textSoFar, chartsSoFar = []) =>
+          putAnswer(
+            textSoFar || chartsSoFar.length
+              ? { role: "agent", text: textSoFar, charts: chartsSoFar, streaming: true }
+              : null
+          )
         );
       } catch (err) {
         // fetch() can't refresh an expired access token the way the axios client
@@ -132,7 +140,7 @@ export default function AIAssistant() {
         result = await sendAgentChatMessage(trimmed, sessionId);
       }
       setSessionId(result.session_id);
-      putAnswer({ role: "agent", text: result.answer, agent: result.agent });
+      putAnswer({ role: "agent", text: result.answer, agent: result.agent, charts: result.charts });
     } catch (err) {
       let text = "שגיאה בפנייה לשירות ה-AI. נסו שוב מאוחר יותר.";
       const status = err instanceof AgentChatStreamError ? err.status : isAxiosError(err) ? err.response?.status : undefined;
@@ -176,7 +184,7 @@ export default function AIAssistant() {
         setSessionId(chatResult.session_id);
         setTurns((prev) => [
           ...prev,
-          { role: "agent", text: chatResult.answer, agent: chatResult.agent },
+          { role: "agent", text: chatResult.answer, agent: chatResult.agent, charts: chatResult.charts },
           ...(proposalResult
             ? ([
                 {
@@ -362,7 +370,11 @@ export default function AIAssistant() {
                   <Avatar sx={{ width: 24, height: 24, bgcolor: "grey.300" }}>
                     <SmartToyIcon sx={{ fontSize: 16 }} />
                   </Avatar>
-                  <Stack spacing={0.5} sx={{ maxWidth: "85%" }}>
+                  <Stack
+                    spacing={0.5}
+                    // A chart needs the bubble's full width, not just its text's.
+                    sx={turn.charts?.length ? { width: "calc(100% - 32px)" } : { maxWidth: "85%" }}
+                  >
                     {turn.agent && !turn.actionCard && (
                       <Chip
                         size="small"
@@ -379,9 +391,12 @@ export default function AIAssistant() {
                       <ActionCard actionId={turn.actionCard.actionId} proposal={turn.actionCard.proposal} />
                     ) : (
                       <Paper variant="outlined" sx={{ px: 1.5, py: 1, bgcolor: "action.hover", borderRadius: "16px 16px 16px 4px" }}>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                          <StreamedAnswer text={turn.text} />
-                        </Typography>
+                        {(turn.text || !turn.charts?.length) && (
+                          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                            <StreamedAnswer text={turn.text} />
+                          </Typography>
+                        )}
+                        {turn.charts?.map((chart, j) => <ChatChart key={j} chart={chart} />)}
                       </Paper>
                     )}
                   </Stack>
