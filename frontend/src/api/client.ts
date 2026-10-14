@@ -983,11 +983,24 @@ export const askQuestion = (question: string) =>
 
 export type AgentType = "DATA_AGENT" | "COMPLIANCE_AGENT" | "EXTERNAL_DATA_AGENT";
 
+/** A chart the assistant drew with its show_chart tool (backend services/chat_charts.py,
+ * already sanitized there): every point carries one value per series (null = no value). */
+export interface ChatChart {
+  chart_type: "bar" | "line" | "pie";
+  title: string;
+  x_label: string;
+  y_label: string;
+  unit: string;
+  series: string[];
+  points: { label: string; values: (number | null)[] }[];
+}
+
 export interface AgentChatResponse {
   session_id: string;
   agent: AgentType;
   reasoning: string;
   answer: string;
+  charts?: ChatChart[];
 }
 
 export const sendAgentChatMessage = (message: string, sessionId?: string | null) =>
@@ -1004,13 +1017,14 @@ export class AgentChatStreamError extends Error {
 }
 
 /** Same turn as sendAgentChatMessage, but over POST /api/ai/agent-chat/stream (NDJSON),
- * so the answer can be shown while it's being written: `onText` gets the answer so far
- * on every chunk. Uses fetch() (axios can't read a streaming body in the browser), so a
- * 401 is not silently refreshed here — callers fall back to sendAgentChatMessage. */
+ * so the answer can be shown while it's being written: `onUpdate` gets the answer text so
+ * far and the charts so far on every chunk (a "reset" clears the text, never the charts).
+ * Uses fetch() (axios can't read a streaming body in the browser), so a 401 is not
+ * silently refreshed here — callers fall back to sendAgentChatMessage. */
 export const streamAgentChatMessage = async (
   message: string,
   sessionId: string | null | undefined,
-  onText: (textSoFar: string) => void,
+  onUpdate: (textSoFar: string, chartsSoFar: ChatChart[]) => void,
 ): Promise<AgentChatResponse> => {
   const token = getAccessToken();
   const res = await fetch("/api/ai/agent-chat/stream", {
@@ -1026,6 +1040,7 @@ export const streamAgentChatMessage = async (
   const decoder = new TextDecoder();
   let buffered = "";
   let text = "";
+  let charts: ChatChart[] = [];
   for (;;) {
     const { done, value } = await reader.read();
     if (value) buffered += decoder.decode(value, { stream: !done });
@@ -1036,10 +1051,13 @@ export const streamAgentChatMessage = async (
       const event = JSON.parse(line);
       if (event.type === "text") {
         text += event.delta;
-        onText(text);
+        onUpdate(text, charts);
+      } else if (event.type === "chart") {
+        charts = [...charts, event.chart as ChatChart];
+        onUpdate(text, charts);
       } else if (event.type === "reset") {
         text = "";
-        onText(text);
+        onUpdate(text, charts);
       } else if (event.type === "done") {
         return event as AgentChatResponse;
       } else if (event.type === "error") {

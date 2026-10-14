@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies.permissions import get_current_user, require_roles
 from app.services import ai_orchestrator, llm
+from app.services.chat_charts import ChatChart
 from app.services.agents import action_agent, data_agent  # noqa: F401 — register agents on import
 from app.services.ai_orchestrator import AgentOrchestrator, AgentType
 from app.services.rate_limit import enforce_ai_rate_limit
@@ -62,6 +63,7 @@ class AgentChatResponse(BaseModel):
     agent: AgentType
     reasoning: str
     answer: str
+    charts: list[ChatChart] = []  # show_chart calls of this turn, already sanitized (services/chat_charts.py)
 
 
 class ProposeMitigationTaskRequest(BaseModel):
@@ -159,10 +161,12 @@ def agent_chat_stream(
     user: models.User = Depends(get_current_user),
 ):
     """Same turn as POST /agent-chat, streamed as NDJSON so the answer shows up
-    while it's being written: {"type": "text", "delta"} chunks, {"type": "reset"}
-    (drop text streamed so far — it was preamble before a tool call), then one
-    {"type": "done", session_id, agent, reasoning, answer} — or {"type": "error",
-    "detail"} if the AI call fails mid-stream (status is already 200 by then)."""
+    while it's being written: {"type": "text", "delta"} chunks, {"type": "chart",
+    "chart"} as soon as the model has finished a show_chart call, {"type": "reset"}
+    (drop text streamed so far — it was preamble before a tool call; charts stay),
+    then one {"type": "done", session_id, agent, reasoning, answer, charts} — or
+    {"type": "error", "detail"} if the AI call fails mid-stream (status is already
+    200 by then)."""
     _require_api_key()
     if not payload.message.strip():
         raise HTTPException(400, "Message is required")
