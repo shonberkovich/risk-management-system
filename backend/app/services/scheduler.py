@@ -49,6 +49,7 @@ import asyncio
 import logging
 import sys
 
+from app.config import settings
 from app.database import SessionLocal
 from app.services.email import process_due_scheduled_emails
 
@@ -56,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 # How often the poller wakes up to check for due scheduled emails. See module
 # docstring for the precision/robustness trade-off this implies.
-POLL_INTERVAL_SECONDS = 30
+POLL_INTERVAL_SECONDS = settings.scheduled_email_poll_seconds
 
 
 def _running_under_pytest() -> bool:

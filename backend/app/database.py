@@ -17,8 +17,19 @@ def get_connection_string() -> str:
 
 
 def get_sqlalchemy_url() -> str:
+    if settings.database_url:
+        return normalize_postgres_url(settings.database_url)
     params = urllib.parse.quote_plus(get_connection_string())
     return f"mssql+pyodbc:///?odbc_connect={params}"
+
+
+def normalize_postgres_url(url: str) -> str:
+    """Neon/Render hand out "postgres://" or "postgresql://" URLs; point them at the
+    psycopg (v3) driver this project installs instead of SQLAlchemy's psycopg2 default."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
 
 
 engine = create_engine(get_sqlalchemy_url(), pool_pre_ping=True)

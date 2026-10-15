@@ -25,6 +25,26 @@ class Settings(BaseSettings):
     db_server: str = r"(localdb)\MSSQLLocalDB"
     db_name: str = "RiskDB"
     db_driver: str = "ODBC Driver 17 for SQL Server"
+    # Cloud deployment (render.yaml): a full SQLAlchemy/Postgres URL, e.g. Neon's
+    # "postgresql://user:pass@host/db?sslmode=require". When set it replaces the
+    # db_server/db_name/db_driver LocalDB connection above; empty = local SQL Server.
+    database_url: str = ""
+
+    # Scheduled-email poller tick (services/scheduler.py). 30s locally; the cloud sets it
+    # higher because every tick wakes the database, and Neon's free tier only allows so
+    # many active compute hours a month.
+    scheduled_email_poll_seconds: int = 30
+
+    # Keep-alive heartbeat (services/keepalive.py): GETs <keepalive_url>/api/health every
+    # keepalive_interval_seconds, only between the start/end hours in keepalive_timezone,
+    # so a free Render service doesn't spin down during the day but may sleep at night.
+    # Empty = falls back to Render's own RENDER_EXTERNAL_URL; neither set = off (local dev).
+    keepalive_url: str = ""
+    render_external_url: str = ""
+    keepalive_interval_seconds: int = 600
+    keepalive_start_hour: int = 8
+    keepalive_end_hour: int = 20
+    keepalive_timezone: str = "Asia/Jerusalem"
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
