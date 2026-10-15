@@ -120,7 +120,7 @@
 | `role_permissions.py` (`/api/role-permissions`) | CRUD קטלוג הרשאות לפי תפקיד (`Role_Permissions`, מחליף את רשימת ה-Seed הקבועה) — **תיעודי בלבד**: אינו משפיע על אכיפת RBAC בפועל, שממשיכה להתבצע דרך `require_roles()` בכל router | ADMIN לכתיבה |
 | `ai.py` (`/api/ai`) | סיווג אירוע, דוח הנהלה (streaming), Q&A — כולם עם rate-limit | authenticated |
 
-מוסכמת RBAC: `Depends(require_roles())` ללא ארגומנטים = "מחייב התחברות, כל תפקיד"; עם ארגומנטים = תפקיד ברשימה בלבד (403 אחרת); ללא `Depends` כלל = פתוח (ראו `backend/app/dependencies/permissions.py`). רוב ה-`GET` נשארו פתוחים בכוונה כדי שדשבורדים ימשיכו לעבוד לפני התחברות; `/api/audit-log` הוא היוצא-מן-הכלל המכוון (גם קריאה חסומה ל-ADMIN, ראו [AuditLog.tsx](../frontend/src/pages/AuditLog.tsx)).
+מוסכמת RBAC: `Depends(require_roles())` ללא ארגומנטים = "מחייב התחברות, כל תפקיד"; עם ארגומנטים = תפקיד ברשימה בלבד (403 אחרת); ללא `Depends` כלל = פתוח (ראו `backend/app/dependencies/permissions.py`). כל ה-`GET` מחייבים התחברות (לפחות `require_roles()`), כי ה-frontend ממילא לא מציג דבר מלבד מסך ההתחברות לפני כניסה, והאפליקציה פרוסה בענן; הפתוחים היחידים הם `/api/health`, `/api/auth/*` והורדות ה-signed-URL (`/api/media/download`, `/api/documents/download`), שבהן הטוקן החתום ב-URL הוא ההרשאה. מעבר לכך, קריאות פיננסיות חסומות לפי תפקיד, ו-`/api/audit-log` חסום לכל מי שאינו ADMIN (ראו [AuditLog.tsx](../frontend/src/pages/AuditLog.tsx)). `test_every_non_public_api_get_rejects_anonymous_callers` ב-`backend/tests/test_rbac_regression.py` עובר על כל נתיבי ה-API ומוודא זאת.
 
 ## 7. מבנה תיקיות
 

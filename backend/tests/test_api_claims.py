@@ -23,7 +23,7 @@ def _open_incident(client, make_property, make_user):
     return incident
 
 
-def test_create_claim_moves_incident_to_claim_filed(client, make_property, make_user, make_policy):
+def test_create_claim_moves_incident_to_claim_filed(client, make_property, make_user, make_policy, reader_headers):
     incident = _open_incident(client, make_property, make_user)
     policy = make_policy(covers=incident["property_id"])
     adjuster = make_user(role="ADJUSTER")
@@ -42,7 +42,7 @@ def test_create_claim_moves_incident_to_claim_filed(client, make_property, make_
     assert body["claim_status"] == "DRAFT"
     assert body["claim_number"].startswith("CLM-")
 
-    updated_incident = client.get(f"/api/incidents/{incident['incident_id']}").json()
+    updated_incident = client.get(f"/api/incidents/{incident['incident_id']}", headers=reader_headers).json()
     assert updated_incident["status"] == "CLAIM_FILED"
 
 
@@ -118,7 +118,7 @@ def test_create_claim_payment_rejects_non_positive_amount(client, make_property,
         assert resp.status_code == 400, bad_amount
 
 
-def test_list_claims_is_readable_without_auth(client, make_property, make_user, make_policy):
+def test_list_claims_needs_login_but_no_particular_role(client, make_property, make_user, make_policy):
     incident = _open_incident(client, make_property, make_user)
     policy = make_policy(covers=incident["property_id"])
     manager = make_user(role="RISK_MANAGER")
@@ -128,6 +128,7 @@ def test_list_claims_is_readable_without_auth(client, make_property, make_user, 
         headers=auth_headers(manager),
     )
 
-    resp = client.get("/api/claims")
+    assert client.get("/api/claims").status_code == 401
+    resp = client.get("/api/claims", headers=auth_headers(make_user(role="FIELD_WORKER")))
     assert resp.status_code == 200
     assert len(resp.json()) == 1

@@ -147,15 +147,15 @@ def test_upload_media_rejects_non_integer_incident_id(client, make_user):
 # ---------------------------------------------------------------------------
 
 
-def test_list_media_empty_for_incident_with_none(client, make_property, make_incident):
+def test_list_media_empty_for_incident_with_none(client, make_property, make_incident, reader_headers):
     incident = make_incident(make_property().property_id)
-    resp = client.get(f"/api/incidents/{incident.incident_id}/media")
+    resp = client.get(f"/api/incidents/{incident.incident_id}/media", headers=reader_headers)
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_list_media_rejects_unknown_incident(client):
-    resp = client.get("/api/incidents/999999/media")
+def test_list_media_rejects_unknown_incident(client, reader_headers):
+    resp = client.get("/api/incidents/999999/media", headers=reader_headers)
     assert resp.status_code == 404
 
 
@@ -164,7 +164,7 @@ def test_list_media_rejects_unknown_incident(client):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_media_as_admin_removes_file_from_disk(client, make_user, make_property, make_incident, monkeypatch, tmp_path):
+def test_delete_media_as_admin_removes_file_from_disk(client, make_user, make_property, make_incident, monkeypatch, tmp_path, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user(role="ADMIN"))
     incident = make_incident(make_property().property_id)
@@ -175,7 +175,7 @@ def test_delete_media_as_admin_removes_file_from_disk(client, make_user, make_pr
 
     assert resp.status_code == 204
     assert not (tmp_path / upload["file_path"]).exists()
-    assert client.get(f"/api/incidents/{incident.incident_id}/media").json() == []
+    assert client.get(f"/api/incidents/{incident.incident_id}/media", headers=reader_headers).json() == []
 
 
 def test_delete_media_forbidden_for_property_manager(client, make_user, make_property, make_incident, monkeypatch):
@@ -200,14 +200,14 @@ def test_delete_nonexistent_media_returns_404(client, make_user):
 # ---------------------------------------------------------------------------
 
 
-def test_signed_url_and_download_round_trip(client, make_user, make_property, make_incident, monkeypatch):
+def test_signed_url_and_download_round_trip(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user())
     incident = make_incident(make_property().property_id)
     content = b"\xff\xd8\xff real-ish jpeg bytes"
     media_id = _upload(client, headers, incident.incident_id, content=content).json()["media_id"]
 
-    signed = client.get(f"/api/media/{media_id}/signed-url")
+    signed = client.get(f"/api/media/{media_id}/signed-url", headers=reader_headers)
     assert signed.status_code == 200
     body = signed.json()
     assert "download_url" in body and body["storage_key"]
@@ -218,7 +218,7 @@ def test_signed_url_and_download_round_trip(client, make_user, make_property, ma
     assert download.headers["content-type"] == "image/jpeg"
 
 
-def test_same_named_photos_do_not_overwrite_each_other(client, make_user, make_property, make_incident, monkeypatch):
+def test_same_named_photos_do_not_overwrite_each_other(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     # Phone cameras often name every capture "image.jpg" — each upload must keep its own
     # bytes, and deleting one must leave the other downloadable.
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
@@ -230,7 +230,7 @@ def test_same_named_photos_do_not_overwrite_each_other(client, make_user, make_p
 
     assert client.delete(f"/api/media/{second['media_id']}", headers=headers).status_code == 204
 
-    signed = client.get(f"/api/media/{first['media_id']}/signed-url").json()
+    signed = client.get(f"/api/media/{first['media_id']}/signed-url", headers=reader_headers).json()
     download = client.get(signed["download_url"])
     assert download.status_code == 200
     assert download.content == b"FIRST"
@@ -249,13 +249,13 @@ def test_upload_with_traversal_filename_is_kept_inside_storage(client, make_user
     assert (tmp_path / resp.json()["file_path"]).exists()
 
 
-def test_download_works_for_a_filename_with_url_special_characters(client, make_user, make_property, make_incident, monkeypatch):
+def test_download_works_for_a_filename_with_url_special_characters(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user())
     incident = make_incident(make_property().property_id)
     media_id = _upload(client, headers, incident.incident_id, filename="R&D #1+2 צילום.jpg", content=b"BYTES").json()["media_id"]
 
-    signed = client.get(f"/api/media/{media_id}/signed-url").json()
+    signed = client.get(f"/api/media/{media_id}/signed-url", headers=reader_headers).json()
     download = client.get(signed["download_url"])
     assert download.status_code == 200
     assert download.content == b"BYTES"
@@ -271,17 +271,17 @@ def test_download_rejects_a_validly_signed_key_outside_storage(client, tmp_path)
     assert resp.status_code == 404
 
 
-def test_signed_url_for_nonexistent_media_returns_404(client):
-    resp = client.get("/api/media/999999/signed-url")
+def test_signed_url_for_nonexistent_media_returns_404(client, reader_headers):
+    resp = client.get("/api/media/999999/signed-url", headers=reader_headers)
     assert resp.status_code == 404
 
 
-def test_download_rejects_tampered_token(client, make_user, make_property, make_incident, monkeypatch):
+def test_download_rejects_tampered_token(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user())
     incident = make_incident(make_property().property_id)
     media_id = _upload(client, headers, incident.incident_id).json()["media_id"]
-    signed = client.get(f"/api/media/{media_id}/signed-url").json()
+    signed = client.get(f"/api/media/{media_id}/signed-url", headers=reader_headers).json()
 
     resp = client.get(
         "/api/media/download",
@@ -290,12 +290,12 @@ def test_download_rejects_tampered_token(client, make_user, make_property, make_
     assert resp.status_code == 403
 
 
-def test_download_rejects_expired_signature(client, make_user, make_property, make_incident, monkeypatch):
+def test_download_rejects_expired_signature(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user())
     incident = make_incident(make_property().property_id)
     media_id = _upload(client, headers, incident.incident_id).json()["media_id"]
-    storage_key = client.get(f"/api/media/{media_id}/signed-url").json()["storage_key"]
+    storage_key = client.get(f"/api/media/{media_id}/signed-url", headers=reader_headers).json()["storage_key"]
 
     expired = storage.generate_signed_url(storage_key, expires_in_seconds=-10)
     resp = client.get(
@@ -305,12 +305,12 @@ def test_download_rejects_expired_signature(client, make_user, make_property, ma
     assert resp.status_code == 403
 
 
-def test_download_missing_file_after_delete_returns_404(client, make_user, make_property, make_incident, monkeypatch):
+def test_download_missing_file_after_delete_returns_404(client, make_user, make_property, make_incident, monkeypatch, reader_headers):
     monkeypatch.setattr(media.storage, "extract_image_metadata", lambda *_: None)
     headers = auth_headers(make_user(role="ADMIN"))
     incident = make_incident(make_property().property_id)
     media_id = _upload(client, headers, incident.incident_id).json()["media_id"]
-    storage_key = client.get(f"/api/media/{media_id}/signed-url").json()["storage_key"]
+    storage_key = client.get(f"/api/media/{media_id}/signed-url", headers=reader_headers).json()["storage_key"]
 
     client.delete(f"/api/media/{media_id}", headers=headers)
 

@@ -59,7 +59,10 @@ def _to_out(task: models.MitigationTask) -> schemas.MitigationTaskOut:
 
 
 @router.get("", response_model=list[schemas.MitigationTaskOut])
-def list_tasks(db: Session = Depends(get_db)):
+def list_tasks(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     tasks = db.scalars(select(models.MitigationTask).order_by(models.MitigationTask.due_date)).all()
     for task in tasks:
         _sync_overdue(task)
@@ -68,7 +71,10 @@ def list_tasks(db: Session = Depends(get_db)):
 
 
 @router.get("/roi-summary", response_model=list[schemas.MitigationRoiBreakdown])
-def get_roi_summary(db: Session = Depends(get_db)):
+def get_roi_summary(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """calculate_mitigation_roi_breakdown for every task, sorted by ROI descending —
     powers the executive report's "ROI על מיטיגציה" section. Registered before
     `/{task_id}` so "roi-summary" isn't swallowed by the int path-param route."""
@@ -76,7 +82,11 @@ def get_roi_summary(db: Session = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=schemas.MitigationTaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     task = db.get(models.MitigationTask, task_id)
     if not task:
         raise HTTPException(404, "Mitigation task not found")
@@ -142,7 +152,11 @@ def update_task(
 
 
 @router.get("/{task_id}/roi", response_model=schemas.MitigationRoiBreakdown)
-def get_task_roi(task_id: int, db: Session = Depends(get_db)):
+def get_task_roi(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     breakdown = calculate_mitigation_roi_breakdown(db, task_id)
     if breakdown is None:
         raise HTTPException(404, "Mitigation task not found")

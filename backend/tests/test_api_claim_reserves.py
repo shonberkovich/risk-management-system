@@ -54,7 +54,7 @@ def test_create_reserve_for_missing_claim_is_404(client, make_user):
     assert resp.status_code == 404
 
 
-def test_create_and_list_reserves(client, make_property, make_user, make_policy):
+def test_create_and_list_reserves(client, make_property, make_user, make_policy, reader_headers):
     manager = make_user(role="RISK_MANAGER")
     headers = auth_headers(manager)
     claim = _open_claim(client, make_property, make_user, make_policy, headers)
@@ -69,7 +69,7 @@ def test_create_and_list_reserves(client, make_property, make_user, make_policy)
     assert body["reserve_amount"] == 100000
     assert body["claim_id"] == claim["claim_id"]
 
-    listed = client.get(f"/api/claims/{claim['claim_id']}/reserves")
+    listed = client.get(f"/api/claims/{claim['claim_id']}/reserves", headers=reader_headers)
     assert listed.status_code == 200
     assert len(listed.json()) == 1
 

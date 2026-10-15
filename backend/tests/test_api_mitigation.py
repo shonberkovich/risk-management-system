@@ -170,14 +170,14 @@ def test_update_task_completed_status_survives_past_due_date(client, make_user, 
     assert resp.json()["status"] == "COMPLETED"
 
 
-def test_task_reverts_from_overdue_to_open_when_due_date_moved_to_future(client, make_user, make_property):
+def test_task_reverts_from_overdue_to_open_when_due_date_moved_to_future(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user(role="ADMIN"))
     prop = make_property()
     past_date = (date.today() - timedelta(days=3)).isoformat()
     task_id = client.post(
         "/api/mitigation-tasks", json=_create_payload(prop.property_id, due_date=past_date), headers=headers
     ).json()["task_id"]
-    assert client.get(f"/api/mitigation-tasks/{task_id}").json()["status"] == "OVERDUE"
+    assert client.get(f"/api/mitigation-tasks/{task_id}", headers=reader_headers).json()["status"] == "OVERDUE"
 
     future_date = (date.today() + timedelta(days=10)).isoformat()
     resp = client.patch(f"/api/mitigation-tasks/{task_id}", json={"due_date": future_date}, headers=headers)
@@ -216,51 +216,51 @@ def test_update_task_rejects_unknown_assigned_user(client, make_user, make_prope
 # ---------------------------------------------------------------------------
 
 
-def test_get_task_404_for_unknown_id(client):
-    assert client.get("/api/mitigation-tasks/999999").status_code == 404
+def test_get_task_404_for_unknown_id(client, reader_headers):
+    assert client.get("/api/mitigation-tasks/999999", headers=reader_headers).status_code == 404
 
 
-def test_list_tasks_auto_heals_stale_overdue_status_on_read(client, make_user, make_property, make_mitigation_task, db):
+def test_list_tasks_auto_heals_stale_overdue_status_on_read(client, make_user, make_property, make_mitigation_task, db, reader_headers):
     """A task inserted directly with status="OVERDUE" and a due_date already in
     the future (e.g. stale data from before a due_date correction) must be
     healed back to OPEN the moment it's listed, not just on update."""
     prop = make_property()
     make_mitigation_task(prop.property_id, status="OVERDUE", due_date=date.today() + timedelta(days=5))
 
-    resp = client.get("/api/mitigation-tasks")
+    resp = client.get("/api/mitigation-tasks", headers=reader_headers)
 
     assert resp.status_code == 200
     assert all(t["status"] != "OVERDUE" for t in resp.json())
 
 
-def test_roi_summary_sorts_descending_and_places_null_roi_last(client, make_user, make_property):
+def test_roi_summary_sorts_descending_and_places_null_roi_last(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user(role="ADMIN"))
     prop = make_property()
     client.post("/api/mitigation-tasks", json=_create_payload(prop.property_id, cost_estimate=0, expected_annual_savings=0, title="No ROI"), headers=headers)
     client.post("/api/mitigation-tasks", json=_create_payload(prop.property_id, cost_estimate=100_000, expected_annual_savings=50_000, title="High ROI"), headers=headers)
     client.post("/api/mitigation-tasks", json=_create_payload(prop.property_id, cost_estimate=100_000, expected_annual_savings=10_000, title="Low ROI"), headers=headers)
 
-    resp = client.get("/api/mitigation-tasks/roi-summary")
+    resp = client.get("/api/mitigation-tasks/roi-summary", headers=reader_headers)
 
     assert resp.status_code == 200
     titles = [r["title"] for r in resp.json()]
     assert titles == ["High ROI", "Low ROI", "No ROI"]
 
 
-def test_roi_summary_route_not_shadowed_by_task_id_route(client):
+def test_roi_summary_route_not_shadowed_by_task_id_route(client, reader_headers):
     """/roi-summary must resolve to the dedicated endpoint, not get swallowed
     by GET /{task_id} treating "roi-summary" as an int path param (which would
     422, not 200-with-a-list) — a route-ordering regression guard."""
-    resp = client.get("/api/mitigation-tasks/roi-summary")
+    resp = client.get("/api/mitigation-tasks/roi-summary", headers=reader_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
 
-def test_task_roi_breakdown_404_for_unknown_task(client):
-    assert client.get("/api/mitigation-tasks/999999/roi").status_code == 404
+def test_task_roi_breakdown_404_for_unknown_task(client, reader_headers):
+    assert client.get("/api/mitigation-tasks/999999/roi", headers=reader_headers).status_code == 404
 
 
-def test_task_roi_breakdown_no_active_policy_attributes_all_savings_to_loss_savings(client, make_user, make_property):
+def test_task_roi_breakdown_no_active_policy_attributes_all_savings_to_loss_savings(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user(role="ADMIN"))
     prop = make_property()
     task_id = client.post(
@@ -269,7 +269,7 @@ def test_task_roi_breakdown_no_active_policy_attributes_all_savings_to_loss_savi
         headers=headers,
     ).json()["task_id"]
 
-    resp = client.get(f"/api/mitigation-tasks/{task_id}/roi")
+    resp = client.get(f"/api/mitigation-tasks/{task_id}/roi", headers=reader_headers)
 
     assert resp.status_code == 200
     body = resp.json()
@@ -279,7 +279,7 @@ def test_task_roi_breakdown_no_active_policy_attributes_all_savings_to_loss_savi
     assert body["payback_years"] == 5.0
 
 
-def test_task_roi_breakdown_zero_savings_has_null_payback(client, make_user, make_property):
+def test_task_roi_breakdown_zero_savings_has_null_payback(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user(role="ADMIN"))
     prop = make_property()
     task_id = client.post(
@@ -288,7 +288,7 @@ def test_task_roi_breakdown_zero_savings_has_null_payback(client, make_user, mak
         headers=headers,
     ).json()["task_id"]
 
-    resp = client.get(f"/api/mitigation-tasks/{task_id}/roi")
+    resp = client.get(f"/api/mitigation-tasks/{task_id}/roi", headers=reader_headers)
 
     assert resp.status_code == 200
     assert resp.json()["payback_years"] is None

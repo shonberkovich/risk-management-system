@@ -29,7 +29,10 @@ def get_kpis(
 
 
 @router.get("/map", response_model=list[schemas.PropertyMapPoint])
-def get_map_points(db: Session = Depends(get_db)):
+def get_map_points(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     props = db.scalars(select(models.Property).where(models.Property.is_active == True)).all()  # noqa: E712
     incidents = db.scalars(select(models.Incident)).all()
 
@@ -70,7 +73,10 @@ SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 
 
 @router.get("/risk-matrix", response_model=list[schemas.RiskMatrixCell])
-def get_risk_matrix(db: Session = Depends(get_db)):
+def get_risk_matrix(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """3x3 probability x severity matrix. Probability derived from the property's
     composite risk score (Asset_Risk_Profiles); severity from worst open incident
     on that property (or a baseline low if none)."""
@@ -121,7 +127,10 @@ def get_loss_ratio_trend(
 
 
 @router.get("/alerts", response_model=list[schemas.AlertOut])
-def get_alerts(db: Session = Depends(get_db)):
+def get_alerts(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """Threshold-crossing alerts: geographic exposure clusters and open-incident
     concentration per property. See kpi.calculate_alerts for the fixed thresholds."""
     return kpi.calculate_alerts(db)
@@ -167,7 +176,10 @@ def get_geographic_exposure_clusters(
 
 
 @router.get("/hazard-distribution", response_model=list[schemas.HazardDistributionItem])
-def get_hazard_distribution(db: Session = Depends(get_db)):
+def get_hazard_distribution(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     rows = db.execute(
         select(models.Incident.hazard_type, func.count().label("cnt"))
         .group_by(models.Incident.hazard_type)

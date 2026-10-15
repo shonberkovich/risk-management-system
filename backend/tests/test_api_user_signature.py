@@ -135,7 +135,7 @@ def test_signature_included_in_login_token_pair(client, make_user):
     assert login_resp.json()["user"]["signature"] == "<p>חתימה</p>"
 
 
-def test_open_users_list_does_not_leak_signatures(client, make_user):
+def test_open_users_list_does_not_leak_signatures(client, make_user, reader_headers):
     """UserOut (used by the open GET /api/users picker) deliberately stays without
     `signature` — only UserMeOut (self-only endpoints) carries it. See schemas.py's
     UserMeOut docstring."""
@@ -145,7 +145,7 @@ def test_open_users_list_does_not_leak_signatures(client, make_user):
         json={"signature": "<p>סודי</p>"},
         headers=auth_headers(user),
     )
-    listed = client.get("/api/users").json()
+    listed = client.get("/api/users", headers=reader_headers).json()
     row = next(u for u in listed if u["user_id"] == user.user_id)
     assert "signature" not in row
 

@@ -20,7 +20,7 @@ def _incident_payload(property_id: int, **overrides) -> dict:
     return payload
 
 
-def test_create_and_get_incident(client, make_property, make_user):
+def test_create_and_get_incident(client, make_property, make_user, reader_headers):
     prop = make_property()
     reporter = make_user(role="FIELD_WORKER")  # incidents.create allows any authenticated role
 
@@ -30,7 +30,7 @@ def test_create_and_get_incident(client, make_property, make_user):
     assert body["status"] == "NEW"
     assert body["incident_code"].startswith("INC-")
 
-    get_resp = client.get(f"/api/incidents/{body['incident_id']}")
+    get_resp = client.get(f"/api/incidents/{body['incident_id']}", headers=reader_headers)
     assert get_resp.status_code == 200
     assert get_resp.json()["description"] == "שריפה קטנה במחסן"
     # TODO_SPEC.md §11 item 2: resolved_address is server-derived (reverse-geocoded
@@ -51,7 +51,7 @@ def test_create_incident_for_missing_property_is_404(client, make_user):
     assert resp.status_code == 404
 
 
-def test_critical_incident_auto_creates_mitigation_task(client, make_property, make_user):
+def test_critical_incident_auto_creates_mitigation_task(client, make_property, make_user, reader_headers):
     """CRITICAL-severity incidents trigger an auto-generated follow-up mitigation
     task (see incidents.py _trigger_critical_incident_ticket)."""
     prop = make_property()
@@ -71,7 +71,7 @@ def test_critical_incident_auto_creates_mitigation_task(client, make_property, m
     )
     assert resp.status_code == 201
 
-    tasks = client.get("/api/mitigation-tasks").json()
+    tasks = client.get("/api/mitigation-tasks", headers=reader_headers).json()
     assert any(t["property_id"] == prop.property_id for t in tasks)
 
 
@@ -198,7 +198,7 @@ def test_incident_status_update_requires_auth(client, make_property, make_user):
     assert resp.status_code == 401
 
 
-def test_incident_timestamp_with_offset_is_stored_as_naive_utc(client, make_property, make_user):
+def test_incident_timestamp_with_offset_is_stored_as_naive_utc(client, make_property, make_user, reader_headers):
     """The frontend sends `toISOString()` ("...Z"/offset). It must be stored — and read
     back — as naive UTC (models.py convention), not by its wall-clock digits alone."""
     prop = make_property()
@@ -211,7 +211,7 @@ def test_incident_timestamp_with_offset_is_stored_as_naive_utc(client, make_prop
     )
     assert resp.status_code == 201
 
-    stored = client.get(f"/api/incidents/{resp.json()['incident_id']}").json()["incident_timestamp"]
+    stored = client.get(f"/api/incidents/{resp.json()['incident_id']}", headers=reader_headers).json()["incident_timestamp"]
     assert stored == "2024-06-01T07:00:00"
 
 def test_create_incident_records_the_authenticated_reporter(client, db, make_property, make_user):
@@ -250,10 +250,10 @@ def test_a_client_supplied_reporter_is_ignored(client, db, make_property, make_u
     assert incident.reported_by_user_id == reporter.user_id
 
 
-def test_property_filter_zero_matches_no_property(client, make_property, make_incident):
+def test_property_filter_zero_matches_no_property(client, make_property, make_incident, reader_headers):
     """property_id=0 is a filter like any other (no property has id 0), not "no filter"."""
     make_incident(make_property().property_id)
-    resp = client.get("/api/incidents", params={"property_id": 0})
+    resp = client.get("/api/incidents", params={"property_id": 0}, headers=reader_headers)
     assert resp.status_code == 200
     assert resp.json() == []
 

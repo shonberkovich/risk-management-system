@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services import retention
 
 router = APIRouter(prefix="/api/retention", tags=["retention"])
@@ -14,6 +15,7 @@ def get_retention_recommendation(
     property_id: int = Query(..., description="Properties.property_id"),
     estimated_loss: float = Query(..., gt=0, description="Estimated loss amount (₪)"),
     db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
 ):
     """Given a damage estimate and a policy, recommends absorbing the loss vs. filing
     a claim (see services/retention.py for the cost model: full loss out-of-pocket for
@@ -28,7 +30,11 @@ def get_retention_recommendation(
 
 
 @router.get("/incidents/{incident_id}", response_model=schemas.RetentionRecommendation)
-def get_retention_recommendation_for_incident(incident_id: int, db: Session = Depends(get_db)):
+def get_retention_recommendation_for_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """Convenience variant: runs the same recommendation using an existing incident's
     initial_estimated_loss and its property's active policy. 404 if the incident
     doesn't exist or its property has no active policy coverage to compare against."""

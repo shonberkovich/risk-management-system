@@ -1,7 +1,7 @@
 """User lookup + administration.
 
-GET / (list) stays open and minimal (name + role only) — it exists mainly to power UI
-pickers (e.g. assigning an executor to a mitigation task) with real names instead of
+GET / (list) requires sign-in (any role) and stays minimal (name + role only) — it
+exists mainly to power UI pickers (e.g. assigning an executor to a mitigation task) with real names instead of
 raw user_ids, not as an admin surface. The write endpoints below (create, edit, role
 change, disable — TODO_SPEC.md §2 "ניהול משתמשים") are ADMIN-only and return the
 fuller UserAdminOut shape. There is still no self-service registration/password-reset
@@ -10,13 +10,13 @@ flow and no server-side session/token revocation beyond the is_active check
 course demo, same as documented for auth generally in routers/auth.py.
 
 `PATCH /{user_id}/signature` (TODO_SPEC.md "משימה 14") is this module's one
-self-service (non-ADMIN) write endpoint — every other endpoint above is either open
-(GET) or ADMIN-gated. It's a "not yours" ownership check, not a role check, so it
+self-service (non-ADMIN) write endpoint — every other endpoint above is either open to any
+signed-in role (GET) or ADMIN-gated. It's a "not yours" ownership check, not a role check, so it
 deliberately returns 403 rather than reusing routers/emails.py's 404-for-"not yours"
 convention: that 404 exists specifically to stop a caller from confirming an
 *email_id* exists in a mailbox they can't see (mailbox contents are private, and even
 their existence is sensitive). A user_id carries no equivalent secret here — GET
-/api/users already lists every user_id + name openly to any caller, admin or not — so
+/api/users already lists every user_id + name to any signed-in caller, admin or not — so
 there's nothing to hide by pretending user #7 doesn't exist; 403 (matches this app's
 general RBAC-failure convention, dependencies/permissions.require_roles) says plainly
 "that's not yours" instead of a misleading 404.
@@ -90,7 +90,10 @@ def _real_users_query():
 
 
 @router.get("", response_model=list[schemas.UserOut])
-def list_users(db: Session = Depends(get_db)):
+def list_users(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     return db.scalars(_real_users_query()).all()
 
 

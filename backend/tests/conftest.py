@@ -152,6 +152,15 @@ def make_user(db: Session):
     return _make
 
 
+@pytest.fixture()
+def reader_headers(make_user) -> dict[str, str]:
+    """Bearer header for a signed-in FIELD_WORKER, for tests that read through an
+    any-signed-in GET endpoint (require_roles() with no args) but aren't about auth.
+    The lowest-privilege role on purpose: a read that turns out to need more than
+    "signed in" fails loudly here instead of passing on an admin token."""
+    return auth_headers(make_user(role="FIELD_WORKER"))
+
+
 def auth_headers(user: models.User) -> dict[str, str]:
     """Bearer header for `user`, minted directly via create_access_token (not through
     /api/auth/login) — used by tests that only care about RBAC on a *different*
