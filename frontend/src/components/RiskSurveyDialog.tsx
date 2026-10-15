@@ -144,7 +144,7 @@ export default function RiskSurveyDialog({
           />
 
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={7}>
+            <Grid item xs={12} sm={7}>
               <TextField
                 label="MFL — אומדן נזק מרבי צפוי (₪)"
                 type="number"
@@ -153,7 +153,7 @@ export default function RiskSurveyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, mfl_amount: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={5}>
+            <Grid item xs={12} sm={5}>
               <FormControlLabel
                 control={
                   <Switch

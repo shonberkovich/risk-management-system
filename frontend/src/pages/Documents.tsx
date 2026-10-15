@@ -2,6 +2,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -211,7 +212,7 @@ export default function Documents() {
               </TextField>
 
               <Autocomplete
-                sx={{ minWidth: 280, flexGrow: 1 }}
+                sx={{ minWidth: { xs: 0, sm: 280 }, maxWidth: { md: 560 }, flexGrow: 1 }}
                 options={entityOptions}
                 value={entity}
                 onChange={(_, value) => setEntity(value)}
@@ -272,21 +273,23 @@ export default function Documents() {
                 <CircularProgress size={24} />
               </Stack>
             ) : (documents.data ?? []).length > 0 ? (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>סוג מסמך</TableCell>
-                    <TableCell>תאריך העלאה</TableCell>
-                    <TableCell>קישור</TableCell>
-                    <TableCell align="left">פעולות</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(documents.data ?? []).map((d) => (
-                    <DocumentRow key={d.document_id} doc={d} onDelete={handleDelete} canDelete={canDelete} />
-                  ))}
-                </TableBody>
-              </Table>
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>סוג מסמך</TableCell>
+                      <TableCell>תאריך העלאה</TableCell>
+                      <TableCell>קישור</TableCell>
+                      <TableCell align="left">פעולות</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(documents.data ?? []).map((d) => (
+                      <DocumentRow key={d.document_id} doc={d} onDelete={handleDelete} canDelete={canDelete} />
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
             ) : (
               <Typography variant="body2" color="text.secondary">
                 לא צורפו מסמכים לישות זו עדיין.

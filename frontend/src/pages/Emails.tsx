@@ -1,3 +1,4 @@
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CampaignIcon from "@mui/icons-material/Campaign";
@@ -37,7 +38,8 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useEffect, useState } from "react";
+import { useTheme } from "@mui/material/styles";
+import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
 import {
@@ -535,6 +537,19 @@ export default function Emails() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["emails"] }),
   });
 
+  // Below the 3-pane breakpoint the reading pane replaces the list (see the layout
+  // comment in the JSX), so bring it into view when a message opens — otherwise a
+  // tap on a row far down a long list would leave the viewport scrolled past it.
+  const threadOpen = selectedId !== null;
+  const threadCardRef = useRef<HTMLDivElement | null>(null);
+  const theme = useTheme();
+  useEffect(() => {
+    if (!threadOpen || typeof window.matchMedia !== "function") return;
+    if (window.matchMedia(theme.breakpoints.up("lg").replace(/^@media\s*/, "")).matches) return;
+    const el = threadCardRef.current;
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" });
+  }, [threadOpen, selectedId, theme]);
+
   const handleSelectFolder = (nextFolder: EmailFolder) => {
     setFolder(nextFolder);
     setSelectedId(null);
@@ -550,10 +565,10 @@ export default function Emails() {
   return (
     <Stack spacing={3}>
       <OutOfOfficeBanner user={user} />
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-        <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
           <MailOutlineIcon color="primary" fontSize="large" />
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
               דואר
             </Typography>
@@ -562,7 +577,7 @@ export default function Emails() {
             </Typography>
           </Box>
         </Stack>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Button
             variant="outlined"
             startIcon={<ScheduleIcon />}
@@ -590,8 +605,20 @@ export default function Emails() {
       />
       <ScheduledEmailsDialog open={scheduledDialogOpen} onClose={() => setScheduledDialogOpen(false)} />
 
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
-        <Card variant="outlined" sx={{ flexShrink: 0, width: { xs: "100%", md: "auto" } }}>
+      {/* Responsive mail client: ≥lg shows folders | list | reading pane side by
+          side; below lg it becomes a list→detail flow (opening a message swaps the
+          list for the reading pane, with a "back" button), and below md the folder
+          nav also steps aside while a message is open, so a phone always gets the
+          full width for whichever pane is active. */}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "flex-start" }}>
+        <Card
+          variant="outlined"
+          sx={{
+            flexShrink: 0,
+            width: { xs: "100%", md: "auto" },
+            display: { xs: threadOpen ? "none" : "block", md: "block" },
+          }}
+        >
           <EmailSidebar
             selected={folder}
             onSelect={handleSelectFolder}
@@ -600,7 +627,10 @@ export default function Emails() {
           />
         </Card>
 
-        <Card variant="outlined" sx={{ flex: 1, minWidth: 0, width: "100%" }}>
+        <Card
+          variant="outlined"
+          sx={{ flex: 1, minWidth: 0, width: "100%", display: { xs: threadOpen ? "none" : "block", lg: "block" } }}
+        >
           <CardContent>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
               {FOLDER_LABELS[folder]} ({list.data?.length ?? 0})
@@ -627,48 +657,63 @@ export default function Emails() {
             {list.isLoading ? (
               <CircularProgress size={20} />
             ) : (list.data ?? []).length > 0 ? (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>שולח</TableCell>
-                    <TableCell>נושא</TableCell>
-                    <TableCell>תאריך</TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(list.data ?? []).map((item) => (
-                    <TableRow
-                      key={item.email_id}
-                      hover
-                      selected={item.email_id === selectedId}
-                      onClick={() => handleRowClick(item)}
-                      sx={{ cursor: "pointer" }}
-                      data-testid={`email-row-${item.email_id}`}
-                    >
-                      <TableCell style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.sender.full_name}</TableCell>
-                      <TableCell>
-                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
-                          <span style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.subject}</span>
-                          {item.is_system_email && <SystemEmailChip />}
-                          {item.labels.map((label) => (
-                            <Chip
-                              key={label.id}
-                              size="small"
-                              label={label.name}
-                              sx={{ bgcolor: label.color, color: "#fff", height: 18, fontSize: "0.7rem" }}
-                            />
-                          ))}
-                        </Stack>
-                      </TableCell>
-                      <TableCell>{formatDateTime(item.created_at)}</TableCell>
-                      <TableCell padding="none" onClick={(e) => e.stopPropagation()}>
-                        <EmailLabelMenu item={item} />
-                      </TableCell>
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ "& .MuiTableCell-root:not(.MuiTableCell-paddingNone)": { px: { xs: 1, sm: 2 } } }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>שולח</TableCell>
+                      <TableCell>נושא</TableCell>
+                      <TableCell sx={{ display: { xs: "none", sm: "table-cell", lg: "none", xl: "table-cell" } }}>תאריך</TableCell>
+                      <TableCell />
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {(list.data ?? []).map((item) => (
+                      <TableRow
+                        key={item.email_id}
+                        hover
+                        selected={item.email_id === selectedId}
+                        onClick={() => handleRowClick(item)}
+                        sx={{ cursor: "pointer" }}
+                        data-testid={`email-row-${item.email_id}`}
+                      >
+                        <TableCell style={{ fontWeight: item.is_read ? 400 : 700 }}>
+                          {item.sender.full_name}
+                          {/* Where the list pane is narrow (phones, and the 3-pane lg range) the date
+                            column is dropped (see TableHead) and the date shows here instead. */}
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: { xs: "block", sm: "none", lg: "block", xl: "none" }, fontWeight: 400, whiteSpace: "nowrap" }}
+                          >
+                            {formatDateTime(item.created_at)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                            <span style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.subject}</span>
+                            {item.is_system_email && <SystemEmailChip />}
+                            {item.labels.map((label) => (
+                              <Chip
+                                key={label.id}
+                                size="small"
+                                label={label.name}
+                                sx={{ bgcolor: label.color, color: "#fff", height: 18, fontSize: "0.7rem" }}
+                              />
+                            ))}
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ display: { xs: "none", sm: "table-cell", lg: "none", xl: "table-cell" }, whiteSpace: "nowrap" }}>
+                          {formatDateTime(item.created_at)}
+                        </TableCell>
+                        <TableCell padding="none" onClick={(e) => e.stopPropagation()}>
+                          <EmailLabelMenu item={item} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
             ) : (
               <Typography variant="body2" color="text.secondary">
                 {debouncedSearch ? "לא נמצאו הודעות התואמות לחיפוש." : "אין הודעות בתיקייה זו."}
@@ -677,8 +722,29 @@ export default function Emails() {
           </CardContent>
         </Card>
 
-        <Card variant="outlined" sx={{ flex: 1, minWidth: 0, width: "100%" }}>
+        <Card
+          ref={threadCardRef}
+          variant="outlined"
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            width: "100%",
+            display: { xs: threadOpen ? "block" : "none", lg: "block" },
+            scrollMarginTop: 88,
+          }}
+        >
           <CardContent>
+            {threadOpen && (
+              <Button
+                size="small"
+                startIcon={<ArrowForwardIcon />}
+                onClick={() => setSelectedId(null)}
+                sx={{ display: { xs: "inline-flex", lg: "none" }, mb: 1.5 }}
+                data-testid="email-thread-back"
+              >
+                חזרה לרשימה
+              </Button>
+            )}
             {selectedId ? (
               <EmailThreadView emailId={selectedId} onOpenReply={openComposeReply} />
             ) : (

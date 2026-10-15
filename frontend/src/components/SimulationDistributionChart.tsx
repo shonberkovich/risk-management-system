@@ -44,7 +44,9 @@ export default function SimulationDistributionChart({
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+      {/* top: room for the two staggered VaR labels; right: the last tick label is centred
+          on the last bar and would otherwise be clipped at the chart edge. */}
+      <BarChart data={chartData} margin={{ top: 30, right: 26, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="rmis-sim-bar" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={neon.cyan} stopOpacity={0.95} />
@@ -52,7 +54,7 @@ export default function SimulationDistributionChart({
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+        <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={8} />
         <YAxis tick={{ fontSize: 12 }} width={40} allowDecimals={false} />
         <Tooltip
           contentStyle={{ direction: "rtl", fontFamily: theme.typography.fontFamily }}
@@ -65,13 +67,15 @@ export default function SimulationDistributionChart({
           x={chartData.reduce((closest, d) => (Math.abs((d.bucket_min + d.bucket_max) / 2 - var95) < Math.abs((closest.bucket_min + closest.bucket_max) / 2 - var95) ? d : closest)).label}
           stroke={neon.medium}
           strokeDasharray="4 4"
-          label={{ value: "VaR 95%", fontSize: 11, fill: neon.medium, position: "top" }}
+          label={{ value: "VaR 95%", fontSize: 11, fill: neon.medium, position: "top", offset: 4 }}
         />
         <ReferenceLine
           x={chartData.reduce((closest, d) => (Math.abs((d.bucket_min + d.bucket_max) / 2 - var99) < Math.abs((closest.bucket_min + closest.bucket_max) / 2 - var99) ? d : closest)).label}
           stroke={neon.critical}
           strokeDasharray="4 4"
-          label={{ value: "VaR 99%", fontSize: 11, fill: neon.critical, position: "top" }}
+          // Raised one line above VaR 95%: on a phone-width chart the two lines often sit a
+          // bar or two apart and same-height labels printed over each other.
+          label={{ value: "VaR 99%", fontSize: 11, fill: neon.critical, position: "top", offset: 17 }}
         />
         <Bar dataKey="count" fill="url(#rmis-sim-bar)" radius={[6, 6, 1, 1]} />
       </BarChart>

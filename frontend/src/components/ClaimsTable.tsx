@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 
 import type { ClaimTrackingRow } from "../api/client";
 import { CLAIM_STATUS_LABELS, HAZARD_LABELS, formatDate, formatIls } from "../format";
+import { DATA_TABLE_SX, NAME_CELL_SX, WRAP_CELL_CLASS } from "./responsiveTable";
 
 const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   DRAFT: "default",
@@ -49,7 +50,7 @@ export default function ClaimsTable({
 
   return (
     <TableContainer sx={{ maxHeight: 360 }}>
-      <Table size="small" stickyHeader>
+      <Table size="small" stickyHeader sx={DATA_TABLE_SX}>
         <TableHead>
           <TableRow>
             <TableCell>מס' תביעה</TableCell>
@@ -68,7 +69,9 @@ export default function ClaimsTable({
           {rows.map((r) => (
             <TableRow key={r.claim_id} hover>
               <TableCell>{r.claim_number}</TableCell>
-              <TableCell>{r.property_name}</TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                {r.property_name}
+              </TableCell>
               <TableCell>{HAZARD_LABELS[r.hazard_type] ?? r.hazard_type}</TableCell>
               <TableCell align="left">{formatIls(r.claimed_amount)}</TableCell>
               <TableCell align="left">{formatIls(r.deductible_applied)}</TableCell>

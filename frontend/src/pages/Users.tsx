@@ -54,7 +54,7 @@ export default function Users() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
         <Stack direction="row" spacing={1} alignItems="center">
           <PeopleAltIcon color="primary" fontSize="large" />
           <Box>
@@ -78,49 +78,51 @@ export default function Users() {
       ) : users.isError ? (
         <Alert severity="error">שגיאה בטעינת רשימת המשתמשים.</Alert>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>שם מלא</TableCell>
-              <TableCell>אימייל</TableCell>
-              <TableCell>תפקיד</TableCell>
-              <TableCell>סטטוס</TableCell>
-              <TableCell>נוצר בתאריך</TableCell>
-              <TableCell align="left">פעולות</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(users.data ?? []).map((u) => (
-              <TableRow key={u.user_id} hover>
-                <TableCell>
-                  {u.full_name}
-                  {u.user_id === me?.user_id && (
-                    <Chip label="אני" size="small" variant="outlined" sx={{ marginInlineStart: 1, height: 18 }} />
-                  )}
-                </TableCell>
-                <TableCell sx={{ direction: "ltr", textAlign: "right" }}>{u.email}</TableCell>
-                <TableCell>
-                  <Chip label={ROLE_LABELS[u.role] ?? u.role} size="small" />
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={u.is_active ? "פעיל" : "מושבת"}
-                    size="small"
-                    color={u.is_active ? "success" : "default"}
-                  />
-                </TableCell>
-                <TableCell>{formatDateTime(u.created_at)}</TableCell>
-                <TableCell align="left">
-                  <Tooltip title="עריכה">
-                    <IconButton size="small" onClick={() => openEdit(u)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </TableCell>
+        <Box sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>שם מלא</TableCell>
+                <TableCell>אימייל</TableCell>
+                <TableCell>תפקיד</TableCell>
+                <TableCell>סטטוס</TableCell>
+                <TableCell>נוצר בתאריך</TableCell>
+                <TableCell align="left">פעולות</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {(users.data ?? []).map((u) => (
+                <TableRow key={u.user_id} hover>
+                  <TableCell>
+                    {u.full_name}
+                    {u.user_id === me?.user_id && (
+                      <Chip label="אני" size="small" variant="outlined" sx={{ marginInlineStart: 1, height: 18 }} />
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ direction: "ltr", textAlign: "right" }}>{u.email}</TableCell>
+                  <TableCell>
+                    <Chip label={ROLE_LABELS[u.role] ?? u.role} size="small" />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={u.is_active ? "פעיל" : "מושבת"}
+                      size="small"
+                      color={u.is_active ? "success" : "default"}
+                    />
+                  </TableCell>
+                  <TableCell>{formatDateTime(u.created_at)}</TableCell>
+                  <TableCell align="left">
+                    <Tooltip title="עריכה">
+                      <IconButton size="small" onClick={() => openEdit(u)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
       )}
 
       {(users.data?.length ?? 0) === 0 && !users.isLoading && !users.isError && (

@@ -60,7 +60,9 @@ export default function Simulation() {
   const iterationsMax = maxIterationsFor(horizonYears);
   const iterationsMarks = ITERATIONS_MARK_VALUES.filter((v) => v <= iterationsMax).map((v) => ({
     value: v,
-    label: v.toLocaleString("he-IL"),
+    // Compact ("10K"): full "1,000" / "10,000" labels sit ~9% of the track apart and
+    // printed over each other at every width.
+    label: `${v / 1000}K`,
   }));
 
   const portfolioResult = useQuery({
@@ -94,25 +96,27 @@ export default function Simulation() {
   }
 
   return (
-    <Stack spacing={3}>
+    // useFlexGap: a margin-spaced Stack resets its children's margins, which strips the
+    // KPI <Grid container>'s negative offset and pushes the grid 16px past the page edge.
+    <Stack spacing={3} useFlexGap>
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
         סימולציית תיק וניתוח VaR
       </Typography>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: "80ch" }}>
         סימולציית מונטה קרלו של הפסדים צפויים על בסיס הסתברות אירוע וחומרה מבוססות פרופיל הסיכון של כל נכס. ראו{" "}
         <code>backend/app/services/simulation.py</code> למודל המלא (הדגמה לימודית — ללא קורלציה בין נכסים).
       </Typography>
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+          <Stack direction="row" flexWrap="wrap" useFlexGap gap={2} alignItems="center">
             <TextField
               select
               size="small"
               label="היקף"
               value={scope}
               onChange={(e) => setScope(e.target.value === "portfolio" ? "portfolio" : Number(e.target.value))}
-              sx={{ minWidth: 220 }}
+              sx={{ minWidth: { sm: 220 }, flex: { xs: "1 1 100%", sm: "1 1 220px", md: "0 0 auto" } }}
             >
               <MenuItem value="portfolio">כל התיק (Portfolio)</MenuItem>
               {simulatable.map((p) => (
@@ -122,7 +126,7 @@ export default function Simulation() {
               ))}
             </TextField>
 
-            <Box sx={{ minWidth: 260, px: 1 }}>
+            <Box sx={{ minWidth: { sm: 260 }, flex: { xs: "1 1 100%", sm: "1 1 260px", md: "0 0 auto" }, px: 2 }}>
               <Typography variant="caption" color="text.secondary">
                 מספר הרצות: {iterations.toLocaleString("he-IL")}
                 {iterationsMax < ITERATIONS_MAX && ` (עד ${iterationsMax.toLocaleString("he-IL")} באופק זה)`}
@@ -140,7 +144,7 @@ export default function Simulation() {
               />
             </Box>
 
-            <Box sx={{ minWidth: 220, px: 1 }}>
+            <Box sx={{ minWidth: { sm: 220 }, flex: { xs: "1 1 100%", sm: "1 1 220px", md: "0 0 auto" }, px: 2 }}>
               <Typography variant="caption" color="text.secondary">
                 אופק: {horizonYears} {horizonYears === 1 ? "שנה" : "שנים"}
               </Typography>
@@ -161,6 +165,7 @@ export default function Simulation() {
               startIcon={activeQuery.isFetching ? <CircularProgress size={16} color="inherit" /> : <CasinoIcon />}
               onClick={runSimulation}
               disabled={activeQuery.isFetching}
+              sx={{ flex: { xs: "1 1 100%", sm: "0 0 auto" }, minHeight: 40 }}
             >
               {activeQuery.isFetching ? "מריץ סימולציה..." : "הרץ סימולציה"}
             </Button>

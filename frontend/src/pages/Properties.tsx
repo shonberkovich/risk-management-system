@@ -70,8 +70,8 @@ export default function Properties() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={2}>
+        <Typography variant="h5" sx={{ fontWeight: 700, minWidth: 0 }}>
           רשימת נכסים ({properties?.length ?? 0})
         </Typography>
         {canWrite && (
@@ -83,17 +83,26 @@ export default function Properties() {
 
       <Grid container spacing={2}>
         {properties?.map((p) => (
-          <Grid item xs={12} sm={6} md={4} key={p.property_id}>
+          <Grid item xs={12} sm={6} md={4} xl={3} key={p.property_id}>
             <Card variant="outlined" sx={{ height: "100%", position: "relative" }}>
               {canWrite && (
                 <Tooltip title="עריכה">
                   <IconButton
                     size="small"
+                    aria-label="עריכה"
                     onClick={(e) => {
                       e.stopPropagation();
                       openEdit(p);
                     }}
-                    sx={{ position: "absolute", top: 8, insetInlineStart: 8, zIndex: 1, bgcolor: "background.paper" }}
+                    sx={{
+                      position: "absolute",
+                      top: 8,
+                      insetInlineStart: 8,
+                      zIndex: 1,
+                      width: { xs: 40, sm: 34 },
+                      height: { xs: 40, sm: 34 },
+                      bgcolor: "background.paper",
+                    }}
                   >
                     <EditIcon fontSize="small" />
                   </IconButton>
@@ -102,21 +111,29 @@ export default function Properties() {
               <CardActionArea onClick={() => navigate(`/properties/${p.property_id}`)} sx={{ height: "100%" }}>
                 <CardContent>
                   <Stack spacing={1.5}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                      <Stack direction="row" spacing={1} alignItems="center">
+                    {/* With write access the edit button floats over this row's start corner —
+                        indent the row past it so it never covers the icon/name. */}
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      gap={1}
+                      sx={{ paddingInlineStart: canWrite ? { xs: "36px", sm: "30px" } : 0, minHeight: canWrite ? 28 : undefined }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
                         <DomainIcon color="primary" />
-                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}>
                           {p.name}
                         </Typography>
                       </Stack>
-                      <Chip size="small" label={p.property_code} variant="outlined" />
+                      <Chip size="small" label={p.property_code} variant="outlined" sx={{ flexShrink: 0 }} />
                     </Stack>
 
                     <Typography variant="body2" color="text.secondary">
                       {p.address}
                     </Typography>
 
-                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                    <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                       <Chip size="small" label={ASSET_TYPE_LABELS[p.asset_type] ?? p.asset_type} color="primary" variant="outlined" />
                       <Chip size="small" label={p.region} icon={<PublicIcon fontSize="small" />} variant="outlined" />
                       {p.risk_profile?.has_sprinklers && (

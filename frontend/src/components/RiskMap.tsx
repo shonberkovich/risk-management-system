@@ -3,8 +3,8 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useMemo, useRef, useState } from "react";
-import { Circle, CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Circle, CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 import type { Map as LeafletMap } from "leaflet";
 import { useNavigate } from "react-router-dom";
 
@@ -28,6 +28,20 @@ function parseReportedCoordinates(raw: string | null): [number, number] | null {
   const parts = raw.split(",").map((v) => Number(v.trim()));
   if (parts.length !== 2 || parts.some((v) => Number.isNaN(v))) return null;
   return [parts[0], parts[1]];
+}
+
+/** Leaflet only re-measures on window resize; the dashboard's map tile also grows/shrinks
+ * with its bento row (flex-filled to the neighbouring tiles' height, which settles only once
+ * their own queries load), so re-measure whenever the container's box changes. */
+function InvalidateOnResize() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
 }
 
 export default function RiskMap({
@@ -90,8 +104,10 @@ export default function RiskMap({
   );
 
   return (
-    <Stack spacing={1}>
-      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+    // flex: "1 0 auto" lets the map fill a taller parent tile (the dashboard spans it over two
+    // bento rows on lg+) instead of leaving a dead band under it; in a block parent it's a no-op.
+    <Stack spacing={1} sx={{ flex: "1 0 auto" }}>
+      <Stack direction="row" columnGap={2} rowGap={0} flexWrap="wrap" useFlexGap>
         <FormControlLabel
           control={<Switch size="small" checked={showProperties} onChange={(e) => setShowProperties(e.target.checked)} />}
           label={<Typography variant="caption">נכסים</Typography>}
@@ -124,9 +140,10 @@ export default function RiskMap({
         ref={mapRef}
         center={center}
         zoom={7}
-        style={{ height: "clamp(320px, 52vh, 520px)", width: "100%", borderRadius: 18, overflow: "hidden" }}
+        style={{ flex: "1 0 auto", height: "clamp(300px, 52vh, 520px)", width: "100%", borderRadius: 18, overflow: "hidden" }}
         scrollWheelZoom={false}
       >
+        <InvalidateOnResize />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

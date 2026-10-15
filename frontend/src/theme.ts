@@ -633,8 +633,22 @@ export function createAppTheme(mode: ColorMode): Theme {
             WebkitBackdropFilter: glass.blur,
             boxShadow: `${deepShadow}, ${innerHighlight}, 0 0 80px -30px ${alpha(neon.violet, isDark ? 0.6 : 0.35)}`,
             animation: `rmis-dialog-in 0.6s ${ease.out} both`,
+            // Phones: MUI's default 32px gutter left only ~256px of dialog on a 320px screen.
+            // (paperFullScreen re-zeroes margin/size below, so full-screen dialogs are unaffected.)
+            "@media (max-width: 599.95px)": {
+              margin: 12,
+              maxWidth: "calc(100% - 24px)",
+              maxHeight: "calc(100% - 24px)",
+              borderRadius: 22,
+            },
           },
-          paperFullScreen: { borderRadius: 0 },
+          paperFullWidth: {
+            "@media (max-width: 599.95px)": { width: "calc(100% - 24px)" },
+          },
+          paperFullScreen: {
+            borderRadius: 0,
+            "@media (max-width: 599.95px)": { margin: 0, maxWidth: "100%", maxHeight: "none", width: "100%", borderRadius: 0 },
+          },
         },
       },
       MuiDialogTitle: {

@@ -116,7 +116,7 @@ export default function Notifications() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1} sx={{ mb: 1.5 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               תצוגה מקדימה — מי יקבל התראה כרגע ({preview.data?.length ?? 0})
             </Typography>
@@ -163,32 +163,34 @@ export default function Notifications() {
           {preview.isLoading ? (
             <CircularProgress size={20} />
           ) : (preview.data ?? []).length > 0 ? (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>סוג התראה</TableCell>
-                  <TableCell>חומרה</TableCell>
-                  <TableCell>נמען</TableCell>
-                  <TableCell>ערוץ</TableCell>
-                  <TableCell>כותרת</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(preview.data ?? []).map((n, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{ALERT_TYPE_LABELS[n.alert_type] ?? n.alert_type}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={SEVERITY_LABELS[n.severity] ?? n.severity} color={SEVERITY_COLOR[n.severity]} />
-                    </TableCell>
-                    <TableCell>
-                      {n.recipient_name} ({ROLE_LABELS[n.recipient_role] ?? n.recipient_role})
-                    </TableCell>
-                    <TableCell>{CHANNEL_LABELS[n.channel] ?? n.channel}</TableCell>
-                    <TableCell>{n.title}</TableCell>
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>סוג התראה</TableCell>
+                    <TableCell>חומרה</TableCell>
+                    <TableCell>נמען</TableCell>
+                    <TableCell>ערוץ</TableCell>
+                    <TableCell>כותרת</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(preview.data ?? []).map((n, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{ALERT_TYPE_LABELS[n.alert_type] ?? n.alert_type}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={SEVERITY_LABELS[n.severity] ?? n.severity} color={SEVERITY_COLOR[n.severity]} />
+                      </TableCell>
+                      <TableCell>
+                        {n.recipient_name} ({ROLE_LABELS[n.recipient_role] ?? n.recipient_role})
+                      </TableCell>
+                      <TableCell>{CHANNEL_LABELS[n.channel] ?? n.channel}</TableCell>
+                      <TableCell>{n.title}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           ) : (
             <Typography variant="body2" color="text.secondary">
               אין כרגע התראות סף פעילות.
@@ -205,34 +207,36 @@ export default function Notifications() {
           {log.isLoading ? (
             <CircularProgress size={20} />
           ) : (log.data ?? []).length > 0 ? (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>נשלח בתאריך</TableCell>
-                  <TableCell>סוג</TableCell>
-                  <TableCell>חומרה</TableCell>
-                  <TableCell>נמען</TableCell>
-                  <TableCell>ערוץ</TableCell>
-                  <TableCell>יעד</TableCell>
-                  <TableCell>סטטוס</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(log.data ?? []).map((l) => (
-                  <TableRow key={l.log_id} hover>
-                    <TableCell>{formatDateTime(l.sent_at)}</TableCell>
-                    <TableCell>{ALERT_TYPE_LABELS[l.alert_type] ?? l.alert_type}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={SEVERITY_LABELS[l.severity] ?? l.severity} color={SEVERITY_COLOR[l.severity]} />
-                    </TableCell>
-                    <TableCell>{l.recipient_name}</TableCell>
-                    <TableCell>{CHANNEL_LABELS[l.channel] ?? l.channel}</TableCell>
-                    <TableCell sx={{ direction: "ltr", textAlign: "right" }}>{l.contact}</TableCell>
-                    <TableCell>{l.status}</TableCell>
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>נשלח בתאריך</TableCell>
+                    <TableCell>סוג</TableCell>
+                    <TableCell>חומרה</TableCell>
+                    <TableCell>נמען</TableCell>
+                    <TableCell>ערוץ</TableCell>
+                    <TableCell>יעד</TableCell>
+                    <TableCell>סטטוס</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(log.data ?? []).map((l) => (
+                    <TableRow key={l.log_id} hover>
+                      <TableCell>{formatDateTime(l.sent_at)}</TableCell>
+                      <TableCell>{ALERT_TYPE_LABELS[l.alert_type] ?? l.alert_type}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={SEVERITY_LABELS[l.severity] ?? l.severity} color={SEVERITY_COLOR[l.severity]} />
+                      </TableCell>
+                      <TableCell>{l.recipient_name}</TableCell>
+                      <TableCell>{CHANNEL_LABELS[l.channel] ?? l.channel}</TableCell>
+                      <TableCell sx={{ direction: "ltr", textAlign: "right" }}>{l.contact}</TableCell>
+                      <TableCell>{l.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           ) : (
             <Typography variant="body2" color="text.secondary">
               עדיין לא נשלחו התראות.
@@ -243,7 +247,7 @@ export default function Notifications() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1} sx={{ mb: 1.5 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               נמענים ({recipients.data?.length ?? 0})
             </Typography>
@@ -256,59 +260,61 @@ export default function Notifications() {
           {recipients.isLoading ? (
             <CircularProgress size={20} />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>שם</TableCell>
-                  <TableCell>תפקיד</TableCell>
-                  <TableCell>ערוצים</TableCell>
-                  <TableCell>סף חומרה</TableCell>
-                  <TableCell>סטטוס</TableCell>
-                  {canManageRecipients && <TableCell align="left">פעולות</TableCell>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(recipients.data ?? []).map((r) => (
-                  <TableRow key={r.recipient_id} hover>
-                    <TableCell>{r.display_name}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={ROLE_LABELS[r.role] ?? r.role} />
-                    </TableCell>
-                    <TableCell>{r.channels.map((c) => CHANNEL_LABELS[c] ?? c).join(", ")}</TableCell>
-                    <TableCell>{r.min_severity === "critical" ? "קריטי בלבד" : "אזהרה ומעלה"}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={r.is_active ? "פעיל" : "לא פעיל"} color={r.is_active ? "success" : "default"} />
-                    </TableCell>
-                    {canManageRecipients && (
-                      <TableCell align="left">
-                        <Tooltip title="עריכה">
-                          <IconButton size="small" onClick={() => openEdit(r)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="מחיקה">
-                          <IconButton
-                            size="small"
-                            disabled={removeRecipientMutation.isPending}
-                            onClick={async () => {
-                              const confirmed = await confirm({
-                                title: "מחיקת נמען",
-                                message: `למחוק את הנמען "${r.display_name}"?`,
-                                confirmLabel: "מחיקה",
-                                destructive: true,
-                              });
-                              if (confirmed) removeRecipientMutation.mutate(r.recipient_id);
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    )}
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>שם</TableCell>
+                    <TableCell>תפקיד</TableCell>
+                    <TableCell>ערוצים</TableCell>
+                    <TableCell>סף חומרה</TableCell>
+                    <TableCell>סטטוס</TableCell>
+                    {canManageRecipients && <TableCell align="left">פעולות</TableCell>}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(recipients.data ?? []).map((r) => (
+                    <TableRow key={r.recipient_id} hover>
+                      <TableCell>{r.display_name}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={ROLE_LABELS[r.role] ?? r.role} />
+                      </TableCell>
+                      <TableCell>{r.channels.map((c) => CHANNEL_LABELS[c] ?? c).join(", ")}</TableCell>
+                      <TableCell>{r.min_severity === "critical" ? "קריטי בלבד" : "אזהרה ומעלה"}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={r.is_active ? "פעיל" : "לא פעיל"} color={r.is_active ? "success" : "default"} />
+                      </TableCell>
+                      {canManageRecipients && (
+                        <TableCell align="left">
+                          <Tooltip title="עריכה">
+                            <IconButton size="small" onClick={() => openEdit(r)}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="מחיקה">
+                            <IconButton
+                              size="small"
+                              disabled={removeRecipientMutation.isPending}
+                              onClick={async () => {
+                                const confirmed = await confirm({
+                                  title: "מחיקת נמען",
+                                  message: `למחוק את הנמען "${r.display_name}"?`,
+                                  confirmLabel: "מחיקה",
+                                  destructive: true,
+                                });
+                                if (confirmed) removeRecipientMutation.mutate(r.recipient_id);
+                              }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           )}
         </CardContent>
       </Card>

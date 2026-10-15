@@ -37,19 +37,28 @@ export default function Claims() {
   });
 
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Stack spacing={3} useFlexGap>
+      {/* Wraps on narrow screens: the title takes its own line and the filter + export
+          controls drop beneath it (the filter stretching to fill the row on phones). */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={2}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           מעקב תביעות וסטטוס גבייה
         </Typography>
-        <Stack direction="row" spacing={2}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+          gap={1.5}
+          sx={{ width: { xs: "100%", sm: "auto" } }}
+        >
           <TextField
             select
             size="small"
             label="סינון לפי סטטוס"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: { xs: 160, sm: 200 }, flex: { xs: "1 1 160px", sm: "0 0 auto" } }}
           >
             <MenuItem value="">הכל</MenuItem>
             {STATUS_OPTIONS.map((s) => (
@@ -62,6 +71,7 @@ export default function Claims() {
             variant="outlined"
             startIcon={<FileDownloadIcon />}
             disabled={!data || data.length === 0}
+            sx={{ flex: { xs: "1 1 auto", sm: "0 0 auto" }, minHeight: 40 }}
             onClick={() => data && exportClaimsToExcel(data, `תביעות-${todayLocalIsoDate()}.xlsx`)}
           >
             ייצוא ל-Excel

@@ -73,19 +73,19 @@ export default function RetentionCalculator() {
             מחשבון "לספוג או לתבוע"
           </Typography>
         </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: "80ch" }}>
           עבור נזק משוער בנכס מבוטח, המחשבון משווה בין ספיגה עצמית מלאה לבין הגשת תביעה (השתתפות עצמית + תוספת פרמיה
           עתידית צפויה על הסכום שיוחזר מהמבטח) וממליץ על החלופה הזולה יותר. ראו <code>backend/app/services/retention.py</code>.
         </Typography>
 
-        <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+        <Stack direction="row" flexWrap="wrap" useFlexGap gap={2} alignItems="center">
           <TextField
             select
             size="small"
             label="נכס מבוטח"
             value={propertyId}
             onChange={(e) => handlePropertyChange(Number(e.target.value))}
-            sx={{ minWidth: 240 }}
+            sx={{ minWidth: { sm: 240 }, flex: { xs: "1 1 100%", sm: "1 1 240px", md: "0 0 auto" } }}
           >
             {insuredProperties.map((p) => (
               <MenuItem key={p.property_id} value={p.property_id}>
@@ -101,7 +101,7 @@ export default function RetentionCalculator() {
             value={estimatedLoss}
             onChange={(e) => setEstimatedLoss(e.target.value === "" ? "" : Number(e.target.value))}
             inputProps={{ min: 1 }}
-            sx={{ width: 180 }}
+            sx={{ width: { md: 180 }, flex: { xs: "1 1 100%", sm: "1 1 180px", md: "0 0 auto" } }}
           />
 
           <Button
@@ -109,6 +109,7 @@ export default function RetentionCalculator() {
             startIcon={result.isFetching ? <CircularProgress size={16} color="inherit" /> : <BalanceIcon />}
             onClick={calculate}
             disabled={!selectedProperty || !estimatedLoss || Number(estimatedLoss) <= 0 || result.isFetching}
+            sx={{ flex: { xs: "1 1 100%", sm: "0 0 auto" }, minHeight: 40 }}
           >
             {result.isFetching ? "מחשב..." : "חשב המלצה"}
           </Button>
@@ -135,7 +136,7 @@ export default function RetentionCalculator() {
         {data && (
           <>
             <Divider sx={{ my: 2 }} />
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" useFlexGap gap={1.5} sx={{ mb: 2 }}>
               <Box>
                 <Chip
                   label={data.recommendation === "ABSORB" ? "המלצה: לספוג את הנזק עצמונית" : "המלצה: להגיש תביעה"}
@@ -160,7 +161,7 @@ export default function RetentionCalculator() {
               <Grid item xs={12} md={6}>
                 <Card
                   variant="outlined"
-                  sx={{ borderColor: data.recommendation === "ABSORB" ? "primary.main" : undefined, borderWidth: data.recommendation === "ABSORB" ? 2 : 1 }}
+                  sx={{ height: "100%", borderColor: data.recommendation === "ABSORB" ? "primary.main" : undefined, borderWidth: data.recommendation === "ABSORB" ? 2 : 1 }}
                 >
                   <CardContent>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
@@ -176,7 +177,7 @@ export default function RetentionCalculator() {
               <Grid item xs={12} md={6}>
                 <Card
                   variant="outlined"
-                  sx={{ borderColor: data.recommendation === "CLAIM" ? "success.main" : undefined, borderWidth: data.recommendation === "CLAIM" ? 2 : 1 }}
+                  sx={{ height: "100%", borderColor: data.recommendation === "CLAIM" ? "success.main" : undefined, borderWidth: data.recommendation === "CLAIM" ? 2 : 1 }}
                 >
                   <CardContent>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
@@ -203,11 +204,11 @@ export default function RetentionCalculator() {
 
 function RowValue({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <Stack direction="row" justifyContent="space-between">
+    <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={2}>
       <Typography variant="body2" color="text.secondary">
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ fontWeight: strong ? 700 : 400 }}>
+      <Typography variant="body2" sx={{ fontWeight: strong ? 700 : 400, whiteSpace: "nowrap" }}>
         {value}
       </Typography>
     </Stack>

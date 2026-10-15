@@ -168,7 +168,13 @@ function DocumentRow({ doc }: { doc: DocumentFile }) {
         {formatDate(doc.uploaded_at)}
       </Typography>
       {signed.data ? (
-        <Link href={signed.data.download_url} target="_blank" rel="noopener" variant="caption">
+        <Link
+          href={signed.data.download_url}
+          target="_blank"
+          rel="noopener"
+          variant="caption"
+          sx={{ display: "inline-flex", alignItems: "center", minHeight: 32, px: 0.5 }}
+        >
           פתיחה
         </Link>
       ) : (
@@ -235,26 +241,29 @@ function ClaimCard({ claim }: { claim: ClaimWithPayments }) {
           תשלומים
         </Typography>
         {claim.payments.length > 0 ? (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>תאריך</TableCell>
-                <TableCell>סוג</TableCell>
-                <TableCell align="left">סכום</TableCell>
-                <TableCell>אסמכתא</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {claim.payments.map((p) => (
-                <TableRow key={p.payment_id}>
-                  <TableCell>{formatDate(p.payment_date)}</TableCell>
-                  <TableCell>{PAYMENT_TYPE_LABELS[p.payment_type] ?? p.payment_type}</TableCell>
-                  <TableCell align="left">{formatIls(p.amount)}</TableCell>
-                  <TableCell>{p.reference_number ?? "-"}</TableCell>
+          // Scrolls sideways inside the card on phones instead of being clipped by it.
+          <Box sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ "& .MuiTableCell-root": { whiteSpace: "nowrap" } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>תאריך</TableCell>
+                  <TableCell>סוג</TableCell>
+                  <TableCell align="left">סכום</TableCell>
+                  <TableCell>אסמכתא</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {claim.payments.map((p) => (
+                  <TableRow key={p.payment_id}>
+                    <TableCell>{formatDate(p.payment_date)}</TableCell>
+                    <TableCell>{PAYMENT_TYPE_LABELS[p.payment_type] ?? p.payment_type}</TableCell>
+                    <TableCell align="left">{formatIls(p.amount)}</TableCell>
+                    <TableCell>{p.reference_number ?? "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
             טרם נרשמו תשלומים לתביעה זו.
@@ -322,7 +331,11 @@ export default function IncidentDetail() {
           <ArrowForwardIcon />
         </IconButton>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          תיק אירוע — {incident.incident_code}
+          {/* Keep the code whole — otherwise phones break it at its hyphens ("INC-" / "2025-001"). */}
+          תיק אירוע —{" "}
+          <Box component="span" sx={{ whiteSpace: "nowrap" }}>
+            {incident.incident_code}
+          </Box>
         </Typography>
       </Stack>
 

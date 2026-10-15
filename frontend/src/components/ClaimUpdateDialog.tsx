@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { updateClaim, type ClaimStatus, type ClaimTrackingRow } from "../api/client";
 import { apiErrorMessage } from "../api/errors";
 import { CLAIM_STATUS_LABELS, claimStatusOptions } from "../format";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 const FIELD_LABELS = { approved_amount: "סכום מאושר", expected_payment_date: "צפי תאריך תשלום" };
 
@@ -70,8 +71,10 @@ export default function ClaimUpdateDialog({
             : null;
   const statusOptions = claim ? claimStatusOptions(claim.claim_status, paid) : [];
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth fullScreen={fullScreen}>
       <DialogTitle>עדכון תביעה — {claim?.claim_number}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>

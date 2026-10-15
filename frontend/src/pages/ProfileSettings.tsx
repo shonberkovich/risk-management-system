@@ -226,8 +226,8 @@ function OutOfOfficeSection() {
     <Card variant="outlined">
       <CardContent>
         <Stack spacing={2}>
-          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-            <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: "1 1 240px" }}>
               <FlightTakeoffIcon color="primary" fontSize="small" />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -254,7 +254,7 @@ function OutOfOfficeSection() {
             />
           </Stack>
 
-          <Stack direction="row" spacing={2}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
               type="date"
               label="מתאריך"
@@ -435,6 +435,13 @@ function RuleItem({ rule, labels, onDelete, deleting }: { rule: EmailRule; label
   );
 }
 
+/** Responsive sizing for a rule's condition/action rows: on phones the two
+ * selects share the first line and the free-text/value field drops to its own
+ * line beside the delete icon (flex-basis leaves exactly room for it); from
+ * `sm` up everything sits on one line, as before. */
+const RULE_SELECT_SX = { minWidth: { xs: 0, sm: 140 }, flex: { xs: "1 1 120px", sm: "0 0 auto" } };
+const RULE_VALUE_SX = { flex: { xs: "1 1 calc(100% - 48px)", sm: "1 1 auto" } };
+
 function EmailRulesSection() {
   const queryClient = useQueryClient();
   const rulesQuery = useQuery({ queryKey: ["email-rules"], queryFn: fetchEmailRules });
@@ -513,14 +520,21 @@ function EmailRulesSection() {
             </Typography>
             <Stack spacing={1} sx={{ mt: 0.5 }}>
               {conditions.map((condition, index) => (
-                <Stack key={index} direction="row" spacing={1} alignItems="center">
+                <Stack
+                  key={index}
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  useFlexGap
+                  sx={{ flexWrap: { xs: "wrap", sm: "nowrap" } }}
+                >
                   <TextField
                     select
                     label="שדה"
                     size="small"
                     value={condition.field}
                     onChange={(e) => updateCondition(index, { field: e.target.value as EmailRuleConditionField })}
-                    sx={{ minWidth: 140 }}
+                    sx={RULE_SELECT_SX}
                     slotProps={{ htmlInput: { "data-testid": `rule-condition-field-${index}` } }}
                   >
                     {Object.entries(CONDITION_FIELD_LABELS).map(([value, label]) => (
@@ -535,7 +549,7 @@ function EmailRulesSection() {
                     size="small"
                     value={condition.operator}
                     onChange={(e) => updateCondition(index, { operator: e.target.value as EmailRuleConditionOperator })}
-                    sx={{ minWidth: 140 }}
+                    sx={RULE_SELECT_SX}
                     slotProps={{ htmlInput: { "data-testid": `rule-condition-operator-${index}` } }}
                   >
                     {Object.entries(CONDITION_OPERATOR_LABELS).map(([value, label]) => (
@@ -550,6 +564,7 @@ function EmailRulesSection() {
                     fullWidth
                     value={condition.value}
                     onChange={(e) => updateCondition(index, { value: e.target.value })}
+                    sx={RULE_VALUE_SX}
                     slotProps={{ htmlInput: { "data-testid": `rule-condition-value-${index}` } }}
                   />
                   <IconButton
@@ -583,14 +598,21 @@ function EmailRulesSection() {
             </Typography>
             <Stack spacing={1} sx={{ mt: 0.5 }}>
               {actions.map((action, index) => (
-                <Stack key={index} direction="row" spacing={1} alignItems="center">
+                <Stack
+                  key={index}
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  useFlexGap
+                  sx={{ flexWrap: { xs: "wrap", sm: "nowrap" } }}
+                >
                   <TextField
                     select
                     label="סוג פעולה"
                     size="small"
                     value={action.type}
                     onChange={(e) => updateAction(index, { type: e.target.value as EmailRuleActionType, value: "" })}
-                    sx={{ minWidth: 160 }}
+                    sx={{ ...RULE_VALUE_SX, flex: { xs: RULE_VALUE_SX.flex.xs, sm: "0 0 auto" }, minWidth: { xs: 0, sm: 160 } }}
                     slotProps={{ htmlInput: { "data-testid": `rule-action-type-${index}` } }}
                   >
                     {Object.entries(ACTION_TYPE_LABELS).map(([value, label]) => (
@@ -608,6 +630,7 @@ function EmailRulesSection() {
                       fullWidth
                       value={action.value}
                       onChange={(e) => updateAction(index, { value: e.target.value })}
+                      sx={RULE_VALUE_SX}
                       slotProps={{ htmlInput: { "data-testid": `rule-action-value-${index}` } }}
                     >
                       {labels.map((label) => (
@@ -626,6 +649,7 @@ function EmailRulesSection() {
                       fullWidth
                       value={action.value}
                       onChange={(e) => updateAction(index, { value: e.target.value })}
+                      sx={RULE_VALUE_SX}
                       slotProps={{ htmlInput: { "data-testid": `rule-action-value-${index}` } }}
                     >
                       {RULE_TARGET_FOLDERS.map((folder) => (

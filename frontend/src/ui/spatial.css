@@ -237,7 +237,10 @@ body {
   position: relative;
   width: 100%;
   margin-inline: auto;
-  padding: clamp(14px, 2.2vw, 32px) clamp(12px, 3vw, 48px) 96px;
+  /* Inline padding never drops below 16px: MUI <Grid container spacing={2}> pulls itself
+     16px outward with a negative margin, so anything less made every such page scroll
+     sideways by a few px on phones (e.g. 12px at 375px wide). */
+  padding: clamp(14px, 2.2vw, 32px) clamp(16px, 3vw, 48px) 96px;
   max-width: 1760px;
 }
 
@@ -399,6 +402,15 @@ body {
 /* --------------------------------------------------------------------------
    Recharts — dark, glowing chart chrome (series colors live in the components)
    -------------------------------------------------------------------------- */
+
+/* SVG text inherits the page's `direction: rtl`, which flips what Recharts' text-anchor
+   start/end mean: Y-axis ticks (anchor end) then grew *into* the plot over the axis line, and
+   outside pie labels grew back over their own slice. LTR restores Recharts' geometry;
+   `plaintext` still lays out a Hebrew-first label right-to-left internally. */
+.recharts-surface text {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
 
 .recharts-cartesian-axis-tick-value,
 .recharts-cartesian-axis-tick-value tspan,
@@ -743,6 +755,11 @@ path.leaflet-interactive:hover {
   .rmis-backdrop__mesh { filter: blur(60px) saturate(130%); opacity: 0.7; }
   .rmis-backdrop__floor { opacity: 0.35; }
   .rmis-core { --size: 190px; }
+  /* The tracked page-title eyebrow wrapped onto two lines next to a header action button. */
+  .rmis-main .MuiTypography-h5:not(.MuiPaper-root .MuiTypography-h5):not(.rmis-plain)::before {
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+  }
 }
 
 /* Respect users who ask for less motion. */

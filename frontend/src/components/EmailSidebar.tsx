@@ -226,7 +226,22 @@ export default function EmailSidebar({
   };
 
   return (
-    <List dense sx={{ minWidth: 190 }} data-testid="email-sidebar">
+    <List
+      dense
+      data-testid="email-sidebar"
+      sx={{
+        minWidth: 190,
+        // Phones/tablets (sidebar stacked above the list): lay the folders and
+        // labels out as a compact multi-column grid instead of one tall column,
+        // so the message list isn't pushed a full screen down. Non-item children
+        // (divider, "תגיות" heading, create-label form) span the whole row.
+        display: { xs: "grid", md: "block" },
+        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+        columnGap: 0.5,
+        px: { xs: 0.5, md: 0 },
+        "& > :not(.MuiListItemButton-root)": { gridColumn: "1 / -1" },
+      }}
+    >
       {FOLDERS.map((folder) => (
         <FolderItem key={folder.value} folder={folder} selected={selected === folder.value} onSelect={onSelect} />
       ))}

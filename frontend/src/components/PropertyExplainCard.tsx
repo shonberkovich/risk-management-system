@@ -171,20 +171,20 @@ export default function PropertyExplainCard({ explanation }: Props) {
           <Stack direction="row" spacing={0.5}>
             <Tooltip title="ניתוח מחדש">
               <span>
-                <IconButton size="small" onClick={start} disabled={running} aria-label="ניתוח מחדש">
+                <IconButton size="small" onClick={start} disabled={running} aria-label="ניתוח מחדש" sx={TOOL_BUTTON_SX}>
                   <RefreshIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
             <Tooltip title="סגירה">
-              <IconButton size="small" onClick={close} aria-label="סגירת הניתוח">
+              <IconButton size="small" onClick={close} aria-label="סגירת הניתוח" sx={TOOL_BUTTON_SX}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           </Stack>
         </Stack>
 
-        <Box aria-live="polite" aria-busy={running}>
+        <Box aria-live="polite" aria-busy={running} sx={{ overflowWrap: "anywhere" }}>
           {phase === "waiting" ? (
             <Stack spacing={0.75} data-testid="explain-loading">
               <Skeleton variant="text" sx={{ fontSize: "1.05rem" }} />
@@ -246,3 +246,6 @@ export default function PropertyExplainCard({ explanation }: Props) {
     </Card>
   );
 }
+
+/** 40px touch targets on phones, the compact 30px look from sm up. */
+const TOOL_BUTTON_SX = { width: { xs: 40, sm: 30 }, height: { xs: 40, sm: 30 } } as const;

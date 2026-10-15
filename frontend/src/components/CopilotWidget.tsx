@@ -95,8 +95,8 @@ export default function CopilotWidget() {
       elevation={8}
       sx={{
         position: "fixed",
-        bottom: 24,
-        insetInlineEnd: 24,
+        bottom: { xs: 16, sm: 24 },
+        insetInlineEnd: { xs: 16, sm: 24 },
         width: { xs: "calc(100vw - 32px)", sm: 380 },
         height: 480,
         maxHeight: "70vh",

@@ -142,23 +142,23 @@ export default function Reports() {
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} useFlexGap>
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
         דוחות ותובנות AI
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, md: 3 }}>
         <Grid item xs={12} md={6}>
           <Card variant="outlined" sx={{ height: "100%" }}>
             <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={1.5} sx={{ mb: 2 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <SummarizeIcon color="primary" />
                   <Typography variant="h6" sx={{ fontWeight: 700 }}>
                     דוח הנהלה (Executive Summary)
                   </Typography>
                 </Stack>
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                   <Button
                     variant="contained"
                     startIcon={summaryLoading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
@@ -205,9 +205,20 @@ export default function Reports() {
                 </Typography>
               </Stack>
 
-              <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+              <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} sx={{ mb: 2 }}>
                 {SUGGESTED_QUESTIONS.map((q) => (
-                  <Chip key={q} label={q} size="small" onClick={() => sendQuestion(q)} variant="outlined" />
+                  <Chip
+                    key={q}
+                    label={q}
+                    size="small"
+                    onClick={() => sendQuestion(q)}
+                    variant="outlined"
+                    // Finger-sized on touch screens; label may wrap rather than ellipsize.
+                    sx={{
+                      maxWidth: "100%",
+                      "@media (pointer: coarse)": { height: "auto", minHeight: 36, "& .MuiChip-label": { whiteSpace: "normal", py: 0.5 } },
+                    }}
+                  />
                 ))}
               </Stack>
 
@@ -227,8 +238,11 @@ export default function Reports() {
                       )}
                       <Box
                         sx={{
-                          bgcolor: m.role === "user" ? "primary.main" : "grey.100",
-                          color: m.role === "user" ? "white" : "text.primary",
+                          // Theme-aware assistant bubble: the old fixed light grey put
+                          // light dark-mode text on a near-white fill.
+                          bgcolor: m.role === "user" ? "primary.main" : "action.selected",
+                          color: m.role === "user" ? "primary.contrastText" : "text.primary",
+                          overflowWrap: "anywhere",
                           borderRadius: 2,
                           px: 1.5,
                           py: 1,
@@ -266,7 +280,7 @@ export default function Reports() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={1.5} sx={{ mb: 2 }}>
             <Stack direction="row" spacing={1} alignItems="center">
               <AccountBalanceIcon color="primary" />
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
@@ -305,7 +319,7 @@ export default function Reports() {
           )}
 
           {regulatoryReport.data && (
-            <Stack spacing={2}>
+            <Stack spacing={2} useFlexGap>
               <Typography variant="caption" color="text.secondary">
                 שנת דיווח: {regulatoryReport.data.reporting_year ?? "-"} · דרישת הון (SCR) מבוססת סימולציית
                 מונטה-קרלו ברמת ביטחון {regulatoryReport.data.capital_adequacy.scr_confidence_level} (

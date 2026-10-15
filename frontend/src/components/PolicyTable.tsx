@@ -14,6 +14,7 @@ import Typography from "@mui/material/Typography";
 
 import type { Policy } from "../api/client";
 import { POLICY_STATUS_LABELS, formatDate, formatIls } from "../format";
+import { DATA_TABLE_SX, NAME_CELL_SX, WRAP_CELL_CLASS } from "./responsiveTable";
 
 const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   ACTIVE: "success",
@@ -44,7 +45,7 @@ export default function PolicyTable({
 
   return (
     <TableContainer sx={{ maxHeight: 520 }}>
-      <Table size="small" stickyHeader>
+      <Table size="small" stickyHeader sx={DATA_TABLE_SX}>
         <TableHead>
           <TableRow>
             <TableCell>מספר פוליסה</TableCell>
@@ -61,11 +62,14 @@ export default function PolicyTable({
           {rows.map((p) => (
             <TableRow key={p.policy_id} hover>
               <TableCell>{p.policy_number}</TableCell>
-              <TableCell>{p.insurer_name}</TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                {p.insurer_name}
+              </TableCell>
               <TableCell align="left">{formatIls(p.total_limit)}</TableCell>
               <TableCell align="left">{formatIls(p.deductible_default)}</TableCell>
               <TableCell align="left">{formatIls(p.annual_premium)}</TableCell>
-              <TableCell>
+              {/* May break after the dash into two date lines when the table is squeezed. */}
+              <TableCell className={WRAP_CELL_CLASS}>
                 {formatDate(p.start_date)} – {formatDate(p.end_date)}
               </TableCell>
               <TableCell>

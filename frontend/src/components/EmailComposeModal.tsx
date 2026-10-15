@@ -24,6 +24,7 @@ import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type InputHTMLAttributes, type MouseEvent, useEffect, useRef, useState } from "react";
 
@@ -202,6 +203,9 @@ export default function EmailComposeModal({
   inReplyTo,
   templateContext,
 }: EmailComposeModalProps) {
+  // Phones (and landscape phones, whose height is too short for a floating dialog)
+  // get the form full-screen so every field and the action row stay reachable.
+  const fullScreen = useMediaQuery("(max-width:599.95px), (max-height:500px)");
   const queryClient = useQueryClient();
   const { user: me } = useAuth();
   const signaturePlainText = signatureToPlainText(me?.signature);
@@ -463,7 +467,7 @@ export default function EmailComposeModal({
 
   return (
     <>
-      <Dialog open={open} onClose={scheduling ? undefined : resetAndClose} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={scheduling ? undefined : resetAndClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
         <DialogTitle>{inReplyTo ? "תגובה" : "מייל חדש"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
