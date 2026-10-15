@@ -1,0 +1,30 @@
+# Redeploys the Render service on every push to main (merges included). The service
+# was created from the public repo URL rather than a GitHub-connected repo, so Render
+# can't watch the repo itself; its Deploy Hook (Render dashboard -> rmis -> Settings ->
+# Deploy Hook) is stored as the RENDER_DEPLOY_HOOK repository secret instead. A hook
+# call deploys the latest commit on main.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: render-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK secret is not set (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" -o /dev/null -w "Render deploy hook: HTTP %{http_code}\n"
