@@ -141,13 +141,21 @@ export default function UserDialog({
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label={isEdit ? "איפוס סיסמה (השאירו ריק לשמירת הקיימת)" : "סיסמה (ריק = ללא סיסמה מקומית, SSO בלבד)"}
+                // The guidance lives in helperText: as part of the label it was cut off with an
+                // ellipsis in the half-width column and on phones.
+                label={isEdit ? "איפוס סיסמה" : "סיסמה"}
                 type="password"
                 fullWidth
                 inputProps={{ maxLength: 128 }}
                 value={form.password}
                 error={passwordError}
-                helperText={passwordError ? `לפחות ${MIN_PASSWORD_LENGTH} תווים` : undefined}
+                helperText={
+                  passwordError
+                    ? `לפחות ${MIN_PASSWORD_LENGTH} תווים`
+                    : isEdit
+                      ? "השאירו ריק לשמירת הסיסמה הקיימת"
+                      : "ריק = ללא סיסמה מקומית, SSO בלבד"
+                }
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
               />
             </Grid>

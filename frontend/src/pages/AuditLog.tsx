@@ -21,6 +21,7 @@ import { useState } from "react";
 
 import { fetchAuditLog, fetchAuditLogEntityTypes, type AuditLogEntry } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { DATA_TABLE_SX, NAME_CELL_SX, WRAP_CELL_CLASS } from "../components/responsiveTable";
 import { formatDateTime } from "../format";
 
 // DOWNLOAD: a sensitive attachment's signed URL was issued (middleware/audit.py).
@@ -31,6 +32,10 @@ const ACTION_COLORS: Record<string, "success" | "info" | "error" | "warning"> = 
   DELETE: "error",
   DOWNLOAD: "warning",
 };
+
+/** The old/new JSON previews are one unbroken token — let them break anywhere so the
+ * cell keeps a readable measure instead of stretching the table sideways. */
+const VALUE_CELL_SX = { minWidth: 180, wordBreak: "break-all" } as const;
 
 /** Long JSON request bodies (old/new value) are truncated in the table and shown
  * in full on hover — mirrors the 2000-char truncation the middleware already
@@ -49,7 +54,8 @@ function ValueCell({ value }: { value: string | null }) {
     <Tooltip title={<Box sx={{ whiteSpace: "pre-wrap", wordBreak: "break-all", maxWidth: 480 }}>{value}</Box>}>
       <Typography
         variant="caption"
-        sx={{ fontFamily: "monospace", cursor: "help", direction: "ltr", display: "inline-block" }}
+        dir="ltr"
+        sx={{ fontFamily: "monospace", cursor: "help", display: "inline-block", textAlign: "start" }}
       >
         {preview}
       </Typography>
@@ -163,7 +169,7 @@ export default function AuditLog() {
           ) : (
             <>
               <Box sx={{ overflowX: "auto" }}>
-                <Table size="small">
+                <Table size="small" sx={DATA_TABLE_SX}>
                   <TableHead>
                     <TableRow>
                       <TableCell>תאריך ושעה</TableCell>
@@ -180,7 +186,9 @@ export default function AuditLog() {
                     {(logs.data?.entries ?? []).map((entry: AuditLogEntry) => (
                       <TableRow key={entry.log_id} hover>
                         <TableCell>{formatDateTime(entry.timestamp)}</TableCell>
-                        <TableCell>{entry.user_name ?? (entry.user_id ? `#${entry.user_id}` : "לא מזוהה")}</TableCell>
+                        <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                          {entry.user_name ?? (entry.user_id ? `#${entry.user_id}` : "לא מזוהה")}
+                        </TableCell>
                         <TableCell>{entry.entity_type}</TableCell>
                         <TableCell align="left">{entry.entity_id || "-"}</TableCell>
                         <TableCell>
@@ -190,13 +198,15 @@ export default function AuditLog() {
                             color={ACTION_COLORS[entry.action] ?? "default"}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={WRAP_CELL_CLASS} sx={VALUE_CELL_SX}>
                           <ValueCell value={entry.old_value} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={WRAP_CELL_CLASS} sx={VALUE_CELL_SX}>
                           <ValueCell value={entry.new_value} />
                         </TableCell>
-                        <TableCell sx={{ direction: "ltr" }}>{entry.ip_address ?? "-"}</TableCell>
+                        <TableCell>
+                          <span dir="ltr">{entry.ip_address ?? "-"}</span>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
