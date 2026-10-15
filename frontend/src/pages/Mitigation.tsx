@@ -148,22 +148,30 @@ export default function Mitigation() {
   }
 
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+    // useFlexGap: a margin-spaced Stack resets its children's margins, which strips the
+    // KPI <Grid container>'s negative offset and pushes the grid 16px past the page edge.
+    <Stack spacing={3} useFlexGap>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={2}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           משימות הפחתת סיכון
         </Typography>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
           <Button
             variant="outlined"
             startIcon={pdfExporting ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
             onClick={exportPdf}
             disabled={pdfExporting || rows.length === 0}
+            sx={{ flex: { xs: "1 1 auto", sm: "0 0 auto" }, minHeight: 40 }}
           >
             ייצוא ל-PDF
           </Button>
           {canWrite && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={openCreate}
+              sx={{ flex: { xs: "1 1 auto", sm: "0 0 auto" }, minHeight: 40 }}
+            >
               משימה חדשה
             </Button>
           )}
@@ -209,7 +217,15 @@ export default function Mitigation() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            gap={1.5}
+            sx={{ mb: 2 }}
+          >
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               רשימת משימות ({rows.length})
             </Typography>
@@ -219,7 +235,7 @@ export default function Mitigation() {
               label="סטטוס"
               value={status}
               onChange={(e) => setStatus(e.target.value as MitigationStatus | "")}
-              sx={{ minWidth: 180 }}
+              sx={{ minWidth: 180, flex: { xs: "1 1 180px", sm: "0 0 auto" } }}
             >
               <MenuItem value="">הכל</MenuItem>
               {STATUS_OPTIONS.map((s) => (

@@ -13,6 +13,7 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -51,6 +52,9 @@ export default function NotificationRecipientDialog({
   recipient: NotificationRecipient | null;
   onClose: () => void;
 }) {
+  // Phones (and landscape phones, whose height is too short for a floating dialog)
+  // get the form full-screen so every field and the action row stay reachable.
+  const fullScreen = useMediaQuery("(max-width:599.95px), (max-height:500px)");
   const [form, setForm] = useState(emptyForm);
   const queryClient = useQueryClient();
   const isEdit = recipient !== null;
@@ -108,12 +112,12 @@ export default function NotificationRecipientDialog({
     !phoneError;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>{isEdit ? "עריכת נמען" : "נמען חדש"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="תפקיד"
@@ -128,7 +132,7 @@ export default function NotificationRecipientDialog({
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="סף חומרה מינימלי"
@@ -152,7 +156,7 @@ export default function NotificationRecipientDialog({
                 onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="אימייל"
                 inputProps={{ maxLength: 200 }}
@@ -164,7 +168,7 @@ export default function NotificationRecipientDialog({
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="טלפון"
                 inputProps={{ maxLength: 30 }}
@@ -175,7 +179,7 @@ export default function NotificationRecipientDialog({
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={7}>
+            <Grid item xs={12} sm={7}>
               <Typography variant="caption" color="text.secondary" display="block">
                 ערוצי התראה
               </Typography>
@@ -189,7 +193,7 @@ export default function NotificationRecipientDialog({
                 ))}
               </FormGroup>
             </Grid>
-            <Grid item xs={5}>
+            <Grid item xs={12} sm={5}>
               <FormControlLabel
                 control={
                   <Switch

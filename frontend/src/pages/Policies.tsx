@@ -71,8 +71,10 @@ export default function Policies() {
   }
 
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+    // useFlexGap: a margin-spaced Stack resets its children's margins, which strips the
+    // KPI <Grid container>'s negative offset and pushes the grid 16px past the page edge.
+    <Stack spacing={3} useFlexGap>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap gap={2}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           ניהול פוליסות ביטוח
         </Typography>
@@ -156,7 +158,15 @@ export default function Policies() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            gap={1.5}
+            sx={{ mb: 2 }}
+          >
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               רשימת פוליסות ({rows.length})
             </Typography>
@@ -166,7 +176,7 @@ export default function Policies() {
               label="סטטוס"
               value={status}
               onChange={(e) => setStatus(e.target.value as PolicyStatus | "")}
-              sx={{ minWidth: 180 }}
+              sx={{ minWidth: 180, flex: { xs: "1 1 180px", sm: "0 0 auto" } }}
             >
               <MenuItem value="">הכל</MenuItem>
               {STATUS_OPTIONS.map((s) => (

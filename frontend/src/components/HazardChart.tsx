@@ -16,7 +16,9 @@ export default function HazardChart({ data }: { data: HazardDistributionItem[] }
       <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
         התפלגות נזקים לפי סוג
       </Typography>
-      <ResponsiveContainer width="100%" height={240}>
+      {/* 280px: the legend wraps to two lines on phones and eats into the pie's area; at 240px
+          the outside percentage labels (top/bottom slices) were clipped by the SVG edge. */}
+      <ResponsiveContainer width="100%" height={280}>
         <PieChart>
           <Pie
             data={chartData}
@@ -24,8 +26,8 @@ export default function HazardChart({ data }: { data: HazardDistributionItem[] }
             nameKey="name"
             cx="50%"
             cy="50%"
-            innerRadius={46}
-            outerRadius={78}
+            innerRadius={44}
+            outerRadius={74}
             paddingAngle={3}
             cornerRadius={6}
             stroke="none"

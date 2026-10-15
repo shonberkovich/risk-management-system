@@ -70,11 +70,11 @@ export default function MitigationRoiDialog({
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <Stack direction="row" justifyContent="space-between">
+    <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={2}>
       <Typography variant="body2" color="text.secondary">
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ fontWeight: strong ? 700 : 400 }}>
+      <Typography variant="body2" sx={{ fontWeight: strong ? 700 : 400, whiteSpace: "nowrap" }}>
         {value}
       </Typography>
     </Stack>

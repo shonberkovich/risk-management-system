@@ -78,7 +78,7 @@ export default function Roles() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
         <Stack direction="row" spacing={1} alignItems="center">
           <VerifiedUserIcon color="primary" fontSize="large" />
           <Box>
@@ -101,7 +101,7 @@ export default function Roles() {
         label="סינון לפי תפקיד"
         value={roleFilter}
         onChange={(e) => setRoleFilter(e.target.value)}
-        sx={{ minWidth: 220 }}
+        sx={{ minWidth: 220, alignSelf: { xs: "stretch", sm: "flex-start" } }}
       >
         <MenuItem value="">כל התפקידים</MenuItem>
         {ROLE_OPTIONS.map((r) => (
@@ -118,45 +118,47 @@ export default function Roles() {
       ) : permissions.isError ? (
         <Alert severity="error">שגיאה בטעינת קטלוג ההרשאות.</Alert>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>תפקיד</TableCell>
-              <TableCell>מפתח הרשאה</TableCell>
-              <TableCell>תיאור</TableCell>
-              <TableCell align="left">פעולות</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(permissions.data ?? []).map((p) => (
-              <TableRow key={p.role_permission_id} hover>
-                <TableCell>
-                  <Chip label={ROLE_LABELS[p.role] ?? p.role} size="small" />
-                </TableCell>
-                <TableCell sx={{ fontFamily: "monospace", direction: "ltr", textAlign: "right" }}>
-                  {p.permission_key}
-                </TableCell>
-                <TableCell>{p.description || "-"}</TableCell>
-                <TableCell align="left">
-                  <Tooltip title="עריכה">
-                    <IconButton size="small" onClick={() => openEdit(p)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="מחיקה">
-                    <IconButton
-                      size="small"
-                      disabled={removeMutation.isPending}
-                      onClick={() => handleDelete(p)}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </TableCell>
+        <Box sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>תפקיד</TableCell>
+                <TableCell>מפתח הרשאה</TableCell>
+                <TableCell>תיאור</TableCell>
+                <TableCell align="left">פעולות</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {(permissions.data ?? []).map((p) => (
+                <TableRow key={p.role_permission_id} hover>
+                  <TableCell>
+                    <Chip label={ROLE_LABELS[p.role] ?? p.role} size="small" />
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: "monospace", direction: "ltr", textAlign: "right" }}>
+                    {p.permission_key}
+                  </TableCell>
+                  <TableCell>{p.description || "-"}</TableCell>
+                  <TableCell align="left">
+                    <Tooltip title="עריכה">
+                      <IconButton size="small" onClick={() => openEdit(p)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="מחיקה">
+                      <IconButton
+                        size="small"
+                        disabled={removeMutation.isPending}
+                        onClick={() => handleDelete(p)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
       )}
 
       {(permissions.data?.length ?? 0) === 0 && !permissions.isLoading && !permissions.isError && (

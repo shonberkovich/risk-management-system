@@ -86,7 +86,7 @@ function RiskScoreRow({ label, value, icon }: { label: string; value: number; ic
         <Typography variant="body2">{label}</Typography>
       </Stack>
       <Typography variant="body2" sx={{ fontWeight: 700, color }}>
-        {value} / 5
+        {value}/5
       </Typography>
     </Stack>
   );
@@ -101,7 +101,7 @@ function DocumentRow({ doc, onDelete, canWrite }: { doc: DocumentFile; onDelete:
   return (
     <Stack direction="row" spacing={1} alignItems="center">
       <DescriptionIcon fontSize="small" color="action" />
-      <Typography variant="body2" sx={{ flex: 1 }}>
+      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
         {DOCUMENT_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
       </Typography>
       <Typography variant="caption" color="text.secondary">
@@ -117,7 +117,12 @@ function DocumentRow({ doc, onDelete, canWrite }: { doc: DocumentFile; onDelete:
         </Typography>
       )}
       {canWrite && (
-        <IconButton size="small" onClick={() => onDelete(doc.document_id)} aria-label="מחק מסמך">
+        <IconButton
+          size="small"
+          onClick={() => onDelete(doc.document_id)}
+          aria-label="מחק מסמך"
+          sx={{ width: { xs: 40, sm: 30 }, height: { xs: 40, sm: 30 } }}
+        >
           <DeleteIcon fontSize="small" />
         </IconButton>
       )}
@@ -127,9 +132,10 @@ function DocumentRow({ doc, onDelete, canWrite }: { doc: DocumentFile; onDelete:
 
 function EntityEmailRow({ email }: { email: EntityLinkedEmail }) {
   return (
-    <Stack direction="row" spacing={1} alignItems="center">
+    // Wraps on phones: subject + sender/date + chip + link don't fit one 320–414px line.
+    <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap columnGap={1} rowGap={0.25}>
       <MailOutlineIcon fontSize="small" color="action" />
-      <Typography variant="body2" sx={{ flex: 1 }}>
+      <Typography variant="body2" sx={{ flex: "1 1 160px", minWidth: 0, overflowWrap: "anywhere" }}>
         {email.subject}
       </Typography>
       <Typography variant="caption" color="text.secondary">
@@ -276,12 +282,14 @@ export default function PropertyDetail() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-        <Stack direction="row" spacing={1} alignItems="center">
-          <IconButton size="small" onClick={() => navigate("/properties")} aria-label="חזרה לרשימת נכסים">
+      {/* Title block and action buttons wrap onto separate lines (and the four buttons among
+          themselves) on phones/tablets instead of forcing a ~620px-wide row. */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap gap={2}>
+        <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap gap={1} sx={{ minWidth: 0 }}>
+          <IconButton onClick={() => navigate("/properties")} aria-label="חזרה לרשימת נכסים" sx={{ width: 40, height: 40 }}>
             <ArrowForwardIcon />
           </IconButton>
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
               {p.name}
             </Typography>
@@ -300,7 +308,18 @@ export default function PropertyDetail() {
             />
           )}
         </Stack>
-        <Stack direction="row" spacing={1}>
+        <Stack
+          direction="row"
+          flexWrap="wrap"
+          useFlexGap
+          gap={1}
+          // Phones: buttons grow to fill each wrapped line evenly instead of leaving ragged rows.
+          sx={{
+            width: { xs: "100%", sm: "auto" },
+            "& > *": { flex: { xs: "1 1 auto", sm: "0 0 auto" } },
+            "& > span > .MuiButton-root": { width: "100%" },
+          }}
+        >
           <Tooltip title="ניתוח קצר של ציון הסיכון, האירועים והתביעות, והפעולות המשתלמות ביותר">
             <span>
               <Button
@@ -452,7 +471,8 @@ export default function PropertyDetail() {
         </Card>
       )}
 
-      <Grid container spacing={3}>
+      {/* spacing 2 on phones: Grid's 24px negative margin would overhang .rmis-main's 16px padding. */}
+      <Grid container spacing={{ xs: 2, md: 3 }}>
         <Grid item xs={12} md={6}>
           <Card variant="outlined" sx={{ height: "100%" }}>
             <CardContent>
@@ -624,19 +644,27 @@ export default function PropertyDetail() {
 
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            gap={1.5}
+            sx={{ mb: 1.5 }}
+          >
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               מסמכים מצורפים לנכס ({documents.data?.length ?? 0})
             </Typography>
             {canWrite && (
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap gap={1} sx={{ minWidth: 0 }}>
                 <TextField
                   select
                   size="small"
                   label="סוג מסמך"
                   value={docType}
                   onChange={(e) => setDocType(e.target.value)}
-                  sx={{ minWidth: 180 }}
+                  sx={{ minWidth: { xs: 0, sm: 180 }, flex: { xs: "1 1 140px", sm: "0 0 auto" } }}
                 >
                   {DOC_TYPE_OPTIONS.map((t) => (
                     <MenuItem key={t} value={t}>

@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 
 import type { MitigationTask } from "../api/client";
 import { MITIGATION_STATUS_LABELS, formatDate, formatIls } from "../format";
+import { DATA_TABLE_SX, NAME_CELL_SX, TITLE_CELL_SX, WRAP_CELL_CLASS } from "./responsiveTable";
 
 const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   OPEN: "info",
@@ -54,7 +55,7 @@ export default function MitigationTable({
 
   return (
     <TableContainer sx={{ maxHeight: 480 }}>
-      <Table size="small" stickyHeader>
+      <Table size="small" stickyHeader sx={DATA_TABLE_SX}>
         <TableHead>
           <TableRow>
             <TableCell>כותרת המשימה</TableCell>
@@ -71,9 +72,15 @@ export default function MitigationTable({
         <TableBody>
           {rows.map((t) => (
             <TableRow key={t.task_id} hover>
-              <TableCell>{t.title}</TableCell>
-              <TableCell>{t.property_name}</TableCell>
-              <TableCell>{t.assigned_to_name ?? <Typography variant="body2" color="text.secondary">לא משויך</Typography>}</TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={TITLE_CELL_SX}>
+                {t.title}
+              </TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                {t.property_name}
+              </TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                {t.assigned_to_name ?? <Typography variant="body2" color="text.secondary">לא משויך</Typography>}
+              </TableCell>
               <TableCell align="left">{formatIls(t.cost_estimate)}</TableCell>
               <TableCell align="left">{formatIls(t.expected_annual_savings)}</TableCell>
               <TableCell align="left">{t.roi_percent !== null ? `${t.roi_percent.toFixed(1)}%` : "-"}</TableCell>

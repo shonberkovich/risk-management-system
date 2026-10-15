@@ -11,6 +11,7 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -42,6 +43,9 @@ export default function UserDialog({
   isSelf?: boolean;
   onClose: () => void;
 }) {
+  // Phones (and landscape phones, whose height is too short for a floating dialog)
+  // get the form full-screen so every field and the action row stay reachable.
+  const fullScreen = useMediaQuery("(max-width:599.95px), (max-height:500px)");
   const [form, setForm] = useState(emptyForm);
   const queryClient = useQueryClient();
   const isEdit = user !== null;
@@ -92,7 +96,7 @@ export default function UserDialog({
   const canSubmit = form.full_name.trim() && form.email.trim() && form.role && !emailError && !passwordError;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>{isEdit ? "עריכת משתמש" : "משתמש חדש"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -118,7 +122,7 @@ export default function UserDialog({
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="תפקיד"
@@ -135,7 +139,7 @@ export default function UserDialog({
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label={isEdit ? "איפוס סיסמה (השאירו ריק לשמירת הקיימת)" : "סיסמה (ריק = ללא סיסמה מקומית, SSO בלבד)"}
                 type="password"

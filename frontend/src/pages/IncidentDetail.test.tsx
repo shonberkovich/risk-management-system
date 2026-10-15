@@ -116,7 +116,8 @@ describe("IncidentDetail", () => {
     fetchIncidentDrilldownMock.mockResolvedValue({ incident: INCIDENT, media: [], claims: [], documents: [] });
     renderPage();
 
-    expect(await screen.findByText("תיק אירוע — INC-2026-001")).toBeInTheDocument();
+    // By role: the code sits in its own no-wrap span inside the heading.
+    expect(await screen.findByRole("heading", { name: "תיק אירוע — INC-2026-001" })).toBeInTheDocument();
     // Property name comes from a second query (enabled only once the drilldown
     // resolves) — needs its own await, not just the drilldown's.
     expect(await screen.findByText("מרכז לוגיסטי תל אביב")).toBeInTheDocument();

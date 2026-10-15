@@ -1,4 +1,5 @@
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
@@ -22,6 +23,7 @@ import { createClaimPayment, fetchClaimPayments, type ClaimTrackingRow, type Pay
 import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../auth/AuthContext";
 import { PAYMENT_TYPE_LABELS, formatDate, formatIls, todayLocalIsoDate } from "../format";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 const PAYABLE_STATUSES = new Set(["APPROVED", "SETTLED"]);
 const PAYMENT_TYPE_OPTIONS: PaymentType[] = ["ADVANCE", "FINAL_SETTLEMENT"];
@@ -108,12 +110,14 @@ export default function ClaimPaymentsDialog({
           ? "מועד התשלום לא יכול להיות לפני מועד האירוע"
           : null;
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>תשלומים — {claim?.claim_number}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <Stack direction="row" spacing={3}>
+          <Stack direction="row" flexWrap="wrap" useFlexGap columnGap={3} rowGap={1.5}>
             <Stack>
               <Typography variant="caption" color="text.secondary">
                 סכום מאושר
@@ -137,35 +141,38 @@ export default function ClaimPaymentsDialog({
           {payments.isLoading ? (
             <CircularProgress size={24} />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>תאריך</TableCell>
-                  <TableCell>סוג</TableCell>
-                  <TableCell align="left">סכום</TableCell>
-                  <TableCell>אסמכתא</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(payments.data ?? []).map((p) => (
-                  <TableRow key={p.payment_id}>
-                    <TableCell>{formatDate(p.payment_date)}</TableCell>
-                    <TableCell>{PAYMENT_TYPE_LABELS[p.payment_type] ?? p.payment_type}</TableCell>
-                    <TableCell align="left">{formatIls(p.amount)}</TableCell>
-                    <TableCell>{p.reference_number ?? "-"}</TableCell>
-                  </TableRow>
-                ))}
-                {(payments.data ?? []).length === 0 && (
+            // Scrolls sideways inside the dialog on phones rather than squeezing the columns.
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small" sx={{ "& .MuiTableCell-root": { whiteSpace: "nowrap" } }}>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        טרם נרשמו תשלומים לתביעה זו.
-                      </Typography>
-                    </TableCell>
+                    <TableCell>תאריך</TableCell>
+                    <TableCell>סוג</TableCell>
+                    <TableCell align="left">סכום</TableCell>
+                    <TableCell>אסמכתא</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(payments.data ?? []).map((p) => (
+                    <TableRow key={p.payment_id}>
+                      <TableCell>{formatDate(p.payment_date)}</TableCell>
+                      <TableCell>{PAYMENT_TYPE_LABELS[p.payment_type] ?? p.payment_type}</TableCell>
+                      <TableCell align="left">{formatIls(p.amount)}</TableCell>
+                      <TableCell>{p.reference_number ?? "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(payments.data ?? []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          טרם נרשמו תשלומים לתביעה זו.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Box>
           )}
 
           {canPay ? (
@@ -174,7 +181,7 @@ export default function ClaimPaymentsDialog({
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                 רישום תשלום חדש
               </Typography>
-              <Stack direction="row" spacing={2}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField
                   label="תאריך תשלום"
                   type="date"
@@ -197,7 +204,7 @@ export default function ClaimPaymentsDialog({
                   onChange={(e) => setAmount(e.target.value)}
                 />
               </Stack>
-              <Stack direction="row" spacing={2}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField
                   select
                   label="סוג תשלום"

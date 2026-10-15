@@ -21,6 +21,7 @@ import {
 } from "../api/client";
 import { apiErrorMessage } from "../api/errors";
 import { MITIGATION_STATUS_LABELS } from "../format";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 // OVERDUE isn't offered: the backend derives it from the due date on every write
 // (routers/mitigation.py _sync_overdue), so choosing it did nothing.
@@ -123,11 +124,13 @@ export default function MitigationTaskDialog({
     !costError &&
     !savingsError;
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>{isEdit ? "עריכת משימת הפחתת סיכון" : "משימת הפחתת סיכון חדשה"}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <Stack spacing={2} useFlexGap sx={{ mt: 1 }}>
           <Grid container spacing={2}>
             <Grid item xs={12}>
               <TextField
@@ -154,7 +157,7 @@ export default function MitigationTaskDialog({
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="עלות משוערת (₪)"
                 type="number"
@@ -166,7 +169,7 @@ export default function MitigationTaskDialog({
                 onChange={(e) => setForm((f) => ({ ...f, cost_estimate: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="חיסכון שנתי צפוי (₪)"
                 type="number"
@@ -178,7 +181,7 @@ export default function MitigationTaskDialog({
                 onChange={(e) => setForm((f) => ({ ...f, expected_annual_savings: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="תאריך יעד"
                 type="date"
@@ -188,7 +191,7 @@ export default function MitigationTaskDialog({
                 onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="גורם מבצע"

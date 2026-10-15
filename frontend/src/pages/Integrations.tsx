@@ -64,8 +64,16 @@ function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-      <Stack direction="row" spacing={1} alignItems="center">
+    <Stack
+      direction="row"
+      justifyContent="space-between"
+      alignItems="flex-start"
+      flexWrap="wrap"
+      useFlexGap
+      spacing={1}
+      sx={{ mb: 1.5 }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: "1 1 260px" }}>
         {icon}
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>

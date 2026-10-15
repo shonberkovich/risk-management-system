@@ -247,8 +247,8 @@ const NAV_ENTRIES: NavEntry[] = [
 const navIconSx = (isDark: boolean) =>
   ({
     color: "text.primary",
-    width: { xs: 34, sm: 40 },
-    height: { xs: 34, sm: 40 },
+    width: 40,
+    height: 40,
     bgcolor: isDark ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.7)",
     border: `1px solid ${isDark ? "rgba(148, 163, 255, 0.12)" : "rgba(30, 38, 96, 0.12)"}`,
   }) as const;
@@ -412,6 +412,10 @@ export default function Navbar() {
           top: { xs: 8, md: 14 },
           mx: { xs: 1, sm: 1.5, md: 2.5 },
           width: "auto",
+          // On very wide screens (2K/4K) keep the bar aligned with .rmis-main's content box
+          // (max-width 1760px minus its 48px inline padding, see ui/spatial.css) instead of
+          // stretching edge to edge above a centred page.
+          "@media (min-width: 1760px)": { width: "100%", maxWidth: 1664, mx: "auto" },
           overflow: "hidden",
           isolation: "isolate",
           borderRadius: { xs: "18px", md: "22px" },
@@ -495,7 +499,10 @@ export default function Navbar() {
                 />
               </Box>
             </Box>
-            <Box>
+            {/* Wordmark drops out below 360px (iPhone SE / 320px Androids) so the toolbar's
+                actions — including the hamburger, the only route to the nav drawer — never get
+                pushed out of the (overflow:hidden) bar. */}
+            <Box sx={{ "@media (max-width: 359.95px)": { display: "none" } }}>
               <Stack direction="row" alignItems="center" spacing={1}>
                 <Typography
                   variant="h6"
@@ -566,8 +573,8 @@ export default function Navbar() {
                 size="small"
                 sx={{
                   display: { xs: "inline-flex", sm: "none" },
-                  width: 34,
-                  height: 34,
+                  width: 40,
+                  height: 40,
                   color: "#02110F",
                   backgroundImage: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${neon.sky})`,
                   boxShadow: `0 0 18px -4px ${alpha(theme.palette.secondary.main, 0.9)}`,
@@ -582,7 +589,11 @@ export default function Navbar() {
             </Box>
             <FailedSyncChip />
 
-            <ThemeToggle />
+            {/* On phones the toggle lives in the nav drawer (ThemeToggle variant="row") — six
+                40px controls plus the brand don't fit a 375px toolbar. */}
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <ThemeToggle />
+            </Box>
 
             <Tooltip title="דואר">
               <IconButton component={Link} to="/emails" sx={NAV_ICON_SX}>
@@ -615,6 +626,7 @@ export default function Navbar() {
                     pl: { xs: 0.25, sm: 0.5 },
                     pr: { xs: 0.25, md: 1.25 },
                     py: { xs: 0.25, sm: 0.5 },
+                  flexShrink: 0,
                     border: `1px solid ${ink.line}`,
                     bgcolor: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.7)",
                     transition: `background-color 0.35s ${ease.out}, border-color 0.35s, box-shadow 0.45s ${ease.out}`,
@@ -625,7 +637,7 @@ export default function Navbar() {
                     },
                   }}
                 >
-                  <Avatar sx={{ width: { xs: 30, sm: 34 }, height: { xs: 30, sm: 34 }, fontSize: 13, fontWeight: 700 }}>
+                  <Avatar sx={{ width: 34, height: 34, fontSize: 13, fontWeight: 700 }}>
                     {initials}
                   </Avatar>
                   <Box sx={{ display: { xs: "none", md: "block" }, textAlign: "right", lineHeight: 1.1 }}>
@@ -721,7 +733,7 @@ export default function Navbar() {
               </Typography>
             </Box>
           </Stack>
-          <IconButton onClick={() => setMobileOpen(false)} size="small">
+          <IconButton onClick={() => setMobileOpen(false)} aria-label="סגירת תפריט" sx={{ width: 40, height: 40 }}>
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>

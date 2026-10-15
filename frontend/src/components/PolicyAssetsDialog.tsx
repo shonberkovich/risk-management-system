@@ -26,6 +26,7 @@ import {
   type Property,
 } from "../api/client";
 import { formatIls } from "../format";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 export default function PolicyAssetsDialog({
   open,
@@ -63,8 +64,10 @@ export default function PolicyAssetsDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["policy-assets", policyId] }),
   });
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>נכסים מבוטחים — {policy?.policy_number}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>

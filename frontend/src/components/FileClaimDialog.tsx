@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 
 import { createClaim, fetchEligiblePolicies, type Incident } from "../api/client";
 import { apiErrorMessage } from "../api/errors";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 const MONEY_MAX = 1e16; // schemas.Money: DECIMAL(18,2)
 const FIELD_LABELS = {
@@ -83,11 +84,13 @@ export default function FileClaimDialog({
       : null;
   const canSubmit = !!policyId && !claimedError && !deductibleError;
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>פתיחת תביעה — {incident?.incident_code}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <Stack spacing={2} useFlexGap sx={{ mt: 1 }}>
           {policies.isLoading ? (
             <CircularProgress size={24} />
           ) : (policies.data ?? []).length === 0 ? (
@@ -109,7 +112,7 @@ export default function FileClaimDialog({
           )}
 
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="סכום נתבע (₪)"
                 type="number"
@@ -121,7 +124,7 @@ export default function FileClaimDialog({
                 onChange={(e) => setClaimedAmount(e.target.value)}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="השתתפות עצמית (₪)"
                 type="number"

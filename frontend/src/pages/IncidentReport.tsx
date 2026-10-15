@@ -83,6 +83,25 @@ const PILL_BUTTON_SX = {
   transition: "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s, color 0.3s",
 };
 
+// The wizard's forward action (המשך / שלח). On phones it jumps to the front of the action
+// row at full width — the thumb-reachable primary — with חזרה and שמור כטיוטה sharing the
+// row beneath it, instead of the old wrap that stranded it alone on a second line.
+const PRIMARY_ACTION_SX = {
+  minHeight: 48,
+  px: 3,
+  fontSize: "1rem",
+  order: { xs: -1, sm: 0 },
+  flex: { xs: "1 1 100%", sm: "0 0 auto" },
+};
+
+// Container for a group of pill choices: on phones an even two-column grid (free-wrapping
+// pills of different widths left ragged 3/2/1 rows), from `sm` up the original wrapping row.
+const PILL_GROUP_SX = {
+  display: { xs: "grid", sm: "flex" },
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  "& > .MuiButton-root": { px: { xs: 1.5, sm: 3 } },
+};
+
 const HAZARD_OPTIONS: { value: HazardType; color: string }[] = [
   { value: "FLOOD", color: "#4CC9F0" },
   { value: "FIRE", color: "#FF4D79" },
@@ -610,13 +629,25 @@ export default function IncidentReport() {
         </Alert>
       )}
 
-      <Stepper activeStep={activeStep} sx={{ mb: 4 }} alternativeLabel>
+      {/* Phones: four two-word labels squeezed under the step dots wrap to three lines each,
+          so below `sm` the dots stand alone and the active step is named once beneath them. */}
+      <Stepper
+        activeStep={activeStep}
+        sx={{ mb: { xs: 1.5, sm: 4 }, "& .MuiStepLabel-labelContainer": { display: { xs: "none", sm: "block" } } }}
+        alternativeLabel
+      >
         {STEPS.map((label) => (
           <Step key={label}>
             <StepLabel>{label}</StepLabel>
           </Step>
         ))}
       </Stepper>
+      <Typography
+        variant="body2"
+        sx={{ display: { xs: "block", sm: "none" }, textAlign: "center", fontWeight: 600, mb: 3 }}
+      >
+        שלב {activeStep + 1} מתוך {STEPS.length} · {STEPS[activeStep]}
+      </Typography>
 
       <Card variant="outlined">
         <CardContent>
@@ -627,7 +658,14 @@ export default function IncidentReport() {
                 startIcon={geo.loading ? <CircularProgress size={16} /> : <MyLocationIcon />}
                 disabled={geo.loading}
                 onClick={geo.request}
-                sx={{ alignSelf: "flex-start", minHeight: 48, px: 2.5, fontSize: "1rem" }}
+                // Full width on phones (its label doesn't fit a 320px screen on one line).
+                sx={{
+                  alignSelf: { xs: "stretch", sm: "flex-start" },
+                  minHeight: 48,
+                  px: 2.5,
+                  fontSize: "1rem",
+                  whiteSpace: "normal",
+                }}
               >
                 אתר את מיקומי והצע נכסים קרובים
               </Button>
@@ -699,7 +737,7 @@ export default function IncidentReport() {
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   סוג הנזק
                 </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={PILL_GROUP_SX}>
                   {HAZARD_OPTIONS.map((h) => (
                     <Button
                       key={h.value}
@@ -723,7 +761,7 @@ export default function IncidentReport() {
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   רמת חומרה
                 </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={PILL_GROUP_SX}>
                   {SEVERITY_OPTIONS.map((s) => (
                     <Button
                       key={s.value}
@@ -751,10 +789,22 @@ export default function IncidentReport() {
                   value={impact}
                   exclusive
                   onChange={(_, v) => v && setImpact(v)}
-                  sx={{ flexWrap: "wrap", gap: 1 }}
+                  // Phones: an even full-width 3-up segmented row (free wrapping left a
+                  // ragged 2 + 1); labels may take two lines on the narrowest screens.
+                  sx={{
+                    flexWrap: "wrap",
+                    gap: 1,
+                    display: { xs: "grid", sm: "inline-flex" },
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    width: { xs: "100%", sm: "auto" },
+                  }}
                 >
                   {IMPACT_OPTIONS.map((i) => (
-                    <ToggleButton key={i} value={i} sx={{ ...PILL_BUTTON_SX, border: "1px solid" }}>
+                    <ToggleButton
+                      key={i}
+                      value={i}
+                      sx={{ ...PILL_BUTTON_SX, border: "1px solid", px: { xs: 1, sm: 3 }, lineHeight: 1.25 }}
+                    >
                       {OPERATIONAL_IMPACT_LABELS[i]}
                     </ToggleButton>
                   ))}
@@ -911,7 +961,7 @@ export default function IncidentReport() {
                 variant="contained"
                 disabled={!canNext}
                 onClick={() => setActiveStep((s) => s + 1)}
-                sx={{ minHeight: 48, px: 3, fontSize: "1rem" }}
+                sx={PRIMARY_ACTION_SX}
               >
                 המשך
               </Button>
@@ -921,7 +971,7 @@ export default function IncidentReport() {
                 color="secondary"
                 disabled={submitMutation.isPending}
                 onClick={() => submitMutation.mutate()}
-                sx={{ minHeight: 48, px: 3, fontSize: "1rem" }}
+                sx={PRIMARY_ACTION_SX}
               >
                 שלח דיווח למטה
               </Button>

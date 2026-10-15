@@ -138,7 +138,7 @@ export default function EmailEntityLinkControl({ emailId }: EmailEntityLinkContr
         {entityType && (
           <Autocomplete
             size="small"
-            sx={{ minWidth: 260 }}
+            sx={{ minWidth: { xs: 0, sm: 260 }, flex: { xs: "1 1 100%", sm: "0 1 auto" } }}
             options={options}
             loading={isLoading}
             value={selected}

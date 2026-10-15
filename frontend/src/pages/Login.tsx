@@ -96,7 +96,9 @@ export default function Login() {
     >
       <AmbientBackdrop />
 
-      <Box sx={{ position: "absolute", top: { xs: 12, md: 24 }, insetInlineStart: { xs: 12, md: 24 }, zIndex: 2 }}>
+      {/* Inline-end corner: the inline-start corner is where the brand row sits on phones and
+          short landscape screens, and the toggle used to land on top of the brand mark. */}
+      <Box sx={{ position: "absolute", top: { xs: 12, md: 24 }, insetInlineEnd: { xs: 12, md: 24 }, zIndex: 2 }}>
         <ThemeToggle />
       </Box>
 
@@ -181,7 +183,7 @@ export default function Login() {
               </Box>
             </Stack>
 
-            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 2, md: 3 } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 2, sm: 4, md: 3 } }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
                   component="h1"
@@ -211,8 +213,20 @@ export default function Login() {
                 </Typography>
               </Box>
 
-              {/* 3D centerpiece beside the headline (hidden on the narrowest phones). */}
-              <Box sx={{ display: { xs: "none", sm: "block" }, flexShrink: 0 }}>
+              {/* 3D centerpiece beside the headline. Hidden on the narrowest phones; on landscape
+                  phones, where it would push the sign-in form below the fold; and at md (900–1199px),
+                  where the hero is only half the width and the core squeezed the headline to ~250px
+                  with its floating cards overlapping the paragraph. */}
+              <Box
+                sx={{
+                  display: { xs: "none", sm: "block", md: "none", lg: "block" },
+                  flexShrink: 0,
+                  // The core's floating glass cards reach ~60px past its box; keep them off the
+                  // headline/paragraph (same treatment as the dashboard hero).
+                  mx: { sm: 4, lg: 3 },
+                  "@media (max-height: 500px)": { display: "none" },
+                }}
+              >
                 <RiskCore3D size={200} />
               </Box>
             </Box>

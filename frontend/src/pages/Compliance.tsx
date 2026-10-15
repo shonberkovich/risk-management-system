@@ -87,7 +87,7 @@ export default function Compliance() {
         </Stack>
       </Stack>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={{ xs: 1.5, sm: 2 }}>
         <Grid item xs={12} sm={6} md={3}>
           <KpiCard
             label="כיסוי סקרי סיכונים"
@@ -143,7 +143,9 @@ export default function Compliance() {
                   sx={{ p: 1.5, borderRadius: 1, bgcolor: "grey.50" }}
                 >
                   <Icon color={SECTION_STATUS_COLORS[section.status]} />
-                  <Box sx={{ flexGrow: 1 }}>
+                  {/* overflowWrap: descriptions cite long code paths (e.g. "services/x.py::fn")
+                      that would otherwise poke out of the card on phones. */}
+                  <Box sx={{ flexGrow: 1, minWidth: 0, overflowWrap: "anywhere" }}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {section.clause} — {section.title}
@@ -243,40 +245,42 @@ export default function Compliance() {
                       לא הוגדרו משימות הפחתת סיכון (בקרות) עבור נכס זה.
                     </Typography>
                   ) : (
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>בקרה</TableCell>
-                          <TableCell>סטטוס</TableCell>
-                          <TableCell>יעד</TableCell>
-                          <TableCell>אחראי</TableCell>
-                          <TableCell align="left">ROI</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {entry.controls.map((control) => (
-                          <TableRow key={control.task_id}>
-                            <TableCell>{control.title}</TableCell>
-                            <TableCell>
-                              <Chip
-                                label={MITIGATION_STATUS_LABELS[control.status] ?? control.status}
-                                size="small"
-                                color={
-                                  control.status === "COMPLETED"
-                                    ? "success"
-                                    : control.status === "OVERDUE"
-                                      ? "error"
-                                      : "default"
-                                }
-                              />
-                            </TableCell>
-                            <TableCell>{formatDate(control.due_date)}</TableCell>
-                            <TableCell>{control.owner_name ?? "לא הוקצה"}</TableCell>
-                            <TableCell align="left">{control.roi_percent !== null ? `${control.roi_percent}%` : "-"}</TableCell>
+                    <Box sx={{ overflowX: "auto" }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>בקרה</TableCell>
+                            <TableCell>סטטוס</TableCell>
+                            <TableCell>יעד</TableCell>
+                            <TableCell>אחראי</TableCell>
+                            <TableCell align="left">ROI</TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHead>
+                        <TableBody>
+                          {entry.controls.map((control) => (
+                            <TableRow key={control.task_id}>
+                              <TableCell>{control.title}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={MITIGATION_STATUS_LABELS[control.status] ?? control.status}
+                                  size="small"
+                                  color={
+                                    control.status === "COMPLETED"
+                                      ? "success"
+                                      : control.status === "OVERDUE"
+                                        ? "error"
+                                        : "default"
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>{formatDate(control.due_date)}</TableCell>
+                              <TableCell>{control.owner_name ?? "לא הוקצה"}</TableCell>
+                              <TableCell align="left">{control.roi_percent !== null ? `${control.roi_percent}%` : "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Box>
                   )}
                 </AccordionDetails>
               </Accordion>

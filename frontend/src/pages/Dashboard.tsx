@@ -204,8 +204,10 @@ function ExecutiveDashboard() {
 
       {/* ---- Bento row 2: spatial map (tall) + risk matrix + hazard mix ---- */}
       <Box className="rmis-bento" sx={BENTO_SX}>
-        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 8" }, gridRow: { lg: "span 2" } }}>
-          <CardContent>
+        <Card
+          sx={{ gridColumn: { xs: "1 / -1", lg: "span 8" }, gridRow: { lg: "span 2" }, display: "flex", flexDirection: "column" }}
+        >
+          <CardContent sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <Stack
               direction="row"
               justifyContent="space-between"
@@ -249,8 +251,11 @@ function ExecutiveDashboard() {
 
       {/* ---- Bento row 3: asymmetric 5/7 split of the two financial trend tiles ---- */}
       <Box className="rmis-bento" sx={BENTO_SX}>
-        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 5" } }}>
-          <CardContent>{lossRatioTrend.data && <LossRatioTrendChart data={lossRatioTrend.data} />}</CardContent>
+        <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 5" }, display: "flex", flexDirection: "column" }}>
+          {/* Flex column so the trend chart can stretch to the (taller) cashflow tile beside it. */}
+          <CardContent sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            {lossRatioTrend.data && <LossRatioTrendChart data={lossRatioTrend.data} />}
+          </CardContent>
         </Card>
         <Card sx={{ gridColumn: { xs: "1 / -1", lg: "span 7" } }}>
           <CardContent>{cashflow.data && <CashflowChart data={cashflow.data} />}</CardContent>

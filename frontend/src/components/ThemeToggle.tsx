@@ -59,8 +59,8 @@ export default function ThemeToggle({ variant = "icon" }: { variant?: "icon" | "
         data-testid="theme-toggle"
         sx={{
           position: "relative",
-          width: { xs: 34, sm: 40 },
-          height: { xs: 34, sm: 40 },
+          width: 40,
+          height: 40,
           overflow: "hidden",
           bgcolor: isDark ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.7)",
           border: `1px solid ${isDark ? "rgba(148, 163, 255, 0.12)" : "rgba(30, 38, 96, 0.12)"}`,

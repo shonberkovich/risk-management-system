@@ -23,7 +23,9 @@ export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoin
   const chartData = data.map((d) => ({ ...d, percent: d.loss_ratio * 100 }));
 
   return (
-    <div>
+    // Fills its parent when that parent is a flex column (the dashboard's bento tile, so the
+    // chart lines up with the taller cashflow tile next to it); 220px tall otherwise.
+    <div style={{ flex: "1 0 auto", display: "flex", flexDirection: "column" }}>
       <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
         מגמת יחס נזקים (Loss Ratio) רב-שנתית
       </Typography>
@@ -32,10 +34,12 @@ export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoin
           אין נתוני תביעות זמינים.
         </Typography>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <div style={{ flex: "1 0 220px", minHeight: 220, position: "relative" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-            <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+            {/* Inset the first/last points so their dots don't sit on top of the Y-axis tick labels. */}
+            <XAxis dataKey="year" tick={{ fontSize: 12 }} padding={{ left: 20, right: 20 }} />
             <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} width={44} />
             <ReferenceLine y={TARGET_LOSS_RATIO * 100} stroke={neon.low} strokeDasharray="4 4" label={{ value: "יעד", fontSize: 11, fill: neon.low }} />
             <Tooltip
@@ -56,6 +60,7 @@ export default function LossRatioTrendChart({ data }: { data: LossRatioTrendPoin
             />
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );

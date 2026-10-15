@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 
 import type { Incident } from "../api/client";
 import { HAZARD_LABELS, INCIDENT_STATUS_LABELS, SEVERITY_COLORS, SEVERITY_LABELS, formatDate, formatIls } from "../format";
+import { DATA_TABLE_SX, NAME_CELL_SX, WRAP_CELL_CLASS } from "./responsiveTable";
 
 const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   NEW: "info",
@@ -59,7 +60,7 @@ export default function IncidentsTable({
 
   return (
     <TableContainer sx={{ maxHeight: 520 }}>
-      <Table size="small" stickyHeader>
+      <Table size="small" stickyHeader sx={DATA_TABLE_SX}>
         <TableHead>
           <TableRow>
             <TableCell>מס' אירוע</TableCell>
@@ -76,7 +77,9 @@ export default function IncidentsTable({
           {rows.map((inc) => (
             <TableRow key={inc.incident_id} hover>
               <TableCell>{inc.incident_code}</TableCell>
-              <TableCell>{propertyNames[inc.property_id] ?? `#${inc.property_id}`}</TableCell>
+              <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
+                {propertyNames[inc.property_id] ?? `#${inc.property_id}`}
+              </TableCell>
               <TableCell>{HAZARD_LABELS[inc.hazard_type] ?? inc.hazard_type}</TableCell>
               <TableCell>
                 <Chip size="small" label={SEVERITY_LABELS[inc.severity_level] ?? inc.severity_level} color={SEVERITY_COLORS[inc.severity_level]} />

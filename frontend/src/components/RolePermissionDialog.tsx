@@ -8,6 +8,7 @@ import Grid from "@mui/material/Grid";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -27,6 +28,9 @@ export default function RolePermissionDialog({
   permission: RolePermission | null;
   onClose: () => void;
 }) {
+  // Phones (and landscape phones, whose height is too short for a floating dialog)
+  // get the form full-screen so every field and the action row stay reachable.
+  const fullScreen = useMediaQuery("(max-width:599.95px), (max-height:500px)");
   const [form, setForm] = useState(emptyForm);
   const queryClient = useQueryClient();
   const isEdit = permission !== null;
@@ -67,7 +71,7 @@ export default function RolePermissionDialog({
   const canSubmit = form.role && (isEdit || form.permission_key.trim());
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>{isEdit ? "עריכת הרשאה" : "הרשאה חדשה"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>

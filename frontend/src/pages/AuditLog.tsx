@@ -162,44 +162,46 @@ export default function AuditLog() {
             <Alert severity="error">שגיאה בטעינת יומן הביקורת.</Alert>
           ) : (
             <>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>תאריך ושעה</TableCell>
-                    <TableCell>משתמש</TableCell>
-                    <TableCell>סוג ישות</TableCell>
-                    <TableCell align="left">מזהה</TableCell>
-                    <TableCell>פעולה</TableCell>
-                    <TableCell>ערך קודם</TableCell>
-                    <TableCell>ערך חדש</TableCell>
-                    <TableCell>כתובת IP</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(logs.data?.entries ?? []).map((entry: AuditLogEntry) => (
-                    <TableRow key={entry.log_id} hover>
-                      <TableCell>{formatDateTime(entry.timestamp)}</TableCell>
-                      <TableCell>{entry.user_name ?? (entry.user_id ? `#${entry.user_id}` : "לא מזוהה")}</TableCell>
-                      <TableCell>{entry.entity_type}</TableCell>
-                      <TableCell align="left">{entry.entity_id || "-"}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={ACTION_LABELS[entry.action] ?? entry.action}
-                          size="small"
-                          color={ACTION_COLORS[entry.action] ?? "default"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <ValueCell value={entry.old_value} />
-                      </TableCell>
-                      <TableCell>
-                        <ValueCell value={entry.new_value} />
-                      </TableCell>
-                      <TableCell sx={{ direction: "ltr" }}>{entry.ip_address ?? "-"}</TableCell>
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>תאריך ושעה</TableCell>
+                      <TableCell>משתמש</TableCell>
+                      <TableCell>סוג ישות</TableCell>
+                      <TableCell align="left">מזהה</TableCell>
+                      <TableCell>פעולה</TableCell>
+                      <TableCell>ערך קודם</TableCell>
+                      <TableCell>ערך חדש</TableCell>
+                      <TableCell>כתובת IP</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {(logs.data?.entries ?? []).map((entry: AuditLogEntry) => (
+                      <TableRow key={entry.log_id} hover>
+                        <TableCell>{formatDateTime(entry.timestamp)}</TableCell>
+                        <TableCell>{entry.user_name ?? (entry.user_id ? `#${entry.user_id}` : "לא מזוהה")}</TableCell>
+                        <TableCell>{entry.entity_type}</TableCell>
+                        <TableCell align="left">{entry.entity_id || "-"}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={ACTION_LABELS[entry.action] ?? entry.action}
+                            size="small"
+                            color={ACTION_COLORS[entry.action] ?? "default"}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <ValueCell value={entry.old_value} />
+                        </TableCell>
+                        <TableCell>
+                          <ValueCell value={entry.new_value} />
+                        </TableCell>
+                        <TableCell sx={{ direction: "ltr" }}>{entry.ip_address ?? "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
 
               {(logs.data?.entries.length ?? 0) === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
@@ -220,6 +222,10 @@ export default function AuditLog() {
                 rowsPerPageOptions={[10, 25, 50, 100]}
                 labelRowsPerPage="שורות בעמוד"
                 labelDisplayedRows={({ from, to, count }) => `${from}–${to} מתוך ${count}`}
+                sx={{
+                  overflow: "visible",
+                  "& .MuiTablePagination-toolbar": { flexWrap: "wrap", justifyContent: "flex-end", px: { xs: 0, sm: 2 } },
+                  "& .MuiTablePagination-spacer": { display: { xs: "none", sm: "block" } },                }}
               />
             </>
           )}

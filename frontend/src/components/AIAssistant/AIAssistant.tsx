@@ -247,7 +247,9 @@ export default function AIAssistant() {
         insetInlineEnd: { xs: 12, md: 24 },
         width: { xs: "calc(100vw - 24px)", sm: 440 },
         height: 600,
-        maxHeight: { xs: "80dvh", md: "78vh" },
+        // Phones: never taller than the visible viewport minus the 12px inset, so the
+        // input row stays reachable in landscape (≈375px tall) too.
+        maxHeight: { xs: "calc(100dvh - 24px)", md: "78vh" },
         display: "flex",
         flexDirection: "column",
         borderRadius: "26px",

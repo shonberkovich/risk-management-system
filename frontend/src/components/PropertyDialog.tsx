@@ -123,7 +123,7 @@ export default function PropertyDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="קוד נכס"
                 inputProps={{ maxLength: 30 }}
@@ -133,7 +133,7 @@ export default function PropertyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, property_code: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="סוג נכס"
@@ -166,7 +166,7 @@ export default function PropertyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={4}>
               <TextField
                 select
                 label="אזור"
@@ -181,7 +181,7 @@ export default function PropertyDialog({
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={4}>
               <TextField
                 label="קו רוחב (Latitude)"
                 type="number"
@@ -190,7 +190,7 @@ export default function PropertyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={4}>
               <TextField
                 label="קו אורך (Longitude)"
                 type="number"
@@ -199,7 +199,7 @@ export default function PropertyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="שווי כינון (₪)"
                 type="number"
@@ -208,7 +208,7 @@ export default function PropertyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, replacement_value: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="ערך בספרים (₪)"
                 type="number"

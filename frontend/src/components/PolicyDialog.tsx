@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 
 import { createPolicy, updatePolicy, type Policy, type PolicyStatus } from "../api/client";
 import { POLICY_STATUS_LABELS } from "../format";
+import { useShortViewportDialog } from "../hooks/useShortViewportDialog";
 
 const STATUS_OPTIONS: PolicyStatus[] = ["ACTIVE", "PENDING_RENEWAL", "EXPIRED"];
 
@@ -115,13 +116,18 @@ export default function PolicyDialog({
     form.deductible_default !== "" &&
     form.annual_premium !== "";
 
+  const fullScreen = useShortViewportDialog();
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle>{isEdit ? "עריכת פוליסה" : "פוליסה חדשה"}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <Stack spacing={2} useFlexGap sx={{ mt: 1 }}>
+          {/* Two-up from `sm` (one field per row on phones), every row full: the money
+              fields pair as limit+deductible / premium+per-event-limit, then status +
+              BI waiting period — the old 6/6, 4/4/4, 6/6, 6 split left an orphan. */}
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="מספר פוליסה"
                 inputProps={{ maxLength: 50 }}
@@ -131,7 +137,7 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, policy_number: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="שם מבטח"
                 inputProps={{ maxLength: 150 }}
@@ -140,7 +146,7 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, insurer_name: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="תחילת תוקף"
                 type="date"
@@ -150,7 +156,7 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="סוף תוקף"
                 type="date"
@@ -166,7 +172,7 @@ export default function PolicyDialog({
                 inputProps={{ min: form.start_date ? dayAfter(form.start_date) : undefined }}
               />
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="תקרת כיסוי (₪)"
                 type="number"
@@ -175,7 +181,7 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, total_limit: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="השתתפות עצמית (₪)"
                 type="number"
@@ -184,7 +190,7 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, deductible_default: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={4}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="פרמיה שנתית (₪)"
                 type="number"
@@ -193,7 +199,17 @@ export default function PolicyDialog({
                 onChange={(e) => setForm((f) => ({ ...f, annual_premium: e.target.value }))}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="גבול אחריות לאירוע בודד (₪)"
+                type="number"
+                fullWidth
+                value={form.per_event_limit}
+                onChange={(e) => setForm((f) => ({ ...f, per_event_limit: e.target.value }))}
+                helperText="ריק = ללא גבול נפרד לאירוע בודד"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 label="סטטוס"
@@ -208,17 +224,7 @@ export default function PolicyDialog({
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={6}>
-              <TextField
-                label="גבול אחריות לאירוע בודד (₪)"
-                type="number"
-                fullWidth
-                value={form.per_event_limit}
-                onChange={(e) => setForm((f) => ({ ...f, per_event_limit: e.target.value }))}
-                helperText="ריק = ללא גבול נפרד לאירוע בודד"
-              />
-            </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="תקופת המתנה לאובדן רווחים (שעות)"
                 type="number"
