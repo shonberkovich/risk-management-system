@@ -223,6 +223,7 @@ def list_incidents(
     status: str | None = Query(default=None),
     property_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
 ):
     stmt = select(models.Incident).order_by(models.Incident.incident_timestamp.desc())
     if status:
@@ -233,7 +234,11 @@ def list_incidents(
 
 
 @router.get("/{incident_id}", response_model=schemas.IncidentOut)
-def get_incident(incident_id: int, db: Session = Depends(get_db)):
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     incident = db.get(models.Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
@@ -241,7 +246,11 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{incident_id}/full", response_model=schemas.IncidentDrillDown)
-def get_incident_drilldown(incident_id: int, db: Session = Depends(get_db)):
+def get_incident_drilldown(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     """Unified incident file (Drill-down): the incident + its media + its claim(s),
     each claim with its payments + any documents attached directly to the incident
     (Documents.entity_type == "INCIDENT"), all in a single call for the incident

@@ -105,28 +105,28 @@ def test_upload_document_rejects_non_integer_entity_id(client, make_user):
 # ---------------------------------------------------------------------------
 
 
-def test_list_documents_returns_newest_first(client, make_user, make_property):
+def test_list_documents_returns_newest_first(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user())
     prop = make_property()
     _upload(client, headers, "PROPERTY", prop.property_id, filename="a.pdf", doc_type="SURVEY_REPORT")
     _upload(client, headers, "PROPERTY", prop.property_id, filename="b.pdf", doc_type="CORRESPONDENCE")
 
-    resp = client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}")
+    resp = client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}", headers=reader_headers)
     assert resp.status_code == 200
     docs = resp.json()
     assert len(docs) == 2
     assert {d["doc_type"] for d in docs} == {"SURVEY_REPORT", "CORRESPONDENCE"}
 
 
-def test_list_documents_empty_for_entity_with_none(client, make_property):
+def test_list_documents_empty_for_entity_with_none(client, make_property, reader_headers):
     prop = make_property()
-    resp = client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}")
+    resp = client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}", headers=reader_headers)
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_list_documents_rejects_unknown_entity(client):
-    resp = client.get("/api/documents/entity/PROPERTY/999999")
+def test_list_documents_rejects_unknown_entity(client, reader_headers):
+    resp = client.get("/api/documents/entity/PROPERTY/999999", headers=reader_headers)
     assert resp.status_code == 404
 
 
@@ -159,9 +159,12 @@ def test_policy_document_signed_url_needs_a_policy_read_role(client, make_user, 
     assert client.get(signed.json()["download_url"]).status_code == 200
 
 
-def test_property_claim_and_incident_documents_stay_open_like_their_entities(
+def test_property_claim_and_incident_documents_need_login_like_their_entities(
     client, make_user, make_property, make_policy, make_incident, make_claim
 ):
+    """Same rule as the entity's own GET: any signed-in role, FIELD_WORKER included,
+    but never anonymous."""
+    field_worker = auth_headers(make_user(role="FIELD_WORKER"))
     prop = make_property()
     incident = make_incident(prop.property_id)
     claim = make_claim(incident.incident_id, make_policy().policy_id)
@@ -170,7 +173,9 @@ def test_property_claim_and_incident_documents_stay_open_like_their_entities(
         ("INCIDENT", incident.incident_id),
         ("CLAIM", claim.claim_id),
     ):
-        assert client.get(f"/api/documents/entity/{entity_type}/{entity_id}").status_code == 200
+        path = f"/api/documents/entity/{entity_type}/{entity_id}"
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers=field_worker).status_code == 200, path
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +183,7 @@ def test_property_claim_and_incident_documents_stay_open_like_their_entities(
 # ---------------------------------------------------------------------------
 
 
-def test_delete_document_as_risk_manager_removes_file_from_disk(client, make_user, make_property, tmp_path):
+def test_delete_document_as_risk_manager_removes_file_from_disk(client, make_user, make_property, tmp_path, reader_headers):
     headers = auth_headers(make_user(role="RISK_MANAGER"))
     prop = make_property()
     upload_resp = _upload(client, headers, "PROPERTY", prop.property_id)
@@ -190,7 +195,7 @@ def test_delete_document_as_risk_manager_removes_file_from_disk(client, make_use
 
     assert resp.status_code == 204
     assert not (tmp_path / storage_key).exists()
-    assert client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}").json() == []
+    assert client.get(f"/api/documents/entity/PROPERTY/{prop.property_id}", headers=reader_headers).json() == []
 
 
 def test_delete_document_forbidden_for_field_worker(client, make_user, make_property):
@@ -214,13 +219,13 @@ def test_delete_nonexistent_document_returns_404(client, make_user):
 # ---------------------------------------------------------------------------
 
 
-def test_signed_url_and_download_round_trip(client, make_user, make_property):
+def test_signed_url_and_download_round_trip(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user())
     prop = make_property()
     content = b"%PDF-1.4 hello world"
     doc_id = _upload(client, headers, "PROPERTY", prop.property_id, content=content).json()["document_id"]
 
-    signed = client.get(f"/api/documents/{doc_id}/signed-url")
+    signed = client.get(f"/api/documents/{doc_id}/signed-url", headers=reader_headers)
     assert signed.status_code == 200
     body = signed.json()
     assert "download_url" in body and body["storage_key"]
@@ -231,16 +236,18 @@ def test_signed_url_and_download_round_trip(client, make_user, make_property):
     assert download.headers["content-type"] == "application/pdf"
 
 
-def test_signed_url_for_nonexistent_document_returns_404(client):
-    resp = client.get("/api/documents/999999/signed-url")
+def test_signed_url_for_nonexistent_document_returns_404(client, reader_headers):
+    resp = client.get("/api/documents/999999/signed-url", headers=reader_headers)
     assert resp.status_code == 404
+    # Anonymous callers get 401 before the lookup, so they can't probe which ids exist.
+    assert client.get("/api/documents/999999/signed-url").status_code == 401
 
 
-def test_download_rejects_tampered_token(client, make_user, make_property):
+def test_download_rejects_tampered_token(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user())
     prop = make_property()
     doc_id = _upload(client, headers, "PROPERTY", prop.property_id).json()["document_id"]
-    signed = client.get(f"/api/documents/{doc_id}/signed-url").json()
+    signed = client.get(f"/api/documents/{doc_id}/signed-url", headers=reader_headers).json()
 
     resp = client.get(
         "/api/documents/download",
@@ -249,11 +256,11 @@ def test_download_rejects_tampered_token(client, make_user, make_property):
     assert resp.status_code == 403
 
 
-def test_download_rejects_expired_signature(client, make_user, make_property):
+def test_download_rejects_expired_signature(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user())
     prop = make_property()
     doc_id = _upload(client, headers, "PROPERTY", prop.property_id).json()["document_id"]
-    signed = client.get(f"/api/documents/{doc_id}/signed-url").json()
+    signed = client.get(f"/api/documents/{doc_id}/signed-url", headers=reader_headers).json()
 
     # A signature that was valid for `storage_key` at an expires_at already in
     # the past — is_signed_url_valid must reject this before even checking disk.
@@ -265,11 +272,11 @@ def test_download_rejects_expired_signature(client, make_user, make_property):
     assert resp.status_code == 403
 
 
-def test_download_missing_file_after_delete_returns_404(client, make_user, make_property):
+def test_download_missing_file_after_delete_returns_404(client, make_user, make_property, reader_headers):
     headers = auth_headers(make_user(role="ADMIN"))
     prop = make_property()
     doc_id = _upload(client, headers, "PROPERTY", prop.property_id).json()["document_id"]
-    storage_key = client.get(f"/api/documents/{doc_id}/signed-url").json()["storage_key"]
+    storage_key = client.get(f"/api/documents/{doc_id}/signed-url", headers=reader_headers).json()["storage_key"]
 
     client.delete(f"/api/documents/{doc_id}", headers=headers)
 

@@ -85,7 +85,7 @@ def test_update_missing_property_is_404(client, make_user):
     assert resp.status_code == 404
 
 
-def test_delete_property_is_soft_delete(client, make_user):
+def test_delete_property_is_soft_delete(client, make_user, reader_headers):
     admin = make_user(role="ADMIN")
     headers = auth_headers(admin)
     created = client.post("/api/properties", json=_property_payload(), headers=headers).json()
@@ -95,11 +95,11 @@ def test_delete_property_is_soft_delete(client, make_user):
     assert resp.status_code == 204
 
     # No longer in the active list...
-    listed = client.get("/api/properties").json()
+    listed = client.get("/api/properties", headers=reader_headers).json()
     assert property_id not in [p["property_id"] for p in listed]
 
     # ...but still reachable by id, with is_active=False (soft delete, not a hard delete).
-    fetched = client.get(f"/api/properties/{property_id}")
+    fetched = client.get(f"/api/properties/{property_id}", headers=reader_headers)
     assert fetched.status_code == 200
     assert fetched.json()["is_active"] is False
 

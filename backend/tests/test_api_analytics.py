@@ -31,35 +31,35 @@ def test_kpis_ok_for_risk_manager(client, make_user, make_property, make_risk_pr
     assert "mfl" in body
 
 
-def test_map_endpoint_is_open_and_colors_by_incident_severity(client, make_property, make_incident):
+def test_map_endpoint_is_open_and_colors_by_incident_severity(client, make_property, make_incident, reader_headers):
     green_prop = make_property(property_code="P-GREEN")
     red_prop = make_property(property_code="P-RED")
     make_incident(red_prop.property_id, severity_level="CRITICAL", status="NEW")
 
-    resp = client.get("/api/analytics/map")
+    resp = client.get("/api/analytics/map", headers=reader_headers)
     assert resp.status_code == 200
     points = {p["property_id"]: p for p in resp.json()}
     assert points[green_prop.property_id]["status_color"] == "green"
     assert points[red_prop.property_id]["status_color"] == "red"
 
 
-def test_map_excludes_inactive_properties(client, make_property):
+def test_map_excludes_inactive_properties(client, make_property, reader_headers):
     active = make_property(property_code="P-ACTIVE", is_active=True)
     make_property(property_code="P-INACTIVE", is_active=False)
 
-    resp = client.get("/api/analytics/map")
+    resp = client.get("/api/analytics/map", headers=reader_headers)
     ids = [p["property_id"] for p in resp.json()]
     assert active.property_id in ids
     assert len(ids) == 1
 
 
-def test_risk_matrix_buckets_properties_by_probability_and_severity(client, make_property, make_risk_profile, make_incident):
+def test_risk_matrix_buckets_properties_by_probability_and_severity(client, make_property, make_risk_profile, make_incident, reader_headers):
     # High risk score + CRITICAL open incident -> should land in the high/high cell.
     prop = make_property()
     make_risk_profile(prop.property_id, flood_risk_score=5, fire_risk_score=5, earthquake_risk_score=5)
     make_incident(prop.property_id, severity_level="CRITICAL", status="NEW")
 
-    resp = client.get("/api/analytics/risk-matrix")
+    resp = client.get("/api/analytics/risk-matrix", headers=reader_headers)
     assert resp.status_code == 200
     cells = resp.json()
     assert len(cells) == 9
@@ -67,9 +67,9 @@ def test_risk_matrix_buckets_properties_by_probability_and_severity(client, make
     assert prop.property_id in high_high["property_ids"]
 
 
-def test_risk_matrix_defaults_property_with_no_incidents_to_low_severity(client, make_property):
+def test_risk_matrix_defaults_property_with_no_incidents_to_low_severity(client, make_property, reader_headers):
     prop = make_property()
-    resp = client.get("/api/analytics/risk-matrix")
+    resp = client.get("/api/analytics/risk-matrix", headers=reader_headers)
     cells = resp.json()
     low_low = next(c for c in cells if c["probability_band"] == "low" and c["severity_band"] == "low")
     assert prop.property_id in low_low["property_ids"]
@@ -93,9 +93,9 @@ def test_loss_ratio_trend_ok(client, make_user, make_property, make_risk_profile
     assert isinstance(resp.json(), list)
 
 
-def test_alerts_endpoint_is_open_and_returns_list(client, make_property):
+def test_alerts_endpoint_is_open_and_returns_list(client, make_property, reader_headers):
     make_property()
-    resp = client.get("/api/analytics/alerts")
+    resp = client.get("/api/analytics/alerts", headers=reader_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
@@ -172,13 +172,13 @@ def test_geographic_exposure_clusters_ok(client, make_user, make_property, make_
     assert clusters[0]["cluster_mfl_total"] == 500_000
 
 
-def test_hazard_distribution_is_open_and_computes_percent(client, make_property, make_incident):
+def test_hazard_distribution_is_open_and_computes_percent(client, make_property, make_incident, reader_headers):
     prop = make_property()
     make_incident(prop.property_id, hazard_type="FIRE")
     make_incident(prop.property_id, hazard_type="FIRE")
     make_incident(prop.property_id, hazard_type="FLOOD")
 
-    resp = client.get("/api/analytics/hazard-distribution")
+    resp = client.get("/api/analytics/hazard-distribution", headers=reader_headers)
     assert resp.status_code == 200
     by_type = {row["hazard_type"]: row for row in resp.json()}
     assert by_type["FIRE"]["count"] == 2
@@ -186,18 +186,18 @@ def test_hazard_distribution_is_open_and_computes_percent(client, make_property,
     assert by_type["FLOOD"]["count"] == 1
 
 
-def test_hazard_distribution_empty_db_returns_empty_list(client):
-    resp = client.get("/api/analytics/hazard-distribution")
+def test_hazard_distribution_empty_db_returns_empty_list(client, reader_headers):
+    resp = client.get("/api/analytics/hazard-distribution", headers=reader_headers)
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_risk_matrix_ignores_closed_incidents_for_severity(client, make_property, make_incident):
+def test_risk_matrix_ignores_closed_incidents_for_severity(client, make_property, make_incident, reader_headers):
     """Severity comes from the worst *open* incident (docstring + map definition) —
     a CLOSED critical incident must not keep the property in the high column."""
     prop = make_property()
     make_incident(prop.property_id, severity_level="CRITICAL", status="CLOSED")
 
-    cells = client.get("/api/analytics/risk-matrix").json()
+    cells = client.get("/api/analytics/risk-matrix", headers=reader_headers).json()
     low_low = next(c for c in cells if c["probability_band"] == "low" and c["severity_band"] == "low")
     assert prop.property_id in low_low["property_ids"]

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app import schemas
+from app import models, schemas
 from app.database import get_db
+from app.dependencies.permissions import require_roles
 from app.services import simulation
 
 router = APIRouter(prefix="/api/simulation", tags=["simulation"])
@@ -10,7 +11,7 @@ router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 MAX_ITERATIONS = 100_000
 MAX_HORIZON_YEARS = 50
 # The work is iterations x horizon_years simulated years (x the number of properties),
-# all in pure Python on the request thread, and these endpoints are open to any caller.
+# all in pure Python on the request thread, and any signed-in caller can request it.
 # Each bound alone still allowed 100,000 x 50 — about 100 s of a busy server for a
 # 30-property portfolio — so the product is capped at what 100,000 single-year runs
 # already cost (a few seconds): e.g. 100,000 runs for 1 year, 2,000 runs for 50.
@@ -31,6 +32,7 @@ def run_portfolio_simulation(
     horizon_years: int = Query(1, gt=0, le=MAX_HORIZON_YEARS),
     seed: int | None = None,
     db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
 ):
     """Monte Carlo portfolio loss simulation: expected cumulative loss over
     horizon_years, worst simulated horizon, VaR95/VaR99, and a histogram of the full
@@ -49,6 +51,7 @@ def run_property_simulation(
     horizon_years: int = Query(1, gt=0, le=MAX_HORIZON_YEARS),
     seed: int | None = None,
     db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
 ):
     """Same Monte Carlo simulation, scoped to a single property. 404 if the property
     doesn't exist or has no risk profile to simulate against (see

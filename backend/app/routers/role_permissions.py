@@ -28,7 +28,11 @@ _ROLE_PERMISSIONS_WRITE_ROLES = ("ADMIN",)
 
 
 @router.get("", response_model=list[schemas.RolePermissionOut])
-def list_role_permissions(role: str | None = None, db: Session = Depends(get_db)):
+def list_role_permissions(
+    role: str | None = None,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     stmt = select(models.RolePermission).order_by(
         models.RolePermission.role, models.RolePermission.permission_key
     )

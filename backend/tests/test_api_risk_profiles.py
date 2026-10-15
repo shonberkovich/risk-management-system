@@ -16,9 +16,9 @@ def _profile_payload(**overrides) -> dict:
     return payload
 
 
-def test_get_risk_profile_404_when_none_exists(client, make_property):
+def test_get_risk_profile_404_when_none_exists(client, make_property, reader_headers):
     prop = make_property()
-    resp = client.get(f"/api/properties/{prop.property_id}/risk-profile")
+    resp = client.get(f"/api/properties/{prop.property_id}/risk-profile", headers=reader_headers)
     assert resp.status_code == 404
 
 
@@ -39,7 +39,7 @@ def test_create_risk_profile_forbidden_for_field_worker(client, make_user, make_
     assert resp.status_code == 403
 
 
-def test_create_risk_profile(client, make_user, make_property):
+def test_create_risk_profile(client, make_user, make_property, reader_headers):
     risk_manager = make_user(role="RISK_MANAGER")
     prop = make_property()
     resp = client.post(
@@ -53,12 +53,12 @@ def test_create_risk_profile(client, make_user, make_property):
     assert body["has_sprinklers"] is True
 
     # Now reachable via the plain GET.
-    fetched = client.get(f"/api/properties/{prop.property_id}/risk-profile")
+    fetched = client.get(f"/api/properties/{prop.property_id}/risk-profile", headers=reader_headers)
     assert fetched.status_code == 200
     assert fetched.json()["profile_id"] == body["profile_id"]
 
     # ...and embedded in the property itself.
-    prop_resp = client.get(f"/api/properties/{prop.property_id}")
+    prop_resp = client.get(f"/api/properties/{prop.property_id}", headers=reader_headers)
     assert prop_resp.json()["risk_profile"]["profile_id"] == body["profile_id"]
 
 

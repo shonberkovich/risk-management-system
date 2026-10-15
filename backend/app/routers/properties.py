@@ -42,7 +42,10 @@ def _to_property_out(prop: models.Property) -> schemas.PropertyOut:
 
 
 @router.get("", response_model=list[schemas.PropertyOut])
-def list_properties(db: Session = Depends(get_db)):
+def list_properties(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     props = db.scalars(
         select(models.Property)
         .options(
@@ -57,7 +60,11 @@ def list_properties(db: Session = Depends(get_db)):
 
 
 @router.get("/{property_id}", response_model=schemas.PropertyOut)
-def get_property(property_id: int, db: Session = Depends(get_db)):
+def get_property(
+    property_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     prop = db.scalar(
         select(models.Property)
         .options(

@@ -87,7 +87,11 @@ _PAYABLE_CLAIM_STATUSES = {"APPROVED", "SETTLED"}
 
 
 @router.get("", response_model=list[schemas.ClaimTrackingRow])
-def list_claims(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+def list_claims(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     paid_subq = (
         select(
             models.ClaimPayment.claim_id.label("claim_id"),
@@ -126,7 +130,11 @@ def list_claims(status: str | None = Query(default=None), db: Session = Depends(
 
 
 @router.get("/{claim_id}", response_model=schemas.ClaimOut)
-def get_claim(claim_id: int, db: Session = Depends(get_db)):
+def get_claim(
+    claim_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     claim = db.get(models.Claim, claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
@@ -281,7 +289,11 @@ def update_claim(
 
 
 @router.get("/{claim_id}/payments", response_model=list[schemas.ClaimPaymentOut])
-def list_claim_payments(claim_id: int, db: Session = Depends(get_db)):
+def list_claim_payments(
+    claim_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     claim = db.get(models.Claim, claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
@@ -341,7 +353,11 @@ def create_claim_payment(
 
 
 @router.get("/{claim_id}/reserves", response_model=list[schemas.ClaimReserveOut])
-def list_claim_reserves(claim_id: int, db: Session = Depends(get_db)):
+def list_claim_reserves(
+    claim_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     claim = db.get(models.Claim, claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")

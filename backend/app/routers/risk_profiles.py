@@ -91,7 +91,11 @@ def _get_property_or_404(db: Session, property_id: int) -> models.Property:
 
 
 @router.get("", response_model=schemas.RiskProfileOut)
-def get_risk_profile(property_id: int, db: Session = Depends(get_db)):
+def get_risk_profile(
+    property_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     prop = _get_property_or_404(db, property_id)
     if not prop.risk_profile:
         raise HTTPException(404, "Property has no risk profile yet")

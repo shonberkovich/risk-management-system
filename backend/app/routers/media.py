@@ -103,7 +103,11 @@ async def upload_incident_media(
 
 
 @router.get("/api/incidents/{incident_id}/media", response_model=list[schemas.IncidentMediaOut])
-def list_incident_media(incident_id: int, db: Session = Depends(get_db)):
+def list_incident_media(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     incident = db.get(models.Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
@@ -129,7 +133,11 @@ def delete_incident_media(
 
 
 @router.get("/api/media/{media_id}/signed-url", response_model=schemas.SignedUrlOut)
-def get_signed_url(media_id: int, db: Session = Depends(get_db)):
+def get_signed_url(
+    media_id: int,
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_roles()),
+):
     media = db.get(models.IncidentMedia, media_id)
     if not media:
         raise HTTPException(404, "Media not found")

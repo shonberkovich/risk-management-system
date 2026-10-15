@@ -13,8 +13,9 @@ def _permission_payload(**overrides) -> dict:
     return payload
 
 
-def test_list_role_permissions_is_open(client):
-    resp = client.get("/api/role-permissions")
+def test_list_role_permissions_needs_login_but_no_particular_role(client, make_user):
+    assert client.get("/api/role-permissions").status_code == 401
+    resp = client.get("/api/role-permissions", headers=auth_headers(make_user(role="FIELD_WORKER")))
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -25,7 +26,7 @@ def test_create_role_permission_requires_admin(client, make_user):
     assert resp.status_code == 403
 
 
-def test_create_and_list_role_permission(client, make_user):
+def test_create_and_list_role_permission(client, make_user, reader_headers):
     admin = make_user(role="ADMIN")
     resp = client.post("/api/role-permissions", json=_permission_payload(), headers=auth_headers(admin))
     assert resp.status_code == 201
@@ -33,11 +34,11 @@ def test_create_and_list_role_permission(client, make_user):
     assert body["role"] == "RISK_MANAGER"
     assert body["permission_key"] == "incidents:view"
 
-    listed = client.get("/api/role-permissions", params={"role": "RISK_MANAGER"})
+    listed = client.get("/api/role-permissions", params={"role": "RISK_MANAGER"}, headers=reader_headers)
     assert listed.status_code == 200
     assert len(listed.json()) == 1
 
-    other_role = client.get("/api/role-permissions", params={"role": "CFO"})
+    other_role = client.get("/api/role-permissions", params={"role": "CFO"}, headers=reader_headers)
     assert other_role.json() == []
 
 
@@ -71,7 +72,7 @@ def test_update_missing_role_permission_is_404(client, make_user):
     assert resp.status_code == 404
 
 
-def test_delete_role_permission(client, make_user):
+def test_delete_role_permission(client, make_user, reader_headers):
     admin = make_user(role="ADMIN")
     headers = auth_headers(admin)
     created = client.post("/api/role-permissions", json=_permission_payload(), headers=headers).json()
@@ -79,7 +80,7 @@ def test_delete_role_permission(client, make_user):
     resp = client.delete(f"/api/role-permissions/{created['role_permission_id']}", headers=headers)
     assert resp.status_code == 204
 
-    listed = client.get("/api/role-permissions")
+    listed = client.get("/api/role-permissions", headers=reader_headers)
     assert listed.json() == []
 
 

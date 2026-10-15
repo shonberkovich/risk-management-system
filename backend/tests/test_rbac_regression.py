@@ -15,13 +15,16 @@ GET route in backend/app/routers/, derived by reading each router file and its
   financials.py's `_FINANCIALS_ROLES` endpoints, compliance.py's
   `_COMPLIANCE_ROLES`, audit.py's `_AUDIT_ROLES` (ADMIN-only), and
   integrations.py's `_ERP_ROLES`/`_GIS_ROLES`/`_ECONOMICS_ROLES` endpoints.
-- **Intentionally open GET endpoints** (must stay reachable by FIELD_WORKER, no
-  token needed): analytics.py's map/risk-matrix/alerts/hazard-distribution,
-  claims.py's list/by-id/payments/reserves, incidents.py's list/by-id/full,
-  properties.py, mitigation-tasks, risk-profiles, retention, simulation, users
-  list, integrations.py's weather alerts (deliberately open to any authenticated
-  role — see its module comment) — a future accidental over-restriction on any
-  of these should fail a test here.
+- **Any-signed-in GET endpoints** (`require_roles()` with no args: 401 without a
+  token, but must stay reachable by FIELD_WORKER): analytics.py's
+  map/risk-matrix/alerts/hazard-distribution, claims.py's
+  list/by-id/payments/reserves, incidents.py's list/by-id/full, properties.py,
+  mitigation-tasks, risk-profiles, retention, simulation, users list, role
+  permissions list, incident media, property/incident/claim documents, and
+  integrations.py's weather/home-front/reverse-geocode endpoints. These used to be
+  fully anonymous-open; with the app publicly deployed they now need a token. A
+  future accidental over-restriction (403 for FIELD_WORKER) or re-opening (200
+  without a token) on any of these should fail a test here.
 
 Each endpoint is exercised against a minimal but valid fixture setup (property /
 incident / policy / claim as needed) so a 500 from missing joined data doesn't
@@ -29,6 +32,7 @@ mask what we're actually testing (the 403/200 split).
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 
 import pytest
@@ -201,11 +205,12 @@ def test_integrations_finance_and_gis_get_endpoints_block_field_worker(client, m
 
 
 # ---------------------------------------------------------------------------
-# Intentionally open GET endpoints — must stay reachable by FIELD_WORKER
+# Any-signed-in GET endpoints — 401 without a token, but must stay reachable
+# by FIELD_WORKER
 # ---------------------------------------------------------------------------
 
 
-def test_operational_analytics_get_endpoints_stay_open_to_field_worker(client, make_user):
+def test_operational_analytics_get_endpoints_need_login_but_stay_open_to_field_worker(client, make_user):
     field_worker = make_user(role="FIELD_WORKER")
     endpoints = [
         "/api/analytics/map",
@@ -214,11 +219,11 @@ def test_operational_analytics_get_endpoints_stay_open_to_field_worker(client, m
         "/api/analytics/hazard-distribution",
     ]
     for path in endpoints:
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
-def test_claims_get_endpoints_stay_open_to_field_worker(
+def test_claims_get_endpoints_need_login_but_stay_open_to_field_worker(
     client, make_user, make_property, make_incident, make_policy, make_claim
 ):
     field_worker = make_user(role="FIELD_WORKER")
@@ -234,11 +239,11 @@ def test_claims_get_endpoints_stay_open_to_field_worker(
         f"/api/claims/{claim.claim_id}/reserves",
     ]
     for path in endpoints:
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
-def test_incidents_get_endpoints_stay_open_to_field_worker(client, make_user, make_property, make_incident):
+def test_incidents_get_endpoints_need_login_but_stay_open_to_field_worker(client, make_user, make_property, make_incident):
     field_worker = make_user(role="FIELD_WORKER")
     prop = make_property()
     incident = make_incident(prop.property_id)
@@ -249,21 +254,21 @@ def test_incidents_get_endpoints_stay_open_to_field_worker(client, make_user, ma
         f"/api/incidents/{incident.incident_id}/full",
     ]
     for path in endpoints:
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
-def test_properties_get_endpoints_stay_open_to_field_worker(client, make_user, make_property):
+def test_properties_get_endpoints_need_login_but_stay_open_to_field_worker(client, make_user, make_property):
     field_worker = make_user(role="FIELD_WORKER")
     prop = make_property()
 
     endpoints = ["/api/properties", f"/api/properties/{prop.property_id}"]
     for path in endpoints:
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
-def test_mitigation_get_endpoints_stay_open_to_field_worker(
+def test_mitigation_get_endpoints_need_login_but_stay_open_to_field_worker(
     client, make_user, make_property, make_mitigation_task
 ):
     field_worker = make_user(role="FIELD_WORKER")
@@ -277,7 +282,7 @@ def test_mitigation_get_endpoints_stay_open_to_field_worker(
         f"/api/mitigation-tasks/{task.task_id}/roi",
     ]
     for path in endpoints:
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
         assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
@@ -289,7 +294,7 @@ def test_risk_profile_get_endpoint_stays_open_to_field_worker(
     make_risk_profile(prop.property_id)
 
     path = f"/api/properties/{prop.property_id}/risk-profile"
-    assert client.get(path).status_code == 200, path
+    assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
@@ -302,7 +307,7 @@ def test_retention_get_endpoint_stays_open_to_field_worker(client, make_user, ma
         f"/api/retention/recommendation?policy_id={policy.policy_id}"
         f"&property_id={prop.property_id}&estimated_loss=50000"
     )
-    assert client.get(path).status_code == 200, path
+    assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
@@ -312,7 +317,7 @@ def test_simulation_get_endpoint_stays_open_to_field_worker(client, make_user, m
     make_risk_profile(prop.property_id)
 
     path = "/api/simulation/portfolio"
-    assert client.get(path).status_code == 200, path
+    assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
@@ -320,15 +325,15 @@ def test_users_list_get_endpoint_stays_open_to_field_worker(client, make_user):
     field_worker = make_user(role="FIELD_WORKER")
 
     path = "/api/users"
-    assert client.get(path).status_code == 200, path
+    assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
 
 
 def test_integrations_weather_alerts_open_to_any_authenticated_role(client, make_user, make_property):
     """The one integrations.py GET deliberately left open (require_roles() with no
     args = authenticated, any role) — per its module comment, a field worker needs
-    a storm warning as much as a risk officer does. Still requires a token, unlike
-    the map/risk-matrix/claims endpoints above which are fully anonymous-open."""
+    a storm warning as much as a risk officer does. Requires a token, like every
+    non-public GET endpoint above."""
     field_worker = make_user(role="FIELD_WORKER")
     make_property()
 
@@ -372,3 +377,48 @@ def test_users_admin_get_endpoint_blocks_field_worker(client, make_user):
     assert client.get(path).status_code == 401, path
     assert client.get(path, headers=auth_headers(field_worker)).status_code == 403, path
     assert client.get(path, headers=auth_headers(admin)).status_code == 200, path
+
+
+# ---------------------------------------------------------------------------
+# Catch-all: no GET under /api/ answers an anonymous caller, except the
+# deliberately public ones. Walks the app's real route table, so a new GET
+# endpoint that forgets its require_roles(...) dependency fails here even if
+# nobody adds it to the per-router tests above.
+# ---------------------------------------------------------------------------
+
+# Public by design (see dependencies/permissions.py's module docstring): liveness,
+# the SSO redirect that starts a login, and the signed-URL downloads, where the
+# expiring token in the URL is the credential.
+_PUBLIC_GET_PATHS = {
+    "/api/health",
+    "/api/auth/sso/{provider}/login",
+    "/api/media/download",
+    "/api/documents/download",
+}
+
+
+def test_every_non_public_api_get_rejects_anonymous_callers(client):
+    from app.main import app
+
+    checked = []
+    # The OpenAPI schema rather than app.routes: it lists every included router's
+    # routes flat, whatever FastAPI version nests them internally.
+    for route_path, operations in app.openapi()["paths"].items():
+        if "get" not in operations:
+            continue
+        if not route_path.startswith("/api/") or route_path in _PUBLIC_GET_PATHS:
+            continue
+        # Any valid value works for path params (the first enum member for a Literal
+        # one, else 1): auth is checked before the handler looks anything up, so the
+        # 401 comes first.
+        values = {
+            p["name"]: (p["schema"].get("enum") or [1])[0]
+            for p in operations["get"].get("parameters", [])
+            if p["in"] == "path"
+        }
+        path = re.sub(r"\{([^}]+)\}", lambda m: str(values.get(m.group(1), 1)), route_path)
+        assert client.get(path).status_code == 401, route_path
+        checked.append(route_path)
+
+    # Guard against the walk silently matching nothing (e.g. a router prefix change).
+    assert "/api/users" in checked and "/api/properties" in checked

@@ -32,8 +32,8 @@ def test_create_user(client, make_user):
     assert body["email"] == "new-user@example.com"
     assert body["is_active"] is True
 
-    # Now appears in the open GET /api/users lookup too.
-    listed = client.get("/api/users").json()
+    # Now appears in the any-signed-in GET /api/users lookup too.
+    listed = client.get("/api/users", headers=auth_headers(admin)).json()
     assert any(u["user_id"] == body["user_id"] for u in listed)
 
 
@@ -141,7 +141,7 @@ def test_list_users_admin_returns_full_shape(client, make_user):
     assert "created_at" in row
 
 
-def test_system_sender_is_hidden_from_user_listings_and_edits(client, db, make_user):
+def test_system_sender_is_hidden_from_user_listings_and_edits(client, db, make_user, reader_headers):
     """services/notifications.py's system sender (role SYSTEM, not a schemas.UserRole)
     must not appear in either listing — it used to make GET /api/users/admin fail
     response validation (500) as soon as the row existed — nor be editable."""
@@ -154,7 +154,7 @@ def test_system_sender_is_hidden_from_user_listings_and_edits(client, db, make_u
     assert admin_list.status_code == 200
     assert all(u["user_id"] != system_user.user_id for u in admin_list.json())
 
-    open_list = client.get("/api/users")
+    open_list = client.get("/api/users", headers=reader_headers)
     assert open_list.status_code == 200
     assert all(u["user_id"] != system_user.user_id for u in open_list.json())
 

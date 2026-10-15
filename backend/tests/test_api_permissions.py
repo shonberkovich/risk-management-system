@@ -74,10 +74,12 @@ def test_mitigation_task_write_requires_permitted_role(client, make_property, ma
     assert client.post("/api/mitigation-tasks", json=payload, headers=auth_headers(property_manager)).status_code == 201
 
 
-def test_mitigation_task_read_is_open_to_everyone(client):
-    # GET endpoints are intentionally left open (see dependencies/permissions.py
-    # module docstring) — no auth required to list tasks.
-    assert client.get("/api/mitigation-tasks").status_code == 200
+def test_mitigation_task_read_needs_login_but_no_particular_role(client, make_user):
+    # Plain reads take require_roles() (see dependencies/permissions.py module
+    # docstring) — any signed-in role, but never anonymous.
+    assert client.get("/api/mitigation-tasks").status_code == 401
+    field_worker = make_user(role="FIELD_WORKER")
+    assert client.get("/api/mitigation-tasks", headers=auth_headers(field_worker)).status_code == 200
 
 
 def test_financial_get_endpoints_block_field_worker_and_anonymous(client, make_user):
@@ -102,10 +104,12 @@ def test_financial_get_endpoints_block_field_worker_and_anonymous(client, make_u
         assert client.get(path, headers=auth_headers(risk_manager)).status_code == 200, path
 
 
-def test_operational_analytics_get_endpoints_stay_open(client):
+def test_operational_analytics_get_endpoints_need_login_but_no_particular_role(client, make_user):
     """The counterpart to the above: endpoints that don't lead with a financial
-    figure (map, risk-matrix, alerts, hazard-distribution) are left open, unchanged
-    by this task."""
+    figure (map, risk-matrix, alerts, hazard-distribution) aren't role-gated, so a
+    FIELD_WORKER gets them — but like every non-public read they need a token."""
+    field_worker = make_user(role="FIELD_WORKER")
     for path in ("/api/analytics/map", "/api/analytics/risk-matrix",
                  "/api/analytics/alerts", "/api/analytics/hazard-distribution"):
-        assert client.get(path).status_code == 200, path
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers=auth_headers(field_worker)).status_code == 200, path
