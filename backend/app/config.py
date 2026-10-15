@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # short classification/summary/Q&A tasks and works on every current model (unlike
     # thinking={"type": "disabled"}, which Opus 5.5 / Sonnet 5.5 reject with a 400).
     anthropic_effort: str = "low"
+    # thinking.type for the assistant chat turn (services/ai_orchestrator.py) only. Even at
+    # effort "low" Haiku 5.5 still thought ~1.7s before answering chart questions; "disabled"
+    # removes that. Opus 5.5 / Sonnet 5.5 reject "disabled" with a 400 — set this to
+    # "adaptive" if ANTHROPIC_MODEL is switched to one of them.
+    anthropic_chat_thinking: str = "disabled"
 
     # --- Real weather connector (app/integrations/weather.py) ---
     # OpenWeatherMap "Current Weather Data" API key (free tier, api.openweathermap.org/data/2.5/
