@@ -1,0 +1,30 @@
+# Render Blueprint — one free web service (site + API, built from ./Dockerfile).
+# The database is a free Neon Postgres; paste its URL into DATABASE_URL when Render asks.
+services:
+  - type: web
+    name: rmis
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # Every poller tick wakes the Neon database; 15 min keeps it inside the free
+      # tier's monthly compute hours (scheduled emails go out up to 15 min late).
+      - key: SCHEDULED_EMAIL_POLL_SECONDS
+        value: "900"
+      # services/keepalive.py: self-ping every 10 min, 08:00-20:00 Israel time.
+      - key: KEEPALIVE_START_HOUR
+        value: "8"
+      - key: KEEPALIVE_END_HOUR
+        value: "20"

@@ -1,0 +1,30 @@
+# Wakes the free Render service for the day and keeps pinging it 07:30-20:00 Israel
+# time. Render spins a free service down after 15 idle minutes, and a sleeping server
+# can't wake itself, so the morning wake-up has to come from outside. While it's up,
+# backend/app/services/keepalive.py also self-pings; this workflow is the backup for
+# that (GitHub may delay scheduled runs, so the two overlap on purpose).
+name: keep-alive
+
+on:
+  schedule:
+    # UTC. Covers 07:30-20:00 Israel time in both summer (UTC+3) and winter (UTC+2);
+    # the step below skips runs outside that window.
+    - cron: "*/10 4-18 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /api/health during Israel daytime
+        env:
+          RMIS_URL: ${{ vars.RMIS_URL || 'https://rmis.onrender.com' }}
+        run: |
+          now=$(TZ=Asia/Jerusalem date +%H%M)
+          if [ "$now" -lt 0730 ] || [ "$now" -ge 2000 ]; then
+            echo "Outside 07:30-20:00 Israel time ($now), skipping."
+            exit 0
+          fi
+          # A cold start takes ~1 minute, hence the long timeout and retries.
+          curl -fsS --retry 3 --retry-delay 20 --max-time 120 "$RMIS_URL/api/health"

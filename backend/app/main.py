@@ -1,10 +1,15 @@
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DataError
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse, RedirectResponse
 
 from app.config import settings
@@ -36,7 +41,7 @@ from app.routers import (
     sse,
     users,
 )
-from app.services import ai_orchestrator, sse_manager
+from app.services import ai_orchestrator, keepalive, sse_manager
 from app.services.scheduler import start_scheduled_email_poller
 from app.shutdown_signals import chain_shutdown_signal_handlers
 
@@ -48,6 +53,7 @@ async def lifespan(app: FastAPI):
     # and why it's skipped entirely under pytest). `poller_task` is None under
     # pytest, in which case there's nothing to cancel on shutdown either.
     poller_task = start_scheduled_email_poller()
+    keepalive_task = keepalive.start_keepalive()
     ai_orchestrator.warm_up_in_background()
     # End every open SSE stream as soon as the server starts shutting down — the
     # server waits for all open responses first, so an endless stream would hang
@@ -61,10 +67,11 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         restore_signal_handlers()
-        if poller_task is not None:
-            poller_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await poller_task
+        for task in (poller_task, keepalive_task):
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
 
 app = FastAPI(
@@ -145,3 +152,23 @@ app.include_router(email_rules.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# Cloud deployment (render.yaml): the built React app (frontend/dist) is served by this
+# same process, so the site and /api share one origin — no CORS, no second service.
+# Locally there's no dist/ and Vite's dev server keeps serving the frontend as before.
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if _FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+    # A 404 handler rather than a catch-all route: a "/{path}" route would also match
+    # unknown /api/* paths and turn their 404s into 405s for non-GET methods.
+    @app.exception_handler(StarletteHTTPException)
+    async def spa_fallback(request: Request, exc: StarletteHTTPException):
+        path = request.url.path
+        if exc.status_code == 404 and request.method == "GET" and not path.startswith("/api"):
+            file = (_FRONTEND_DIST / path.lstrip("/")).resolve()
+            if file.is_file() and file.is_relative_to(_FRONTEND_DIST):
+                return FileResponse(file)
+            return FileResponse(_FRONTEND_DIST / "index.html")
+        return await http_exception_handler(request, exc)
