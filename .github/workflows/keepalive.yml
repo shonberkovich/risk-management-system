@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Ping /api/health during Israel daytime
         env:
-          RMIS_URL: ${{ vars.RMIS_URL || 'https://rmis.onrender.com' }}
+          RMIS_URL: ${{ vars.RMIS_URL || 'https://rmis-j48m.onrender.com' }}
         run: |
           now=$(TZ=Asia/Jerusalem date +%H%M)
           if [ "$now" -lt 0730 ] || [ "$now" -ge 2000 ]; then
