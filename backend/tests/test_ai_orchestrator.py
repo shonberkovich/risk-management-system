@@ -118,6 +118,7 @@ def test_turn_request_replays_history_and_inlines_snapshots(stub_snapshots):
     assert "SNAP-DATA_AGENT" in request["system"]
     assert "SNAP-COMPLIANCE_AGENT" in request["system"]
     assert request["output_config"] == {"effort": settings.anthropic_effort}
+    assert request["thinking"] == {"type": "disabled"}  # no pre-answer thinking in the chat (latency)
 
 
 def test_another_users_session_id_starts_a_fresh_session(db, make_user, monkeypatch):

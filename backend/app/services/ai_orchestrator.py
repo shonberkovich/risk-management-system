@@ -184,6 +184,7 @@ def _turn_request(message: str, history: list[dict], agents: list[AgentType]) ->
     request = {
         "model": settings.anthropic_model,
         "output_config": {"effort": settings.anthropic_effort},
+        "thinking": {"type": settings.anthropic_chat_thinking},
         "max_tokens": 2048,
         "system": "\n\n".join(sections),
         "tools": tools,
