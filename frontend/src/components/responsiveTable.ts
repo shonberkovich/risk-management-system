@@ -13,14 +13,14 @@ export const WRAP_CELL_CLASS = "rmis-cell-wrap";
  * as possible and its `TableContainer` scrolls sideways only once that isn't enough.
  *
  * On touch screens the `size="small"` row-action icon buttons (30px) are padded up to a
- * ~38px tap target; mouse layouts keep the compact size. */
+ * 40px tap target; mouse layouts keep the compact size. */
 export const DATA_TABLE_SX: SxProps<Theme> = {
   [`& .MuiTableCell-body:not(.${WRAP_CELL_CLASS})`]: { whiteSpace: "nowrap" },
   // Tighter gutters below `xl` (tablets / laptops): 8–10 columns then fit, or need
   // far less sideways scroll, without wrapping any value.
   "& .MuiTableCell-root": { paddingInline: { xs: "10px", xl: "16px" } },
   "@media (pointer: coarse)": {
-    "& .MuiTableCell-body .MuiIconButton-sizeSmall": { padding: "9px" },
+    "& .MuiTableCell-body .MuiIconButton-sizeSmall": { padding: "10px" },
   },
 };
 

@@ -25,6 +25,7 @@ import { deleteRolePermission, fetchRolePermissions, type RolePermission } from 
 import { useAuth } from "../auth/AuthContext";
 import { useConfirmDialog } from "../components/ConfirmDialog";
 import RolePermissionDialog from "../components/RolePermissionDialog";
+import { DATA_TABLE_SX, TITLE_CELL_SX, WRAP_CELL_CLASS } from "../components/responsiveTable";
 import { ROLE_LABELS } from "../format";
 
 const ROLE_OPTIONS = Object.keys(ROLE_LABELS);
@@ -119,7 +120,7 @@ export default function Roles() {
         <Alert severity="error">שגיאה בטעינת קטלוג ההרשאות.</Alert>
       ) : (
         <Box sx={{ overflowX: "auto" }}>
-          <Table size="small">
+          <Table size="small" sx={DATA_TABLE_SX}>
             <TableHead>
               <TableRow>
                 <TableCell>תפקיד</TableCell>
@@ -134,10 +135,12 @@ export default function Roles() {
                   <TableCell>
                     <Chip label={ROLE_LABELS[p.role] ?? p.role} size="small" />
                   </TableCell>
-                  <TableCell sx={{ fontFamily: "monospace", direction: "ltr", textAlign: "right" }}>
-                    {p.permission_key}
+                  <TableCell sx={{ fontFamily: "monospace" }}>
+                    <span dir="ltr">{p.permission_key}</span>
                   </TableCell>
-                  <TableCell>{p.description || "-"}</TableCell>
+                  <TableCell className={WRAP_CELL_CLASS} sx={TITLE_CELL_SX}>
+                    {p.description || "-"}
+                  </TableCell>
                   <TableCell align="left">
                     <Tooltip title="עריכה">
                       <IconButton size="small" onClick={() => openEdit(p)}>

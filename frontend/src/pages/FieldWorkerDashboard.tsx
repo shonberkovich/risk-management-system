@@ -175,13 +175,23 @@ export default function FieldWorkerDashboard() {
                   <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 110 }}>
                     {i.incident_code}
                   </Typography>
-                  <Chip size="small" label={INCIDENT_STATUS_LABELS[i.status] ?? i.status} color={INCIDENT_STATUS_COLOR[i.status]} />
-                  <Chip size="small" label={SEVERITY_LABELS[i.severity_level] ?? i.severity_level} color={SEVERITY_COLORS[i.severity_level]} />
-                  <Chip size="small" variant="outlined" label={HAZARD_LABELS[i.hazard_type] ?? i.hazard_type} />
-                  {i.is_draft && <Chip size="small" variant="outlined" color="default" label="טיוטה" />}
-                  <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, textAlign: "left" }}>
+                  {/* Phones: code + date on the first line, the chips on their own line below
+                      (wrapping freely, they used to land on a different line in every row).
+                      From `sm` up: one line, date pushed to the far end (`textAlign: "end"`, as the
+                      RTL cache would flip a physical "left" to "right"). */}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ flexGrow: 1, textAlign: "end", whiteSpace: "nowrap", order: { sm: 1 } }}
+                  >
                     {formatDateTime(i.incident_timestamp)}
                   </Typography>
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ width: { xs: "100%", sm: "auto" } }}>
+                    <Chip size="small" label={INCIDENT_STATUS_LABELS[i.status] ?? i.status} color={INCIDENT_STATUS_COLOR[i.status]} />
+                    <Chip size="small" label={SEVERITY_LABELS[i.severity_level] ?? i.severity_level} color={SEVERITY_COLORS[i.severity_level]} />
+                    <Chip size="small" variant="outlined" label={HAZARD_LABELS[i.hazard_type] ?? i.hazard_type} />
+                    {i.is_draft && <Chip size="small" variant="outlined" color="default" label="טיוטה" />}
+                  </Stack>
                 </Stack>
               ))}
             </Stack>

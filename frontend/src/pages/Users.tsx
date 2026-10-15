@@ -21,6 +21,7 @@ import { useState } from "react";
 import { fetchUsersAdmin, type UserAdmin } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import UserDialog from "../components/UserDialog";
+import { DATA_TABLE_SX, NAME_CELL_SX, WRAP_CELL_CLASS } from "../components/responsiveTable";
 import { formatDateTime, ROLE_LABELS } from "../format";
 
 /** ADMIN-only user management screen (TODO_SPEC.md §5, "ניהול משתמשים והרשאות") — create
@@ -79,7 +80,7 @@ export default function Users() {
         <Alert severity="error">שגיאה בטעינת רשימת המשתמשים.</Alert>
       ) : (
         <Box sx={{ overflowX: "auto" }}>
-          <Table size="small">
+          <Table size="small" sx={DATA_TABLE_SX}>
             <TableHead>
               <TableRow>
                 <TableCell>שם מלא</TableCell>
@@ -93,13 +94,17 @@ export default function Users() {
             <TableBody>
               {(users.data ?? []).map((u) => (
                 <TableRow key={u.user_id} hover>
-                  <TableCell>
+                  <TableCell className={WRAP_CELL_CLASS} sx={NAME_CELL_SX}>
                     {u.full_name}
                     {u.user_id === me?.user_id && (
                       <Chip label="אני" size="small" variant="outlined" sx={{ marginInlineStart: 1, height: 18 }} />
                     )}
                   </TableCell>
-                  <TableCell sx={{ direction: "ltr", textAlign: "right" }}>{u.email}</TableCell>
+                  <TableCell>
+                    {/* `dir` attribute, not `sx` direction: the RTL emotion cache flips `direction: ltr`
+                        (and `textAlign`) to their mirror, which scrambled LTR values. */}
+                    <span dir="ltr">{u.email}</span>
+                  </TableCell>
                   <TableCell>
                     <Chip label={ROLE_LABELS[u.role] ?? u.role} size="small" />
                   </TableCell>
